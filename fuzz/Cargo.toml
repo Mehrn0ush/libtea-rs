@@ -1,0 +1,48 @@
+[package]
+name = "tea-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+rust-version = "1.85"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tea-core = { path = "../crates/tea-core" }
+
+[[bin]]
+name = "tei_parse"
+path = "fuzz_targets/tei_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "discovery_json"
+path = "fuzz_targets/discovery_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "version_negotiation"
+path = "fuzz_targets/version_negotiation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "artifact_metadata"
+path = "fuzz_targets/artifact_metadata.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "origin_policy"
+path = "fuzz_targets/origin_policy.rs"
+test = false
+doc = false
+bench = false

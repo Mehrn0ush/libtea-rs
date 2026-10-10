@@ -1,0 +1,3 @@
+[resolver]
+# Prefer crates whose rust-version fits this workspace (1.85) when resolving.
+incompatible-rust-versions = "fallback"

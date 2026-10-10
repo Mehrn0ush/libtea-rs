@@ -1,0 +1,28 @@
+[package]
+name = "tea-client"
+version = "0.1.0"
+description = "Async TEA consumer client"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+tea-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+url.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+futures-util.workspace = true
+bytes.workspace = true
+base64.workspace = true
+flate2.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

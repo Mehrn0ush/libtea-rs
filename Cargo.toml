@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tea-core",
+    "crates/tea-client",
+    "crates/tea-conformance",
+    "crates/tea-cli",
+]
+exclude = ["fuzz"]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.85"
+publish = false
+
+[workspace.dependencies]
+tea-core = { version = "0.1.0", path = "crates/tea-core" }
+tea-client = { version = "0.1.0", path = "crates/tea-client" }
+tea-conformance = { version = "0.1.0", path = "crates/tea-conformance" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+url = "2"
+uuid = { version = "1", features = ["serde"] }
+semver = "1"
+sha1 = "0.10"
+sha2 = "0.10"
+sha3 = "0.10"
+blake2 = "0.10"
+blake3 = "1"
+digest = "0.10"
+base64 = "0.22"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+tracing = "0.1"
+futures-util = "0.3"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+proptest = "1"
+# 0.6.5 uses let-chains, which need rustc 1.88. Keep 0.6.4 so the 1.85 dev-dependency graph builds.
+wiremock = "=0.6.4"

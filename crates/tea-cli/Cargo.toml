@@ -1,0 +1,29 @@
+[package]
+name = "tea-cli"
+version = "0.1.0"
+description = "Command line for the TEA consumer SDK"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "tea"
+path = "src/main.rs"
+
+[dependencies]
+tea-core.workspace = true
+tea-client.workspace = true
+tea-conformance.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+url.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock.workspace = true
+serde_json.workspace = true
+url.workspace = true
+sha2.workspace = true
