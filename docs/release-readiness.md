@@ -4,11 +4,11 @@ Date: 2026-10-10. Nothing was published. Crate names were not changed.
 
 ## Verdict
 
-The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is still not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. Live interoperability was not run. Many list, release, and collection operations remain unverified. Publication is still blocked by crate names.
+The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong server has been called by this client; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. Many get, collection, and CLE operations still have no dedicated test. Publication is still blocked by crate names and by `publish = false`.
 
 ## Blockers before a conformance claim
 
-The five items below were the audit blockers. They are fixed in this tree. A conformance claim still requires live interoperability and the unverified operations in `docs/api-operation-matrix.md`.
+The five items below were the audit blockers. They are fixed in this tree. A conformance claim would still overreach: live evidence is one local Oolong server, and the unverified operations in `docs/api-operation-matrix.md` remain.
 
 1. Decode HTTP `deflate` as zlib and test it. Fixed. `ContentDecoder` and `zlib_deflate_is_decoded_before_the_checksum`.
 2. Make `HEAD` succeed when `Content-Length` describes the representation and the body is empty. Fixed. `head_ignores_representation_content_length`.
@@ -50,13 +50,13 @@ Duplicate `synstructure` 0.13.2 and 0.14.0 appeared when ICU 1.5 was selected fo
 
 ## SemVer and API stability
 
-Stay on 0.1.x until the download, HEAD, and policy defects are fixed. Those fixes can be made without a breaking change if `head_artifact`'s return type stays a header map and `deflate` only changes runtime behavior. Tightening `download_artifact` so an empty checksum list becomes an error would be a breaking change. Prefer a new method, or a 0.2.0 bump, if that default changes.
+Those download, HEAD, and policy defects are fixed in this tree. `0.1.0` is still unpublished and the public API should be treated as unstable. Tightening `download_artifact` so an empty checksum list becomes an error would be a breaking change. Prefer a new method, or a 0.2.0 bump, if that default changes. Changing the value-only identifier error text from `idType and idValue must be provided together` to `idValue requires idType` would not change which inputs are rejected.
 
 Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-version` 1.85. Leave the edition alone unless a separate migration is requested.
 
 ## Documentation
 
-`README.md` and `docs/` describe the pin, the limits, and the decision not to claim interoperability. This audit adds the five review documents and does not weaken those statements. `docs/requirements-matrix.md` still marks unverified rows as implemented. Readers should use `docs/conformance-gap-analysis.md` for status until that matrix is revised.
+`README.md` and `docs/` describe the pin, the limits, and the single local Oolong result. They do not claim conformance. `docs/requirements-matrix.md` still marks some rows as implemented from code inspection. Readers should use `docs/api-operation-matrix.md` for which operations have a mock test, a live Oolong observation, or neither.
 
 ## Not a blocker
 

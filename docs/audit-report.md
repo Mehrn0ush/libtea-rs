@@ -2,6 +2,8 @@
 
 Audit date: 2026-10-10. Auditor role: independent review of the existing workspace. No implementation code was changed.
 
+Later work fixed the defects named in this report and added mock tests plus one local Oolong run. Those results are in [interoperability.md](interoperability.md), [api-operation-matrix.md](api-operation-matrix.md), and [release-readiness.md](release-readiness.md). The findings below are the 2026-10-10 record. Where they say interoperability was not run, or that `deflate` and `HEAD` were incorrect, that describes this audit, not the tree after remediation.
+
 ## Executive summary
 
 The workspace is a real TEA consumer, not a stub. Every consumer operation in the pinned OpenAPI document has a method on `tea_client::Service`. TEI parsing, SemVer selection, discovery failover for a non-TEA 404, a TEA 404 stop, one bearer exchange, and SHA-256 mismatch handling are implemented and covered by tests.

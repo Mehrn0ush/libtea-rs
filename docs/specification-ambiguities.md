@@ -54,9 +54,11 @@ Interpretation used: a trailing dot is rejected. This is recorded because the pr
 
 ## Identifier list filters
 
-TEA 1.0 describes compliance-document discovery with `idType=COMPLIANCE_DOCUMENT` and no `idValue`. This SDK sends `idType` alone, and it sends both parameters when both are set.
+TEA 1.0 describes compliance-document discovery with `idType=COMPLIANCE_DOCUMENT` and no `idValue`. This SDK sends `idType` alone, and it sends both parameters when both are set. Neither parameter is a claim that every server must accept a type-only query. It is the filter this client is able to send, matching that described use case.
 
-A request that sets `idValue` and omits `idType` is still rejected before any HTTP call. The pinned specification does not settle that value-only case. The rejection is this SDK's current behavior pending upstream clarification. It is not documented here as a mandatory TEA 1.0 requirement.
+A request that sets `idValue` and omits `idType` is rejected before any HTTP call. The pinned specification does not settle that value-only case. The rejection is this SDK's current behavior. It is not a mandatory TEA 1.0 requirement.
+
+The error text is `idType and idValue must be provided together`. That sentence is inaccurate: the check rejects only a value without a type. Type-only input is accepted. A precise message would be `idValue requires idType`. The string has not been changed.
 
 ## Signatures document
 

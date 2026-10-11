@@ -2,9 +2,11 @@
 
 Pinned specification: CycloneDX/transparency-exchange-api `962a0228af1bfcc1232ac3f79239317ff33fdb04`, OpenAPI `3.1.1`, `info.version` `1.0.0`. Retrieved 2026-10-10. Blob of `spec/openapi.yaml`: `c96baa3e102c195895643fab81ae468ee54b8182`.
 
-A row is **Verified** only when a test in this workspace executed the requirement during this audit. **Code only** means the source implements the rule and no test ran it. **Incorrect** means the code disagrees with the pinned text. Server-only obligations are omitted.
+A row is **Verified** only when a test in this workspace executed the requirement during the 2026-10-10 audit, unless a later note names a newer test. **Code only** means the source implements the rule and no test ran it at that audit. **Incorrect** means the code disagreed with the pinned text at that audit. Server-only obligations are omitted.
 
-The existing requirements matrix marks several of these rows as implemented on the strength of code inspection. This document does not.
+Later mock tests and one ignored local Oolong test cover identifier filters. They are named in [api-operation-matrix.md](api-operation-matrix.md) and [interoperability.md](interoperability.md). Where this file's operation table still says "Code only" for a list operation, that is the 2026-10-10 audit. The current filter evidence is REQ-LIST-01 below, not a claim that every list path has its own mock fixture.
+
+The requirements matrix marks several rows as implemented on the strength of code inspection. This document does not treat that as verification.
 
 ## Consumer operations
 
@@ -13,21 +15,21 @@ Paths are relative to `{rootUrl}/v{advertised}/`. All 28 operations from `paths`
 | Operation ID | Method and path | SDK | HTTP test in this audit | Result |
 | --- | --- | --- | --- | --- |
 | discover | GET `/discovery` | `Client::discover`, `Service::discover_identifier` | TEA 404, non-TEA 404 failover, bearer 401 does not fail over | Partial. PURL query, `400`, and two-release array order are code only |
-| queryProducts | GET `/products` | `Service::query_products` | None | Code only |
+| queryProducts | GET `/products` | `Service::query_products` | Mock pagination and identifier filters. Ignored live Oolong test | Mock-tested and live-tested for filters. Not a conformance claim. The 2026-10-10 audit had no HTTP test for this path |
 | getProduct | GET `/product/{uuid}` | `Service::get_product` | `gets_a_product` | Verified for one JSON object |
 | listProductReleases | GET `/product/{uuid}/releases` | `Service::list_product_releases` | None | Code only |
 | getProductCle | GET `/product/{uuid}/cle` | `Service::get_product_cle` | None | Code only. `NOT_IMPLEMENTED` branch is code only |
-| queryProductReleases | GET `/productReleases` | `Service::query_product_releases` | None | Code only |
+| queryProductReleases | GET `/productReleases` | `Service::query_product_releases` | Ignored live Oolong type-only filter. No mock for this path | Live-tested for one PURL filter. The 2026-10-10 audit was code only |
 | getProductRelease | GET `/productRelease/{uuid}` | `Service::get_product_release` | None | Code only |
 | getProductReleaseCle | GET `/productRelease/{uuid}/cle` | `Service::get_product_release_cle` | None | Code only |
 | listProductReleaseCollections | GET `/productRelease/{uuid}/collections` | `Service::list_product_release_collections` | None | Code only |
 | getLatestProductReleaseCollection | GET `/productRelease/{uuid}/collection/latest` | `Service::get_latest_product_release_collection` | None | Code only |
 | getProductReleaseCollectionByVersion | GET `/productRelease/{uuid}/collection/{collectionVersion}` | `Service::get_product_release_collection` | None | Code only |
-| queryComponents | GET `/components` | `Service::query_components` | None | Code only |
+| queryComponents | GET `/components` | `Service::query_components` | Mock malformed page and identifier filters. Ignored live Oolong type-only filter | Mock-tested and live-tested for filters. The 2026-10-10 audit was code only |
 | getComponent | GET `/component/{uuid}` | `Service::get_component` | None | Code only |
 | listComponentReleases | GET `/component/{uuid}/releases` | `Service::list_component_releases` | None | Code only |
 | getComponentCle | GET `/component/{uuid}/cle` | `Service::get_component_cle` | None | Code only |
-| queryComponentReleases | GET `/componentReleases` | `Service::query_component_releases` | None | Code only |
+| queryComponentReleases | GET `/componentReleases` | `Service::query_component_releases` | Ignored live Oolong type-only filter. No mock for this path | Live-tested for one PURL filter. The 2026-10-10 audit was code only |
 | getComponentRelease | GET `/componentRelease/{uuid}` | `Service::get_component_release` | None | Code only |
 | getComponentReleaseCle | GET `/componentRelease/{uuid}/cle` | `Service::get_component_release_cle` | None | Code only |
 | listComponentReleaseCollections | GET `/componentRelease/{uuid}/collections` | `Service::list_component_release_collections` | None | Code only |
@@ -56,7 +58,7 @@ Paths are relative to `{rootUrl}/v{advertised}/`. All 28 operations from `paths`
 | REQ-DISC-01 | Discovery response | Success is a non-empty array. Empty `200` is not success | `DiscoveryInfo::parse_list` | `empty_discovery_array_is_rejected` | Verified |
 | REQ-DISC-02 | Unresolved identifiers | TEA `404` (`application/json` object with string `error`) stops discovery, including an unknown code and extra fields | `tea_error_code`, `Client::discover` | `discovery_follows_version_and_stops_on_tea_404`, unit recognition of `FUTURE` | Verified |
 | REQ-DISC-03 | Failover | Non-TEA `404` tries the next compatible endpoint | `Client::discover` | `non_tea_404_fails_over_to_the_next_endpoint` | Verified |
-| REQ-DISC-04 | Authentication section | `401` and `403` do not fail over | `Client::discover` returns on those statuses and on `AuthenticationRequired` | `bearer_401_does_not_fail_over` | `401` verified. `403` is code only (`lib.rs` status check). Not counted as verified |
+| REQ-DISC-04 | Authentication section | `401` and `403` do not fail over | `Client::discover` returns on those statuses and on `AuthenticationRequired` | `bearer_401_does_not_fail_over`, `discovery_403_does_not_fail_over_or_fetch_a_token` | Mock-tested. The 2026-10-10 audit had verified `401` only |
 | REQ-DISC-05 | Discovery by PURL | Exactly one of `tei` and `purl` | `Service::discover_identifier` | None | Code only |
 | REQ-DISC-06 | Discovery response | `servers[]` selected with the same version and priority rules. Further calls use that root, not the well-known host, unless it is also listed | `DiscoveryInfo::select_server`, then only the first selected server is kept | None for `servers[]` | Code only. Alternate servers are dropped after selection |
 | REQ-DISC-07 | Query examples | Discovery prose example leaves `/` unencoded. OpenAPI example percent-encodes the whole TEI | `operation_url` uses `query_pairs_mut`, which encodes `/` | `query_encoding_matches_openapi_example_shape` | Ambiguity. Client matches the OpenAPI example. Not verified against a server |
@@ -73,7 +75,7 @@ Paths are relative to `{rootUrl}/v{advertised}/`. All 28 operations from `paths`
 | REQ-ART-05 | Collection | A format with `url` has checksums. External URL is fetched without a bearer token | `ArtifactFormat::validate`, `download_format` | `artifact_with_url_requires_checksum` (parse only) | Parse rule verified. External GET is code only |
 | REQ-ART-06 | Collection | `latest` download is mutable and is not a format `url` | Client exposes `download_latest_artifact` and does not write `latest` into a format URL | None | Code only |
 | REQ-PAGE-01 | OpenAPI pagination | `pageToken` is copied from `nextPageToken`. `pageSize` is bounded | `ListParams::validate` (1..=100) and `page` | `product_pages_keep_tokens_opaque_and_do_not_follow_urls`, `empty_page_and_malformed_page_and_oversized_page_size`, `type_only_filter_stays_on_the_next_page` | Verified for product and component list calls. The client does not follow a next-page URL. A token that looks like `https://169.254.169.254/latest` stays a query value on the API origin. A type-only `idType` is repeated with the continuation token and is not replaced by `idValue`. Collection list endpoints use the same `page` helper and do not have their own fixtures |
-| REQ-LIST-01 | OpenAPI `idType` / `idValue`, compliance-document discovery | `idType` alone is a valid filter. Both parameters are sent when both are set | `ListParams::validate`, `Service::page` | `type_only_identifier_filter_is_serialized`, `both_identifier_filters_are_encoded_in_the_query`, `absent_identifier_filters_are_omitted`, `value_only_identifier_filter_sends_no_request` | Verified against the mock. `idValue` without `idType` still fails before HTTP. That case is unresolved in the pinned specification |
+| REQ-LIST-01 | OpenAPI `idType` / `idValue`, compliance-document discovery | `idType` alone is a filter this client can send. Both parameters are sent when both are set | `ListParams::validate`, `Service::page` | Mock: `type_only_identifier_filter_is_serialized`, `both_identifier_filters_are_encoded_in_the_query`, `absent_identifier_filters_are_omitted`, `value_only_identifier_filter_sends_no_request`. Live: ignored `oolong_idtype_live` | Mock-tested and live-tested against one local Oolong. `idValue` without `idType` fails before HTTP. The error text still says the fields must be provided together, which overstates the check. The pinned specification does not settle the value-only case, and type-only support here is not a rule for every server |
 | REQ-HTTP-01 | Discovery TLS and this SDK's destination policy | Default client refuses cleartext, loopback, and link-local literals | `DestinationPolicy::check_url` | `production_policy_rejects_cleartext_and_metadata` | Verified for those literals. DNS filtering was not executed against a resolver |
 | REQ-CACHE-01 | Discovery data caching | Implementations should respect caching headers and refresh | No cache. Callers may pass `If-None-Match` on downloads | None | Not a mandatory "shall". Not implemented |
 
@@ -90,6 +92,7 @@ These are not counted as client defects.
 | Collection and artifact `version` | Prose starts at 1. Schema type is integer with no `minimum` | `validate` rejects values below 1 |
 | Well-known `http` | Schema pattern allows `http`. Prose says a client shall reject it unless that base was configured for local testing | Documents parse. The default policy refuses the connection |
 | Signatures technology | `signatures/signature.md` is outside the standard and mentions `/trust-anchors/`, which is not in this OpenAPI | Signature bytes can be downloaded. Trust anchors are not implemented |
+| Value-only `idValue` | Compliance-document prose shows `idType` without `idValue`. It does not define `idValue` without `idType` | This client rejects the value-only combination before HTTP. That is SDK behavior, not a new specification rule |
 
 ## What the static conformance report covers
 

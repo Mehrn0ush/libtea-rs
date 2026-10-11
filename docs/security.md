@@ -51,4 +51,4 @@ The lockfile is committed. `deny.toml` allows common permissive licenses and den
 
 ## Out of scope
 
-This SDK does not verify detached signature technology, trust anchors, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared. It does not show that a third party published those bytes.
+This SDK does not verify detached signature technology, trust anchors, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. Callers who need that assurance have to verify signatures themselves. The client can download signature bytes and does not interpret them.

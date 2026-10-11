@@ -13,7 +13,7 @@ tea-cli
 
 `tea-conformance` runs checks that do not contact a network and writes a JSON report. A passing report means the local checks passed. It does not certify a server.
 
-`tea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP.
+`tea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, and `download`. Identifier filters are `ListParams` on `tea-client` list methods. The CLI does not expose them.
 
 ## Request path
 

@@ -2,6 +2,8 @@
 
 Date: 2026-10-10. Scope: `tea-core` destination policy, `tea-client` transport and downloads, credential handling, and the CLI. No implementation file was changed. Findings below are from reading the pinned sources and from the tests that actually ran.
 
+Remediation after this review added the origin-scoped DNS check, zlib `deflate`, HEAD handling, and a mock test that strips a real bearer token off the API prefix. Current behavior is summarized in [security.md](security.md). A matching checksum is still not detached-signature verification or publisher authentication. The paragraphs below keep the 2026-10-10 findings, including notes that were true before those tests existed.
+
 Production defaults refuse cleartext, userinfo, literal loopback, literal link-local (`169.254.169.254` included), and a custom reqwest resolver that drops non-public answers unless the hostname is excepted. TLS verification is rustls with the webpki roots. There is no switch that disables certificate checks. Tokens and API-key secrets are redacted in `Debug`. Request logs record the URL and status, not the `Authorization` value. `reqwest` is built without the gzip feature, so content coding is not decoded twice by the HTTP stack.
 
 Those defaults were not exercised with a live DNS rebinding harness or a hostile certificate.
@@ -39,13 +41,13 @@ Status after remediation: **Verified**. `deflate` uses `flate2::write::ZlibDecod
 
 Severity: High. Class: implementation defect. Also an interoperability defect.
 
-Affected code: `crates/tea-core/src/checksum.rs`, `decode_content_coding`, the `deflate` branch that constructs `flate2::read::DeflateDecoder`.
+Affected code at the time of the finding: `crates/tea-core/src/checksum.rs`, `decode_content_coding`, the `deflate` branch that constructed `flate2::read::DeflateDecoder`. The status line above is the code after the fix.
 
 Requirement: `tea-collection/tea-collection.md` says clients shall remove HTTP content coding before comparing checksums. RFC 9110 defines the `deflate` coding as the zlib format (RFC 1950), not raw DEFLATE (RFC 1951). `DeflateDecoder` is raw DEFLATE.
 
 Impact: a server that sends a spec-compliant `Content-Encoding: deflate` body fails decoding, or, if a raw stream is accepted from a non-compliant peer, the checksum is computed over the wrong framing. Gzip uses `GzDecoder` and has a unit test. Deflate has no test. The decoded-size cap does apply to both, so this is not an unbounded decompression bomb. Compressed input is also capped by `max_artifact_bytes` before decode, and output is capped again.
 
-Reproduction: zlib-wrap the bytes `artifact-bytes` and call `decode_content_coding(body, Some("deflate"), 1024)`. A correct decoder returns `artifact-bytes`. The current decoder returns an error or different bytes.
+Reproduction, against the code before the fix: zlib-wrap the bytes `artifact-bytes` and call `decode_content_coding(body, Some("deflate"), 1024)`. A correct decoder returns `artifact-bytes`. The decoder at audit time returned an error or different bytes.
 
 Remediation: decode `deflate` with a zlib decoder. Keep rejecting stacked codings and unknown codings. Add the vector above and a truncated zlib member that must not return `IntegrityOutcome::Verified`.
 

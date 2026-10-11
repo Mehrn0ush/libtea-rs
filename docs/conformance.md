@@ -20,8 +20,10 @@ The report includes the specification commit and version and one result per case
 
 ## What the HTTP tests cover
 
-The tests in `tea-client` use a local mock server. They cover production destination refusal, JSON size limits, a product read, TEA `404` recognition, failover from a non-TEA `404`, one API-key exchange after a bearer challenge, redirect stripping of `Authorization`, and checksum verification of decoded bytes.
+The default `tea-client` tests use a local mock server. They cover production destination refusal, JSON size limits, a product read, TEA `404` recognition, failover from a non-TEA `404`, one API-key exchange after a bearer challenge, redirect stripping of `Authorization`, checksum verification of decoded bytes, and identifier query serialization (type only, both parameters, neither parameter, and value-only rejection before a request).
+
+An ignored test, `oolong_idtype_live`, talks to a local Oolong process. It is not part of `cargo test`. See [interoperability.md](interoperability.md).
 
 ## What is not claimed
 
-No public TEA server was used as a conformance oracle. Passing these tests does not imply interoperability with ReARM, Oolong, pypi-tea, sbomify, or any other implementation. See [interoperability.md](interoperability.md).
+No public TEA server was used as a conformance oracle. Passing the mock tests, or the ignored Oolong test, does not imply interoperability with ReARM, pypi-tea, sbomify, or any other implementation. A checksum match is not detached-signature verification.

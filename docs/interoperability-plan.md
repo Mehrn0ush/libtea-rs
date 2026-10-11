@@ -1,6 +1,6 @@
 # Interoperability plan
 
-Date: 2026-10-10. No TEA server was driven by this SDK. Results below are either documents fetched as themselves, or README text. They are not client/server test results.
+Date: 2026-10-10. This file is the survey from that date. Current Oolong results are in [interoperability.md](interoperability.md). The paragraphs below were true on 2026-10-10: no TEA server had been driven by this SDK yet, and the notes are documents and README text, not the later client/server runs.
 
 The pinned contract is OpenAPI `1.0.0` at commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. A server that answers this client is not, by that fact, a conforming TEA server.
 
@@ -42,7 +42,7 @@ This prediction was not confirmed by calling `Client::discover`. Doing so would 
 | Query encoding | `/` in `tei` becomes `%2F` | A server that decodes the query once should accept it. A server written to the discovery prose example may still accept it. Not tested |
 | API version path | Exact advertised string, `+` left unencoded | Peers that only route `/v1.0.0` will not see build metadata. That matches the spec |
 | Version `1` or `0.4.0` | Rejected or not in `SupportedApi::tea_1_0_0` | ReARM 0.4.0, sbomify 0.3.0-beta.2, and the Cybeats `1` document are outside this client's default support set |
-| `deflate` | Raw DEFLATE decoder | A peer that sends zlib-wrapped `deflate` will not verify. See TEA-AUD-001 |
+| `deflate` | On 2026-10-10 the decoder was raw DEFLATE (TEA-AUD-001). The client now uses the zlib wrapper for HTTP `deflate` | A peer that sends raw DEFLATE will fail decoding. A peer that sends zlib-wrapped `deflate` matches the current client |
 | HTTP and private addresses | Refused unless that origin is excepted | Local demo servers on `127.0.0.1` need `DestinationPolicy::allow_origin` |
 | Credentials | Not posted to a discovered host unless `allow_discovered_credentials` is set | A server that requires a token on the first well-known hop will fail closed |
 
