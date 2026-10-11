@@ -111,6 +111,9 @@ pub(crate) struct ClientInner {
     /// Origins this client may send the API key to.
     credential_origins: Mutex<BTreeSet<String>>,
     pub(crate) allow_discovered_credentials: bool,
+    /// The lock is not held across `POST /token`, so overlapping challenges
+    /// may each exchange the API key. That duplicate is bounded by one exchange
+    /// per in-flight request.
     tokens: Mutex<std::collections::HashMap<String, StoredToken>>,
     semaphore: Arc<Semaphore>,
     pub(crate) well_known_override: Option<Url>,
@@ -400,6 +403,16 @@ impl ClientInner {
                     }
                     return Ok(response);
                 }
+                Ok(response)
+                    if refreshed
+                        && !call.basic_auth
+                        && response.status == StatusCode::UNAUTHORIZED =>
+                {
+                    // The token just stored did not authorize the retry. Drop it
+                    // so the next call does not present that same bearer token.
+                    self.discard_token(call.api_prefix.as_ref());
+                    return Ok(response);
+                }
                 Ok(response) => return Ok(response),
                 Err(ClientError::Timeout) | Err(ClientError::Transport(_))
                     if call.method == Method::GET && attempt < self.limits.max_retries =>
@@ -591,9 +604,7 @@ impl ClientInner {
         }
         let token: TokenResponse = serde_json::from_slice(&response.body)?;
         let token = token.bearer()?;
-        let expires_at = token.expires_in.and_then(|seconds| {
-            Instant::now().checked_add(Duration::from_secs(seconds.saturating_sub(5)))
-        });
+        let expires_at = token_expires_at(token.expires_in, Instant::now());
         let origin = origin_key(api_prefix)?;
         self.tokens
             .lock()
@@ -606,6 +617,19 @@ impl ClientInner {
                 },
             );
         Ok(())
+    }
+
+    fn discard_token(&self, api_prefix: Option<&Url>) {
+        let Some(prefix) = api_prefix else {
+            return;
+        };
+        let Ok(origin) = origin_key(prefix) else {
+            return;
+        };
+        self.tokens
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .remove(&origin);
     }
 
     pub(crate) async fn backoff(&self, attempt: u32) {
@@ -656,6 +680,22 @@ pub(crate) fn url_under_prefix(url: &Url, prefix: &Url) -> bool {
 
 fn form_encode(value: &str) -> String {
     url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
+}
+
+/// Local expiry of a token response.
+///
+/// TEA leaves lifetime to the implementation and says servers should send
+/// `expires_in`. A five-second margin applies only when the lifetime is longer
+/// than that margin, so a short positive lifetime is still usable. `0` is
+/// already expired. A missing value, or a lifetime `Instant` cannot represent,
+/// has no local expiry and is replaced when the server returns `invalid_token`.
+fn token_expires_at(expires_in: Option<u64>, now: Instant) -> Option<Instant> {
+    let seconds = expires_in?;
+    let usable = if seconds > 5 { seconds - 5 } else { seconds };
+    if usable == 0 {
+        return Some(now);
+    }
+    now.checked_add(Duration::from_secs(usable))
 }
 
 async fn read_decoded(
@@ -743,3 +783,30 @@ pub(crate) fn operation_url(
 }
 
 pub(crate) use reqwest::header::CONTENT_TYPE as CONTENT_TYPE_HEADER;
+
+#[cfg(test)]
+mod token_expiry_tests {
+    use std::time::{Duration, Instant};
+
+    use super::token_expires_at;
+
+    #[test]
+    fn expiry_margin_does_not_consume_a_short_lifetime() {
+        let now = Instant::now();
+        assert_eq!(token_expires_at(None, now), None);
+        assert_eq!(token_expires_at(Some(0), now), Some(now));
+        assert_eq!(
+            token_expires_at(Some(4), now),
+            Some(now + Duration::from_secs(4))
+        );
+        assert_eq!(
+            token_expires_at(Some(5), now),
+            Some(now + Duration::from_secs(5))
+        );
+        assert_eq!(
+            token_expires_at(Some(3600), now),
+            Some(now + Duration::from_secs(3595))
+        );
+        assert_eq!(token_expires_at(Some(u64::MAX), now), None);
+    }
+}

@@ -17,7 +17,9 @@ Artifact `url` and `signatureUrl` values are third-party fetches. They never rec
 
 The API key is form-urlencoded and then placed in the Basic credential for `POST /token`. Resource requests use `Authorization: Bearer`. Tokens are not logged. `Debug` for `ApiKey` and the token cache redacts the secret and the token.
 
-A `401` with `WWW-Authenticate: Bearer`, with no error or with `error=invalid_token`, obtains a token and retries the resource request once. `403` is returned to the caller. The client does not call `/token` before a resource asks for a token.
+A `401` with `WWW-Authenticate: Bearer`, with no error or with `error=invalid_token`, obtains a token and retries the resource request once. A challenge with another `error` value, including `insufficient_scope`, is not retried. If the retry is still `401`, the token just stored is dropped. `403` is returned to the caller. The client does not call `/token` before a resource asks for a token. `POST /token` is not followed if it redirects.
+
+The request body is only `grant_type=client_credentials`. No `scope` or `audience` parameter is sent. A `scope` on the token response is ignored. When `expires_in` is greater than five seconds, the cached token is treated as expired five seconds early. A shorter positive lifetime is kept for its full `expires_in`. `expires_in` of `0` is already expired. If `expires_in` is omitted, the token stays cached until the server rejects it. Two overlapping challenges can each call `POST /token`; the cache lock is not held across that request.
 
 ## Transport
 
