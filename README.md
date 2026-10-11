@@ -85,6 +85,19 @@ if let ArtifactFetch::Body(body) = fetched {
 
 `ETag` is not a checksum. Pass a previously stored strong tag as `if_none_match` when you want a `304`.
 
+## Filter a list by identifier type
+
+```rust
+use tea_core::enums::IdentifierType;
+use tea_core::ListParams;
+
+let mut query = ListParams::default();
+query.id_type = Some(IdentifierType::ComplianceDocument);
+let page = service.query_components(&query).await?;
+```
+
+`idType` may be sent without `idValue`. Setting both sends `idType` and `idValue`. Setting `idValue` without `idType` is rejected before the request. The pinned specification does not settle that value-only case, so the rejection is SDK behavior pending upstream clarification, not a claim that TEA 1.0 forbids it.
+
 ## Authentication
 
 ```rust

@@ -609,8 +609,10 @@ impl Service {
         if let Some(order) = query.sort_order {
             pairs.push(("sortOrder".into(), order.as_str().to_owned()));
         }
-        if let (Some(id_type), Some(id_value)) = (&query.id_type, &query.id_value) {
+        if let Some(id_type) = &query.id_type {
             pairs.push(("idType".into(), id_type.as_str().to_owned()));
+        }
+        if let Some(id_value) = &query.id_value {
             pairs.push(("idValue".into(), id_value.clone()));
         }
         let borrowed: Vec<(&str, &str)> = pairs

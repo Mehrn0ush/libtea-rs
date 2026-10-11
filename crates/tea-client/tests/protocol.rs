@@ -8,7 +8,9 @@ use sha2::{Digest, Sha256};
 use tea_client::{ApiKey, ArtifactFetch, CleFetch, Client, ClientError, Limits, SignatureFetch};
 use tea_core::{Checksum, ChecksumAlgorithm, DestinationPolicy, ListParams, ProductId, Tei};
 use url::Url;
-use wiremock::matchers::{header, header_exists, method, path, query_param};
+use wiremock::matchers::{
+    header, header_exists, method, path, query_param, query_param_is_missing,
+};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const ID: &str = "2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d";
@@ -724,4 +726,210 @@ async fn redirect_limit_and_gzip_expansion_limit_are_enforced() {
         error,
         ClientError::Model(_) | ClientError::TooLarge
     ));
+}
+
+fn component_page(has_next: bool, token: Option<&str>) -> serde_json::Value {
+    serde_json::json!({
+        "hasNext": has_next,
+        "nextPageToken": token,
+        "results": [{
+            "uuid": ID,
+            "name": "Part",
+            "identifiers": []
+        }]
+    })
+}
+
+#[tokio::test]
+async fn type_only_identifier_filter_is_serialized() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/components"))
+        .and(query_param("idType", "COMPLIANCE_DOCUMENT"))
+        .and(query_param_is_missing("idValue"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(component_page(false, None)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut query = params(None, None);
+    query.id_type = Some(tea_core::enums::IdentifierType::ComplianceDocument);
+    let page = client(&server)
+        .service(&server.uri(), "1.0.0")
+        .unwrap()
+        .query_components(&query)
+        .await
+        .unwrap();
+    assert_eq!(page.results.len(), 1);
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    let pairs: Vec<_> = requests[0].url.query_pairs().collect();
+    assert_eq!(pairs.len(), 1);
+    assert_eq!(pairs[0].0, "idType");
+    assert_eq!(pairs[0].1, "COMPLIANCE_DOCUMENT");
+}
+
+#[tokio::test]
+async fn both_identifier_filters_are_encoded_in_the_query() {
+    let server = MockServer::start().await;
+    let value = "pkg:generic/widget@1 a&b";
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/products"))
+        .and(query_param("idType", "PURL"))
+        .and(query_param("idValue", value))
+        .respond_with(ResponseTemplate::new(200).set_body_json(product_page(false, None, 1)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut query = params(None, None);
+    query.id_type = Some(tea_core::enums::IdentifierType::Purl);
+    query.id_value = Some(value.to_owned());
+    let page = client(&server)
+        .service(&server.uri(), "1.0.0")
+        .unwrap()
+        .query_products(&query)
+        .await
+        .unwrap();
+    assert_eq!(page.results.len(), 1);
+    let requests = server.received_requests().await.unwrap();
+    let raw = requests[0].url.query().unwrap();
+    assert!(raw.contains("idValue="));
+    assert!(raw.contains("%26"));
+    assert!(!raw.contains("&b"));
+    let pairs: Vec<_> = requests[0].url.query_pairs().collect();
+    assert_eq!(pairs.len(), 2);
+    assert_eq!(pairs[0].0, "idType");
+    assert_eq!(pairs[1].0, "idValue");
+    assert_eq!(pairs[1].1, value);
+}
+
+#[tokio::test]
+async fn absent_identifier_filters_are_omitted() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/products"))
+        .and(query_param("pageSize", "25"))
+        .and(query_param_is_missing("idType"))
+        .and(query_param_is_missing("idValue"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(product_page(false, None, 0)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let page = client(&server)
+        .service(&server.uri(), "1.0.0")
+        .unwrap()
+        .query_products(&params(Some(25), None))
+        .await
+        .unwrap();
+    assert!(page.results.is_empty());
+    let raw = server.received_requests().await.unwrap()[0]
+        .url
+        .query()
+        .unwrap()
+        .to_owned();
+    assert_eq!(raw, "pageSize=25");
+}
+
+#[tokio::test]
+async fn value_only_identifier_filter_sends_no_request() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+    let mut query = params(None, None);
+    query.id_value = Some("pkg:generic/widget@1".to_owned());
+    let error = client(&server)
+        .service(&server.uri(), "1.0.0")
+        .unwrap()
+        .query_products(&query)
+        .await
+        .unwrap_err();
+    match error {
+        ClientError::Model(tea_core::ModelError::Invalid(message)) => {
+            assert_eq!(message, "idType and idValue must be provided together");
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn type_only_filter_stays_on_the_next_page() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/components"))
+        .and(query_param("idType", "COMPLIANCE_DOCUMENT"))
+        .and(query_param("pageSize", "1"))
+        .and(query_param_is_missing("idValue"))
+        .and(query_param_is_missing("pageToken"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(component_page(true, Some("page-2"))),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/components"))
+        .and(query_param("idType", "COMPLIANCE_DOCUMENT"))
+        .and(query_param("pageSize", "1"))
+        .and(query_param("pageToken", "page-2"))
+        .and(query_param_is_missing("idValue"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(component_page(false, None)))
+        .with_priority(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    let service = client(&server).service(&server.uri(), "1.0.0").unwrap();
+    let mut query = params(Some(1), None);
+    query.id_type = Some(tea_core::enums::IdentifierType::ComplianceDocument);
+    let first = service.query_components(&query).await.unwrap();
+    assert!(first.has_next);
+    assert_eq!(first.next_page_token.as_deref(), Some("page-2"));
+    query.page_token = first.next_page_token;
+    let last = service.query_components(&query).await.unwrap();
+    assert!(!last.has_next);
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        let pairs: Vec<_> = request.url.query_pairs().collect();
+        assert!(pairs
+            .iter()
+            .any(|(key, value)| key == "idType" && value == "COMPLIANCE_DOCUMENT"));
+        assert!(pairs.iter().all(|(key, _)| key != "idValue"));
+    }
+    let second: Vec<_> = requests[1].url.query_pairs().collect();
+    assert!(second
+        .iter()
+        .any(|(key, value)| key == "pageToken" && value == "page-2"));
+    assert!(second
+        .iter()
+        .any(|(key, value)| key == "pageSize" && value == "1"));
+}
+
+#[tokio::test]
+async fn list_queries_keep_unrelated_parameters() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/products"))
+        .and(query_param("pageSize", "10"))
+        .and(query_param("sortField", "name"))
+        .and(query_param("sortOrder", "desc"))
+        .and(query_param_is_missing("idType"))
+        .and(query_param_is_missing("idValue"))
+        .and(query_param_is_missing("pageToken"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(product_page(false, None, 1)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut query = params(Some(10), None);
+    query.sort_field = Some(tea_core::enums::ProductSort::Name);
+    query.sort_order = Some(tea_core::enums::SortOrder::Desc);
+    let page = client(&server)
+        .service(&server.uri(), "1.0.0")
+        .unwrap()
+        .query_products(&query)
+        .await
+        .unwrap();
+    assert_eq!(page.results.len(), 1);
 }

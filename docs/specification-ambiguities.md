@@ -52,6 +52,12 @@ Normative examples use a DNS name without a trailing root dot. Comparison is exa
 
 Interpretation used: a trailing dot is rejected. This is recorded because the prose does not say so in those words.
 
+## Identifier list filters
+
+TEA 1.0 describes compliance-document discovery with `idType=COMPLIANCE_DOCUMENT` and no `idValue`. This SDK sends `idType` alone, and it sends both parameters when both are set.
+
+A request that sets `idValue` and omits `idType` is still rejected before any HTTP call. The pinned specification does not settle that value-only case. The rejection is this SDK's current behavior pending upstream clarification. It is not documented here as a mandatory TEA 1.0 requirement.
+
 ## Signatures document
 
 `signatures/signature.md` says it is work in progress and not part of the TEA standard. It mentions `/trust-anchors/`, which is absent from `spec/openapi.yaml`.

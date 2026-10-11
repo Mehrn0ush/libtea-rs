@@ -70,30 +70,104 @@ pub struct ListParams<S> {
     pub sort_field: Option<S>,
     /// `sortOrder`.
     pub sort_order: Option<enums::SortOrder>,
-    /// `idType` filter. Must be paired with `id_value`.
+    /// `idType` filter.
+    ///
+    /// This may be sent without [`id_value`](Self::id_value). TEA 1.0 uses that
+    /// form for compliance-document discovery (`idType=COMPLIANCE_DOCUMENT`).
     pub id_type: Option<enums::IdentifierType>,
-    /// `idValue` filter. Must be paired with `id_type`.
+    /// `idValue` filter.
+    ///
+    /// Sent only together with [`id_type`](Self::id_type). This SDK rejects a
+    /// value with no type before the request. The pinned specification does
+    /// not settle that value-only case, so the rejection is not a claim that
+    /// TEA 1.0 forbids it.
     pub id_value: Option<String>,
 }
 
 impl<S> ListParams<S> {
-    /// Validate pagination bounds and identifier filter pairing.
+    /// Validate pagination bounds and identifier filters.
+    ///
+    /// `idType` alone is accepted. Both fields together are accepted. Neither
+    /// field is accepted. `idValue` without `idType` is rejected.
     ///
     /// # Errors
     ///
-    /// Returns an error when `pageSize` is outside 1..=100 or only one of
-    /// `idType` and `idValue` is set.
+    /// Returns an error when `pageSize` is outside 1..=100 or `idValue` is set
+    /// without `idType`.
     pub fn validate(&self) -> Result<(), ModelError> {
         if let Some(size) = self.page_size {
             if !(1..=100).contains(&size) {
                 return Err(ModelError::Invalid("pageSize must be from 1 to 100".into()));
             }
         }
-        if self.id_type.is_some() != self.id_value.is_some() {
+        if self.id_value.is_some() && self.id_type.is_none() {
             return Err(ModelError::Invalid(
                 "idType and idValue must be provided together".into(),
             ));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ListParams;
+    use crate::enums::{IdentifierType, SortOrder};
+
+    fn params(id_type: Option<IdentifierType>, id_value: Option<&str>) -> ListParams<()> {
+        ListParams {
+            page_size: None,
+            page_token: None,
+            sort_field: None,
+            sort_order: None,
+            id_type,
+            id_value: id_value.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn neither_identifier_field_is_accepted() {
+        assert!(params(None, None).validate().is_ok());
+    }
+
+    #[test]
+    fn both_identifier_fields_are_accepted() {
+        assert!(
+            params(Some(IdentifierType::Purl), Some("pkg:generic/widget@1"))
+                .validate()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn id_type_without_id_value_is_accepted() {
+        assert!(params(Some(IdentifierType::ComplianceDocument), None)
+            .validate()
+            .is_ok());
+    }
+
+    #[test]
+    fn id_value_without_id_type_keeps_the_existing_error() {
+        let error = params(None, Some("pkg:generic/widget@1"))
+            .validate()
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "idType and idValue must be provided together"
+        );
+    }
+
+    #[test]
+    fn page_size_bounds_are_unchanged_for_a_type_only_filter() {
+        let mut query = params(Some(IdentifierType::ComplianceDocument), None);
+        query.page_size = Some(0);
+        query.sort_order = Some(SortOrder::Desc);
+        assert!(query.validate().is_err());
+        query.page_size = Some(101);
+        assert!(query.validate().is_err());
+        query.page_size = Some(1);
+        assert!(query.validate().is_ok());
+        query.page_size = Some(100);
+        assert!(query.validate().is_ok());
     }
 }

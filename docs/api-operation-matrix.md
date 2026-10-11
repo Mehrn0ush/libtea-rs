@@ -11,7 +11,7 @@ Status is after the 2026-10-10 remediation tests. "Verified" means a happy path 
 | Method | Path | Operation ID | SDK method | Status | Tests |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/discovery` | `discover` | `Service::discover_identifier`, `Client::discover` | Implemented + verified | Version selection, TEA `404` stop, non-TEA `404` failover, `401` no failover, `403` no failover and no token fetch |
-| GET | `/products` | `queryProducts` | `Service::query_products` | Implemented + verified | First, next, and repeated opaque `pageToken`; empty page; `pageSize` 101 rejected before the request |
+| GET | `/products` | `queryProducts` | `Service::query_products` | Implemented + verified | First, next, and repeated opaque `pageToken`; empty page; `pageSize` 101 rejected before the request; paired `idType` and `idValue` are encoded; absent identifier filters are omitted |
 | GET | `/product/{uuid}` | `getProduct` | `Service::get_product` | Implemented + verified | `gets_a_product`; `406` is `ClientError::Api` |
 | GET | `/product/{uuid}/releases` | `listProductReleases` | `Service::list_product_releases` | Implemented + unverified | Uses `page`. No fixture for this path |
 | GET | `/product/{uuid}/cle` | `getProductCle` | `Service::get_product_cle` | Optional; partially verified | `NOT_IMPLEMENTED` is `CleFetch::NotImplemented`. Success and `OBJECT_UNKNOWN` are not fixtures |
@@ -21,7 +21,7 @@ Status is after the 2026-10-10 remediation tests. "Verified" means a happy path 
 | GET | `/productRelease/{uuid}/collections` | `listProductReleaseCollections` | `Service::list_product_release_collections` | Implemented + unverified | Uses `page` |
 | GET | `/productRelease/{uuid}/collection/latest` | `getLatestProductReleaseCollection` | `Service::get_latest_product_release_collection` | Implemented + unverified | Uses `get` |
 | GET | `/productRelease/{uuid}/collection/{collectionVersion}` | `getProductReleaseCollectionByVersion` | `Service::get_product_release_collection` | Implemented + unverified | Uses `get` |
-| GET | `/components` | `queryComponents` | `Service::query_components` | Implemented + partially verified | Malformed page (`hasNext` missing) is `ClientError::Json` |
+| GET | `/components` | `queryComponents` | `Service::query_components` | Implemented + verified | Malformed page (`hasNext` missing) is `ClientError::Json`. `idType=COMPLIANCE_DOCUMENT` without `idValue` is sent on the first page and kept with `pageToken` on the next page. `idValue` without `idType` returns `ClientError::Model` and sends no request |
 | GET | `/component/{uuid}` | `getComponent` | `Service::get_component` | Implemented + partially verified | Missing `Content-Type` (`text/plain`) is `ClientError::Model` |
 | GET | `/component/{uuid}/releases` | `listComponentReleases` | `Service::list_component_releases` | Implemented + unverified | Uses `page` |
 | GET | `/component/{uuid}/cle` | `getComponentCle` | `Service::get_component_cle` | Optional; unverified | Uses `cle` |
