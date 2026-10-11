@@ -44,7 +44,7 @@ The OpenAPI document at that commit is `spec/openapi.yaml`. Its `info.version` i
 - Optional OAuth profiles other than the API-key `client_credentials` baseline (SAML, JWT bearer, token exchange, mutual TLS) are not implemented.
 - CLE is retrieved as the TEA projection. This client does not fetch or validate a full ECMA-428 document.
 - The SDK is not `no_std` and is not a TEA server.
-- List filters accept `idType` alone and both `idType` and `idValue`. `idValue` without `idType` is rejected before the request. The pinned text does not define that value-only case, and the current error string (`idType and idValue must be provided together`) is broader than the check.
+- List filters accept `idType` alone and both `idType` and `idValue`. `idValue` without `idType` is rejected before the request with `idValue requires idType`. The pinned text does not define that value-only case.
 - The CLI covers spec identity, TEI parse, offline conformance, discovery, one product-release read, and artifact download. It does not offer list or identifier-filter commands.
 
 ## Unresolved specification ambiguities

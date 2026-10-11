@@ -13,7 +13,7 @@ Pinned contract: CycloneDX/transparency-exchange-api commit `962a0228af1bfcc1232
 | Type-only product filter | `idType=PURL` and `pageSize=1` returned Alpha Fixture, `hasNext` true, and a non-empty `nextPageToken`. `idValue` was not sent |
 | Pagination | The next call kept `idType=PURL` and `pageSize=1`, sent that token, and returned Beta Fixture with `hasNext` false |
 | Type and value | `idType=PURL` and `idValue=pkg:generic/oolong-fixture/beta` returned only Beta Fixture |
-| Value only | The client returned `idType and idValue must be provided together` and sent no request |
+| Value only | No request was sent. The client rejected the combination. The error text is now `idValue requires idType`. The 2026-10-11 run observed the previous wording |
 | No identifier filter | The product list was Alpha, Beta, Delta, Epsilon, and Gamma, with `hasNext` false |
 | Other lists | Type-only `idType=PURL` on products, product releases, components, and component releases returned only objects that carry a PURL. The unfiltered lists were larger |
 

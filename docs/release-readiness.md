@@ -50,7 +50,7 @@ Duplicate `synstructure` 0.13.2 and 0.14.0 appeared when ICU 1.5 was selected fo
 
 ## SemVer and API stability
 
-Those download, HEAD, and policy defects are fixed in this tree. `0.1.0` is still unpublished and the public API should be treated as unstable. Tightening `download_artifact` so an empty checksum list becomes an error would be a breaking change. Prefer a new method, or a 0.2.0 bump, if that default changes. Changing the value-only identifier error text from `idType and idValue must be provided together` to `idValue requires idType` would not change which inputs are rejected.
+Those download, HEAD, and policy defects are fixed in this tree. `0.1.0` is still unpublished and the public API should be treated as unstable. Tightening `download_artifact` so an empty checksum list becomes an error would be a breaking change. Prefer a new method, or a 0.2.0 bump, if that default changes. The value-only identifier error text is `idValue requires idType`. That change does not change which inputs are rejected.
 
 Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-version` 1.85. Leave the edition alone unless a separate migration is requested.
 

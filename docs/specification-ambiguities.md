@@ -58,7 +58,7 @@ TEA 1.0 describes compliance-document discovery with `idType=COMPLIANCE_DOCUMENT
 
 A request that sets `idValue` and omits `idType` is rejected before any HTTP call. The pinned specification does not settle that value-only case. The rejection is this SDK's current behavior. It is not a mandatory TEA 1.0 requirement.
 
-The error text is `idType and idValue must be provided together`. That sentence is inaccurate: the check rejects only a value without a type. Type-only input is accepted. A precise message would be `idValue requires idType`. The string has not been changed.
+The error text is `idValue requires idType`. The check rejects only a value without a type. Type-only input is accepted. The pinned specification still does not define the value-only case.
 
 ## Signatures document
 

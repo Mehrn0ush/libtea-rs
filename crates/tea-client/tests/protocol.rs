@@ -847,7 +847,7 @@ async fn value_only_identifier_filter_sends_no_request() {
         .unwrap_err();
     match error {
         ClientError::Model(tea_core::ModelError::Invalid(message)) => {
-            assert_eq!(message, "idType and idValue must be provided together");
+            assert_eq!(message, "idValue requires idType");
         }
         other => panic!("unexpected error: {other}"),
     }

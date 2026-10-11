@@ -382,7 +382,7 @@ async fn value_only_filter_does_not_reach_oolong() {
     assert!(requests.is_empty(), "no HTTP request: {requests:?}");
     match error {
         ClientError::Model(tea_core::ModelError::Invalid(message)) => {
-            assert_eq!(message, "idType and idValue must be provided together");
+            assert_eq!(message, "idValue requires idType");
         }
         other => panic!("unexpected error: {other}"),
     }

@@ -29,6 +29,16 @@ TLS uses rustls. Certificate verification cannot be turned off. The default dest
 
 Fuzz targets live in `fuzz/` and are outside the workspace. They need `cargo-fuzz` and are not part of `cargo test --workspace`.
 
+## Compilable example
+
+The fenced programs below are illustrations. They are not one compilable file: `?` crosses different error types, and later fences reuse names from earlier ones. The program that type-checks with this workspace is [`crates/tea-client/examples/filter_by_identifier_type.rs`](crates/tea-client/examples/filter_by_identifier_type.rs).
+
+```sh
+cargo run -p tea-client --example filter_by_identifier_type -- https://api.example.com
+```
+
+That run uses API version `1.0.0`, the default HTTPS destination policy, and `idType=COMPLIANCE_DOCUMENT` with no `idValue`. Pass `--allow-origin` only for a local HTTP origin, as the example's comments describe. It does not embed a credential.
+
 ## Discover a product release
 
 ```rust
@@ -110,7 +120,7 @@ let page = service.query_components(&query).await?;
 | Present | Absent | `idType` only |
 | Absent | Present | No request. `ListParams::validate` returns an error |
 
-The pinned specification describes compliance-document discovery with `idType=COMPLIANCE_DOCUMENT` and no `idValue`. It does not settle a query that sets `idValue` and omits `idType`. Rejecting that combination is this SDK's behavior, not a claim that TEA 1.0 requires the rejection. The error text is still `idType and idValue must be provided together`. That sentence is broader than the check: a type without a value is accepted. A more precise message would be `idValue requires idType`. The wording has not been changed.
+The pinned specification describes compliance-document discovery with `idType=COMPLIANCE_DOCUMENT` and no `idValue`. It does not settle a query that sets `idValue` and omits `idType`. Rejecting that combination is this SDK's behavior, not a claim that TEA 1.0 requires the rejection. The error text is `idValue requires idType`. A type without a value is still accepted.
 
 The client does not follow `next` URLs. Copy `next_page_token` into `page_token` and call the same method again. Identifier fields you leave set are sent again with the token.
 

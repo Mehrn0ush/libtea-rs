@@ -101,9 +101,7 @@ impl<S> ListParams<S> {
             }
         }
         if self.id_value.is_some() && self.id_type.is_none() {
-            return Err(ModelError::Invalid(
-                "idType and idValue must be provided together".into(),
-            ));
+            return Err(ModelError::Invalid("idValue requires idType".into()));
         }
         Ok(())
     }
@@ -147,14 +145,11 @@ mod tests {
     }
 
     #[test]
-    fn id_value_without_id_type_keeps_the_existing_error() {
+    fn id_value_without_id_type_requires_id_type() {
         let error = params(None, Some("pkg:generic/widget@1"))
             .validate()
             .unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            "idType and idValue must be provided together"
-        );
+        assert_eq!(error.to_string(), "idValue requires idType");
     }
 
     #[test]
