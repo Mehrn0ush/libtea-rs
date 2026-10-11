@@ -12,12 +12,12 @@ exclude = ["fuzz"]
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.85"
-publish = false
+repository = "https://github.com/Mehrn0ush/teaSDK"
 
 [workspace.dependencies]
-tea-core = { version = "0.1.0", path = "crates/tea-core" }
-tea-client = { version = "0.1.0", path = "crates/tea-client" }
-tea-conformance = { version = "0.1.0", path = "crates/tea-conformance" }
+cdx-tea-core = { version = "0.1.0", path = "crates/tea-core" }
+cdx-tea-client = { version = "0.1.0", path = "crates/tea-client" }
+cdx-tea-conformance = { version = "0.1.0", path = "crates/tea-conformance" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

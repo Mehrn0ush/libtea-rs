@@ -6,7 +6,7 @@ Pinned contract: CycloneDX/transparency-exchange-api commit `962a0228af1bfcc1232
 
 ## Checked-in live tests
 
-`crates/tea-client/tests/oolong_idtype_live.rs` is ignored. `cargo test` does not run it. It uses `tea-client` against a local Oolong process that is already listening. On 2026-10-11 those tests passed:
+`crates/tea-client/tests/oolong_idtype_live.rs` is ignored. `cargo test` does not run it. It uses `cdx-tea-client` against a local Oolong process that is already listening. On 2026-10-11 those tests passed:
 
 | Scenario | What was observed |
 | --- | --- |

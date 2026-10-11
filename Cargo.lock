@@ -199,6 +199,72 @@ dependencies = [
 ]
 
 [[package]]
+name = "cdx-tea-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cdx-tea-client",
+ "cdx-tea-conformance",
+ "cdx-tea-core",
+ "clap",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "cdx-tea-client"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "cdx-tea-core",
+ "flate2",
+ "futures-util",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "cdx-tea-conformance"
+version = "0.1.0"
+dependencies = [
+ "cdx-tea-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cdx-tea-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "blake2",
+ "blake3",
+ "digest",
+ "flate2",
+ "proptest",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "sha3",
+ "thiserror",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1513,72 +1579,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.7",
-]
-
-[[package]]
-name = "tea-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "serde_json",
- "sha2",
- "tea-client",
- "tea-conformance",
- "tea-core",
- "tokio",
- "url",
- "wiremock",
-]
-
-[[package]]
-name = "tea-client"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "flate2",
- "futures-util",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tea-core",
- "thiserror",
- "tokio",
- "tracing",
- "url",
- "wiremock",
-]
-
-[[package]]
-name = "tea-conformance"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tea-core",
-]
-
-[[package]]
-name = "tea-core"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "blake2",
- "blake3",
- "digest",
- "flate2",
- "proptest",
- "semver",
- "serde",
- "serde_json",
- "sha1",
- "sha2",
- "sha3",
- "thiserror",
- "url",
- "uuid",
 ]
 
 [[package]]

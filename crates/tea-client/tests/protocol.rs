@@ -4,9 +4,11 @@
 
 use std::time::Duration;
 
+use cdx_tea_client::{
+    ApiKey, ArtifactFetch, CleFetch, Client, ClientError, Limits, SignatureFetch,
+};
+use cdx_tea_core::{Checksum, ChecksumAlgorithm, DestinationPolicy, ListParams, ProductId, Tei};
 use sha2::{Digest, Sha256};
-use tea_client::{ApiKey, ArtifactFetch, CleFetch, Client, ClientError, Limits, SignatureFetch};
-use tea_core::{Checksum, ChecksumAlgorithm, DestinationPolicy, ListParams, ProductId, Tei};
 use url::Url;
 use wiremock::matchers::{
     header, header_exists, method, path, query_param, query_param_is_missing,
@@ -89,7 +91,7 @@ async fn head_ignores_representation_content_length() {
     let headers = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .head_artifact(tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
+        .head_artifact(cdx_tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
         .await
         .unwrap();
     assert_eq!(
@@ -114,7 +116,7 @@ async fn head_without_content_length_returns_metadata() {
     let headers = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .head_artifact(tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
+        .head_artifact(cdx_tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
         .await
         .unwrap();
     assert!(!headers.contains_key("content-length"));
@@ -138,7 +140,7 @@ async fn head_bearer_challenge_is_an_authentication_error() {
     let error = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .head_artifact(tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
+        .head_artifact(cdx_tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
         .await
         .unwrap_err();
     assert!(matches!(error, ClientError::AuthenticationRequired));
@@ -203,7 +205,7 @@ async fn head_redirect_uses_the_final_headers_and_strips_a_real_token() {
     let headers = client
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .head_artifact(tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
+        .head_artifact(cdx_tea_core::ArtifactId::parse(ID).unwrap(), 1, None)
         .await
         .unwrap();
     assert_eq!(headers.get("etag").map(String::as_str), Some("\"meta\""));
@@ -284,7 +286,7 @@ async fn bearer_token_is_kept_under_the_prefix_and_stripped_after_that() {
         .service(&server.uri(), "1.0.0")
         .unwrap()
         .download_artifact(
-            tea_core::ArtifactId::parse(ID).unwrap(),
+            cdx_tea_core::ArtifactId::parse(ID).unwrap(),
             1,
             None,
             &[checksum],
@@ -298,7 +300,7 @@ async fn bearer_token_is_kept_under_the_prefix_and_stripped_after_that() {
     assert_eq!(downloaded.bytes, body);
     assert_eq!(
         downloaded.integrity.outcome,
-        tea_core::IntegrityOutcome::Verified
+        cdx_tea_core::IntegrityOutcome::Verified
     );
     assert_ne!(downloaded.etag.as_deref(), Some(digest.as_str()));
 }
@@ -325,7 +327,13 @@ async fn redirect_to_another_origin_is_refused_before_a_credential_is_sent() {
     let error = client(&first)
         .service(&first.uri(), "1.0.0")
         .unwrap()
-        .download_artifact(tea_core::ArtifactId::parse(ID).unwrap(), 1, None, &[], None)
+        .download_artifact(
+            cdx_tea_core::ArtifactId::parse(ID).unwrap(),
+            1,
+            None,
+            &[],
+            None,
+        )
         .await
         .unwrap_err();
     assert!(matches!(error, ClientError::Policy(_)));
@@ -350,7 +358,7 @@ async fn conditional_get_304_is_not_a_checksum_and_has_no_body() {
         .service(&server.uri(), "1.0.0")
         .unwrap()
         .download_artifact(
-            tea_core::ArtifactId::parse(ID).unwrap(),
+            cdx_tea_core::ArtifactId::parse(ID).unwrap(),
             1,
             None,
             &[],
@@ -393,7 +401,7 @@ async fn zlib_deflate_is_decoded_before_the_checksum() {
         .service(&server.uri(), "1.0.0")
         .unwrap()
         .download_artifact(
-            tea_core::ArtifactId::parse(ID).unwrap(),
+            cdx_tea_core::ArtifactId::parse(ID).unwrap(),
             1,
             None,
             &[checksum],
@@ -405,7 +413,10 @@ async fn zlib_deflate_is_decoded_before_the_checksum() {
         panic!("expected a body");
     };
     assert_eq!(body.bytes, raw);
-    assert_eq!(body.integrity.outcome, tea_core::IntegrityOutcome::Verified);
+    assert_eq!(
+        body.integrity.outcome,
+        cdx_tea_core::IntegrityOutcome::Verified
+    );
 }
 
 #[tokio::test]
@@ -569,7 +580,7 @@ async fn not_acceptable_is_an_api_error_and_a_missing_json_type_is_rejected() {
     let error = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .get_component(tea_core::ComponentId::parse(ID).unwrap())
+        .get_component(cdx_tea_core::ComponentId::parse(ID).unwrap())
         .await
         .unwrap_err();
     assert!(matches!(error, ClientError::Model(_)));
@@ -590,7 +601,7 @@ async fn signature_absence_is_not_verification_and_unknown_is_an_error() {
         .await;
     let service = client(&server).service(&server.uri(), "1.0.0").unwrap();
     let missing = service
-        .download_signature(tea_core::ArtifactId::parse(ID).unwrap(), 1, None, None)
+        .download_signature(cdx_tea_core::ArtifactId::parse(ID).unwrap(), 1, None, None)
         .await
         .unwrap();
     assert!(matches!(missing, SignatureFetch::NotPublished));
@@ -607,7 +618,7 @@ async fn signature_absence_is_not_verification_and_unknown_is_an_error() {
     let error = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .download_signature(tea_core::ArtifactId::parse(ID).unwrap(), 1, None, None)
+        .download_signature(cdx_tea_core::ArtifactId::parse(ID).unwrap(), 1, None, None)
         .await
         .unwrap_err();
     assert!(matches!(
@@ -634,7 +645,7 @@ async fn signature_bytes_are_not_reported_as_verified() {
     let fetched = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .download_signature(tea_core::ArtifactId::parse(ID).unwrap(), 1, None, None)
+        .download_signature(cdx_tea_core::ArtifactId::parse(ID).unwrap(), 1, None, None)
         .await
         .unwrap();
     let SignatureFetch::Present(body) = fetched else {
@@ -643,7 +654,7 @@ async fn signature_bytes_are_not_reported_as_verified() {
     assert_eq!(body.bytes, b"sig-bytes");
     assert_eq!(
         body.integrity.outcome,
-        tea_core::IntegrityOutcome::NotDeclared
+        cdx_tea_core::IntegrityOutcome::NotDeclared
     );
 }
 
@@ -690,7 +701,13 @@ async fn redirect_limit_and_gzip_expansion_limit_are_enforced() {
     let error = client
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .download_artifact(tea_core::ArtifactId::parse(ID).unwrap(), 1, None, &[], None)
+        .download_artifact(
+            cdx_tea_core::ArtifactId::parse(ID).unwrap(),
+            1,
+            None,
+            &[],
+            None,
+        )
         .await
         .unwrap_err();
     assert!(matches!(error, ClientError::TooManyRedirects));
@@ -719,7 +736,13 @@ async fn redirect_limit_and_gzip_expansion_limit_are_enforced() {
     let error = client
         .service(&server.uri(), "1.0.0")
         .unwrap()
-        .download_artifact(tea_core::ArtifactId::parse(ID).unwrap(), 1, None, &[], None)
+        .download_artifact(
+            cdx_tea_core::ArtifactId::parse(ID).unwrap(),
+            1,
+            None,
+            &[],
+            None,
+        )
         .await
         .unwrap_err();
     assert!(matches!(
@@ -752,7 +775,7 @@ async fn type_only_identifier_filter_is_serialized() {
         .mount(&server)
         .await;
     let mut query = params(None, None);
-    query.id_type = Some(tea_core::enums::IdentifierType::ComplianceDocument);
+    query.id_type = Some(cdx_tea_core::enums::IdentifierType::ComplianceDocument);
     let page = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()
@@ -781,7 +804,7 @@ async fn both_identifier_filters_are_encoded_in_the_query() {
         .mount(&server)
         .await;
     let mut query = params(None, None);
-    query.id_type = Some(tea_core::enums::IdentifierType::Purl);
+    query.id_type = Some(cdx_tea_core::enums::IdentifierType::Purl);
     query.id_value = Some(value.to_owned());
     let page = client(&server)
         .service(&server.uri(), "1.0.0")
@@ -830,6 +853,33 @@ async fn absent_identifier_filters_are_omitted() {
 }
 
 #[tokio::test]
+async fn default_list_params_send_no_query() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/components"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "hasNext": false,
+            "results": []
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let query = ListParams::<cdx_tea_core::enums::ComponentSort>::default();
+    let page = client(&server)
+        .service(&server.uri(), "1.0.0")
+        .unwrap()
+        .query_components(&query)
+        .await
+        .unwrap();
+    assert!(page.results.is_empty());
+    assert!(!page.has_next);
+    assert!(server.received_requests().await.unwrap()[0]
+        .url
+        .query()
+        .is_none());
+}
+
+#[tokio::test]
 async fn value_only_identifier_filter_sends_no_request() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -846,7 +896,7 @@ async fn value_only_identifier_filter_sends_no_request() {
         .await
         .unwrap_err();
     match error {
-        ClientError::Model(tea_core::ModelError::Invalid(message)) => {
+        ClientError::Model(cdx_tea_core::ModelError::Invalid(message)) => {
             assert_eq!(message, "idValue requires idType");
         }
         other => panic!("unexpected error: {other}"),
@@ -882,7 +932,7 @@ async fn type_only_filter_stays_on_the_next_page() {
         .await;
     let service = client(&server).service(&server.uri(), "1.0.0").unwrap();
     let mut query = params(Some(1), None);
-    query.id_type = Some(tea_core::enums::IdentifierType::ComplianceDocument);
+    query.id_type = Some(cdx_tea_core::enums::IdentifierType::ComplianceDocument);
     let first = service.query_components(&query).await.unwrap();
     assert!(first.has_next);
     assert_eq!(first.next_page_token.as_deref(), Some("page-2"));
@@ -923,8 +973,8 @@ async fn list_queries_keep_unrelated_parameters() {
         .mount(&server)
         .await;
     let mut query = params(Some(10), None);
-    query.sort_field = Some(tea_core::enums::ProductSort::Name);
-    query.sort_order = Some(tea_core::enums::SortOrder::Desc);
+    query.sort_field = Some(cdx_tea_core::enums::ProductSort::Name);
+    query.sort_order = Some(cdx_tea_core::enums::SortOrder::Desc);
     let page = client(&server)
         .service(&server.uri(), "1.0.0")
         .unwrap()

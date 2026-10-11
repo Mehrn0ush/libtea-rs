@@ -1,8 +1,8 @@
 //! Select an API base from a `.well-known/tea` document.
 //!
-//! Run with `cargo run -p tea-core --example select_endpoint`.
+//! Run with `cargo run -p cdx-tea-core --example select_endpoint`.
 
-use tea_core::{SupportedApi, WellKnownDocument};
+use cdx_tea_core::{SupportedApi, WellKnownDocument};
 
 fn main() {
     let document = WellKnownDocument::parse(

@@ -1,7 +1,7 @@
 //! Async consumer client for the Transparency Exchange API 1.0.0.
 //!
 //! Transport uses rustls. Certificate verification stays enabled. Discovery
-//! and artifact URLs are checked against [`tea_core::DestinationPolicy`] before each
+//! and artifact URLs are checked against [`cdx_tea_core::DestinationPolicy`] before each
 //! connection, including addresses returned by DNS.
 
 #![forbid(unsafe_code)]
@@ -14,7 +14,7 @@ pub use error::ClientError;
 pub use service::{ArtifactFetch, CleFetch, DownloadedArtifact, Service, SignatureFetch};
 pub use transport::{ApiKey, Client, ClientBuilder, Limits};
 
-use tea_core::{tea_error_code, DiscoveryInfo, ProductReleaseId, Tei, WellKnownDocument};
+use cdx_tea_core::{tea_error_code, DiscoveryInfo, ProductReleaseId, Tei, WellKnownDocument};
 use url::Url;
 
 use crate::transport::{header_str, map_api_error, operation_url, Call, CONTENT_TYPE_HEADER};
@@ -47,7 +47,7 @@ impl Client {
         let well_known_url = match &self.inner.well_known_override {
             Some(url) => url.clone(),
             None => Url::parse(&tei.well_known_url()).map_err(|_| {
-                ClientError::Model(tea_core::ModelError::Invalid(
+                ClientError::Model(cdx_tea_core::ModelError::Invalid(
                     "well-known URL is not valid".into(),
                 ))
             })?,
@@ -82,18 +82,20 @@ impl Client {
             }
             attempts += 1;
             let root = Url::parse(&candidate.root_url).map_err(|_| {
-                ClientError::Model(tea_core::ModelError::Invalid("discovery root URL".into()))
+                ClientError::Model(cdx_tea_core::ModelError::Invalid(
+                    "discovery root URL".into(),
+                ))
             })?;
             self.inner.policy.check_url(&root)?;
             if self.inner.allow_discovered_credentials {
                 self.authorize_origin(&root)?;
             }
-            let prefix = Url::parse(&tea_core::versioned_api_prefix(
+            let prefix = Url::parse(&cdx_tea_core::versioned_api_prefix(
                 root.as_str().trim_end_matches('/'),
                 &candidate.version,
             )?)
             .map_err(|_| {
-                ClientError::Model(tea_core::ModelError::Invalid(
+                ClientError::Model(cdx_tea_core::ModelError::Invalid(
                     "versioned discovery URL".into(),
                 ))
             })?;
@@ -133,7 +135,7 @@ impl Client {
                     header_str(&response.headers, CONTENT_TYPE_HEADER),
                     &response.body,
                 ) {
-                    let message = tea_core::TeaErrorBody::parse(&response.body)
+                    let message = cdx_tea_core::TeaErrorBody::parse(&response.body)
                         .ok()
                         .and_then(|body| body.message);
                     return Err(ClientError::Unresolved { error, message });
@@ -159,7 +161,7 @@ impl Client {
             for release in releases {
                 let server = release.select_server(&self.inner.supported)?;
                 let chosen = server.into_iter().next().ok_or_else(|| {
-                    ClientError::Model(tea_core::ModelError::Invalid(
+                    ClientError::Model(cdx_tea_core::ModelError::Invalid(
                         "discovery returned no usable server".into(),
                     ))
                 })?;

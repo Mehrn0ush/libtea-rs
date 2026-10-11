@@ -1,14 +1,18 @@
 [package]
-name = "tea-client"
+name = "cdx-tea-client"
 version = "0.1.0"
-description = "Async TEA consumer client"
+description = "Independent async Rust client for the CycloneDX Transparency Exchange API."
+readme = "README.md"
+keywords = ["cyclonedx", "sbom", "tei", "transparency", "bom"]
+categories = ["api-bindings", "network-programming"]
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+repository.workspace = true
+publish = true
 
 [dependencies]
-tea-core.workspace = true
+cdx-tea-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -31,7 +31,12 @@ pub enum TeiError {
     PercentEncoding,
     /// The identifier failed the registered type's syntax.
     #[error("TEI identifier is not valid for type `{tei_type}`: {reason}")]
-    Registry { tei_type: String, reason: String },
+    Registry {
+        /// Registered TEI type that rejected the identifier.
+        tei_type: String,
+        /// Why the identifier failed that type's syntax.
+        reason: String,
+    },
 }
 
 /// Failure while parsing a TEA model, discovery document, or version.

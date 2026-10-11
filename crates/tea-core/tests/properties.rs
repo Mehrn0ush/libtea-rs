@@ -1,5 +1,5 @@
+use cdx_tea_core::{Tei, WellKnownDocument};
 use proptest::prelude::*;
-use tea_core::{Tei, WellKnownDocument};
 
 proptest! {
     #[test]

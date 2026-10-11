@@ -6,11 +6,11 @@
 
 #![forbid(unsafe_code)]
 
-use serde::{Deserialize, Serialize};
-use tea_core::{
+use cdx_tea_core::{
     verify_checksums, Checksum, ChecksumAlgorithm, DiscoveryInfo, SupportedApi, Tei,
     WellKnownDocument,
 };
+use serde::{Deserialize, Serialize};
 
 /// One specification-derived check.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,8 +63,8 @@ pub fn static_report() -> Report {
         checksum_does_not_claim_success_when_wrong(),
     ];
     Report {
-        spec_commit: tea_core::spec::COMMIT.to_owned(),
-        spec_version: tea_core::spec::SPEC_VERSION.to_owned(),
+        spec_commit: cdx_tea_core::spec::COMMIT.to_owned(),
+        spec_version: cdx_tea_core::spec::SPEC_VERSION.to_owned(),
         cases,
     }
 }
@@ -135,7 +135,7 @@ fn empty_discovery() -> CaseResult {
 }
 
 fn unknown_error_is_still_a_tea_error() -> CaseResult {
-    let code = tea_core::tea_error_code(
+    let code = cdx_tea_core::tea_error_code(
         Some("application/json; charset=utf-8"),
         br#"{"error":"FUTURE_CODE"}"#,
     );
@@ -156,7 +156,7 @@ fn checksum_does_not_claim_success_when_wrong() -> CaseResult {
     let passed = checksum.is_ok_and(|checksum| {
         !matches!(
             verify_checksums(b"tea", &[checksum]).outcome,
-            tea_core::IntegrityOutcome::Verified
+            cdx_tea_core::IntegrityOutcome::Verified
         )
     });
     CaseResult {

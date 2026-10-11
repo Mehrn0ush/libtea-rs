@@ -10,7 +10,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-tea-core = { path = "../crates/tea-core" }
+cdx-tea-core = { path = "../crates/tea-core" }
 
 [[bin]]
 name = "tei_parse"

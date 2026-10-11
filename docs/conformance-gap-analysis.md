@@ -49,7 +49,7 @@ Paths are relative to `{rootUrl}/v{advertised}/`. All 28 operations from `paths`
 
 | ID | Source | Requirement | Implementation | Test | Result |
 | --- | --- | --- | --- | --- | --- |
-| REQ-TEI-01 | discovery/readme.md, TEI syntax | Form `tei://domain/type/id`. Type is lowercase ASCII starting with a letter. No port. Identifier is one segment and rejects `/` and `%2F` | `tea_core::Tei::parse` | `rejects_slash_and_port`, `parses_registry_examples` | Verified |
+| REQ-TEI-01 | discovery/readme.md, TEI syntax | Form `tei://domain/type/id`. Type is lowercase ASCII starting with a letter. No port. Identifier is one segment and rejects `/` and `%2F` | `cdx_tea_core::Tei::parse` | `rejects_slash_and_port`, `parses_registry_examples` | Verified |
 | REQ-TEI-02 | Comparing TEIs | Equality is the original character sequence. Clients shall not rewrite a TEI | `Tei` stores `original` and displays it | `does_not_treat_case_variants_as_equal`, property test | Verified |
 | REQ-TEI-03 | TEI type registry examples in the discovery document | Registered examples parse. Unknown types stay valid | `Tei::validate_registry` | `parses_registry_examples`, `unknown_type_parses_without_registry_rules` | Verified for the examples in the discovery table. The registry files themselves were not re-diffed byte for byte in this audit |
 | REQ-VER-01 | Selecting an API base | Highest mutually supported SemVer, build metadata ignored for comparison and kept in the path, `+` not encoded | `select_endpoints`, `versioned_api_prefix` | `prefers_higher_version_over_priority`, `keeps_build_metadata_spelling`, `prerelease_is_not_the_stable_version` | Verified |
@@ -96,4 +96,4 @@ These are not counted as client defects.
 
 ## What the static conformance report covers
 
-`tea_conformance::static_report` checks six local cases: registry TEI examples, case-sensitive equality, the well-known priority example, an empty discovery array, an unknown error code, and a wrong SHA-256. It does not open a socket. A passing report is not a conformance certificate.
+`cdx_tea_conformance::static_report` checks six local cases: registry TEI examples, case-sensitive equality, the well-known priority example, an empty discovery array, an unknown error code, and a wrong SHA-256. It does not open a socket. A passing report is not a conformance certificate.

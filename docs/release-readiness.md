@@ -1,10 +1,10 @@
 # Release readiness
 
-Date: 2026-10-10. Nothing was published. Crate names were not changed.
+The 2026-10-10 sections below keep the package names from that audit. Current package names are `cdx-tea-core`, `cdx-tea-client`, `cdx-tea-conformance`, and `cdx-tea-cli`. Directory paths are unchanged. Nothing has been published.
 
 ## Verdict
 
-The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong server has been called by this client; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. Many get, collection, and CLE operations still have no dedicated test. Publication is still blocked by crate names and by `publish = false`.
+The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong server has been called by this client; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. Many get, collection, and CLE operations still have no dedicated test. The old `tea-core` and `tea-cli` names are still taken on crates.io. This workspace now uses the `cdx-tea-*` names recorded below. `cdx-tea-cli` and `cdx-tea-conformance` remain `publish = false`.
 
 ## Blockers before a conformance claim
 
@@ -16,9 +16,26 @@ The five items below were the audit blockers. They are fixed in this tree. A con
 4. Add the missing HTTP assertions for token stripping, discovery `403`, `304`, and pagination. Added in `crates/tea-client/tests/protocol.rs`.
 5. Stop the CLI from saving unverified artifact bytes while claiming success. Fixed. Declared checksums are checked. `NotDeclared` is labeled as not verified. Stdout is bytes only.
 
+## Publication names
+
+Checked again with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-11. HTTP 404 means the name was absent at that request. It is not reserved.
+
+| Package | Registry on 2026-10-11 | Publish |
+| --- | --- | --- |
+| `cdx-tea-core` | HTTP 404 | `publish = true`. Publish this first |
+| `cdx-tea-client` | HTTP 404 | `publish = true`. Publish only after `cdx-tea-core` 0.1.0 is on crates.io |
+| `cdx-tea-conformance` | HTTP 404 | `publish = false` |
+| `cdx-tea-cli` | HTTP 404 | `publish = false` |
+
+`cdx-tea-client` depends on `cdx-tea-core` and does not depend on the CLI or the conformance crate. Workspace directories stay `crates/tea-core`, `crates/tea-client`, `crates/tea-conformance`, and `crates/tea-cli`. Rust import paths are `cdx_tea_core` and `cdx_tea_client`.
+
+The CLI package was renamed. The executable name is still `tea`. That name collides with another tool. Reconsider the binary name before publishing `cdx-tea-cli`. This pass does not publish the CLI.
+
+These libraries are an independent consumer implementation of the CycloneDX Transparency Exchange API. The `cdx-tea` prefix does not make them a CycloneDX project release.
+
 ## Blockers before crates.io
 
-Checked with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-10. A 404 means the name was absent at that moment. It can be registered later. A 200 means the name is taken by another project.
+Checked with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-10, before the rename. A 404 means the name was absent at that moment. A 200 means the name was taken by another project. This table is the reason the old names were not published.
 
 | Name | Registry result | This workspace |
 | --- | --- | --- |
@@ -31,7 +48,7 @@ Checked with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-10. A 404 m
 
 `publish` is false on the workspace, which is appropriate. There is no `[package] repository`, `documentation`, `homepage`, or `readme` path on the member crates. The license field is `Apache-2.0` and `LICENSE` is the Apache 2.0 text. There are no feature flags. The public API is `0.1.0` and should be treated as unstable.
 
-Do not rename crates in this audit. A later publish needs an explicit name that is still free at publish time. `tea-core` and `tea-cli` cannot be used as crates.io names while those packages exist. Publication order, if a new prefix is chosen, should be `tea-core`, then `tea-client` and `tea-conformance`, then the CLI, because the higher crates depend on `tea-core`.
+That 2026-10-10 note said not to rename during the audit. The rename to `cdx-tea-*` happened afterward. `tea-core` and `tea-cli` still cannot be used as crates.io names while those other packages exist. Publish `cdx-tea-core` 0.1.0, then `cdx-tea-client` 0.1.0. Leave `cdx-tea-conformance` and `cdx-tea-cli` unpublished. The executable is still named `tea`; change that only when the CLI itself is prepared for publication.
 
 ## Tooling gaps
 

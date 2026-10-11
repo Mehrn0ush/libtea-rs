@@ -3,7 +3,7 @@
 //! Display text does not include access tokens, API key secrets, or
 //! `Authorization` header values.
 
-use tea_core::{IntegrityOutcome, IntegrityReport, ModelError, PolicyError};
+use cdx_tea_core::{IntegrityOutcome, IntegrityReport, ModelError, PolicyError};
 use thiserror::Error;
 
 /// Failure of a consumer HTTP operation.

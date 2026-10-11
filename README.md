@@ -10,19 +10,19 @@ The SDK is a client. It is not a TEA server. A response from a server does not m
 
 | Crate | Role |
 | --- | --- |
-| `tea-core` | TEI, version negotiation, models, checksums, destination classification. No HTTP runtime |
-| `tea-client` | Async client (`tokio`, `reqwest`, `rustls`) |
-| `tea-conformance` | Offline checks and a JSON report |
-| `tea-cli` | `tea` binary that calls the libraries |
+| `cdx-tea-core` | TEI, version negotiation, models, checksums, destination classification. No HTTP runtime |
+| `cdx-tea-client` | Async client (`tokio`, `reqwest`, `rustls`) |
+| `cdx-tea-conformance` | Offline checks and a JSON report |
+| `cdx-tea-cli` | `tea` binary that calls the libraries |
 
-Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. `publish` is false, so these crates are not installed from crates.io. Build them from a checkout of this workspace.
+Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. `cdx-tea-core` and `cdx-tea-client` are the crates prepared for crates.io. `cdx-tea-cli` and `cdx-tea-conformance` stay `publish = false`. None of them have been published yet, so build this workspace from a checkout. The CLI executable name is still `tea`. Reconsider that name before publishing the CLI.
 
 ## Build
 
 ```sh
 cargo build --workspace
 cargo test --workspace --all-targets
-cargo run -p tea-cli -- spec
+cargo run -p cdx-tea-cli -- spec
 ```
 
 TLS uses rustls. Certificate verification cannot be turned off. The default destination policy allows HTTPS to public addresses and refuses cleartext, loopback, and metadata addresses. A local HTTP server needs an explicit origin exception. See [docs/security.md](docs/security.md).
@@ -34,7 +34,7 @@ Fuzz targets live in `fuzz/` and are outside the workspace. They need `cargo-fuz
 The fenced programs below are illustrations. They are not one compilable file: `?` crosses different error types, and later fences reuse names from earlier ones. The program that type-checks with this workspace is [`crates/tea-client/examples/filter_by_identifier_type.rs`](crates/tea-client/examples/filter_by_identifier_type.rs).
 
 ```sh
-cargo run -p tea-client --example filter_by_identifier_type -- https://api.example.com
+cargo run -p cdx-tea-client --example filter_by_identifier_type -- https://api.example.com
 ```
 
 That run uses API version `1.0.0`, the default HTTPS destination policy, and `idType=COMPLIANCE_DOCUMENT` with no `idValue`. Pass `--allow-origin` only for a local HTTP origin, as the example's comments describe. It does not embed a credential.
@@ -42,8 +42,8 @@ That run uses API version `1.0.0`, the default HTTPS destination policy, and `id
 ## Discover a product release
 
 ```rust
-use tea_client::Client;
-use tea_core::Tei;
+use cdx_tea_client::Client;
+use cdx_tea_core::Tei;
 
 let tei = Tei::parse("tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1")?;
 let client = Client::builder().build()?;
@@ -55,8 +55,8 @@ let releases = client.discover(&tei).await?;
 ## Read a release from a known API base
 
 ```rust
-use tea_client::Client;
-use tea_core::ProductReleaseId;
+use cdx_tea_client::Client;
+use cdx_tea_core::ProductReleaseId;
 
 let client = Client::builder().build()?;
 let service = client.service("https://api.example.com", "1.0.0")?;
@@ -72,8 +72,8 @@ let collection = service
 ## Download an artifact and check it
 
 ```rust
-use tea_client::{ArtifactFetch, Client};
-use tea_core::{ArtifactId, IntegrityOutcome};
+use cdx_tea_client::{ArtifactFetch, Client};
+use cdx_tea_core::{ArtifactId, IntegrityOutcome};
 
 let service = client.service("https://api.example.com", "1.0.0")?;
 let artifact = service
@@ -94,24 +94,20 @@ if let ArtifactFetch::Body(body) = fetched {
 ## Filter a list by identifier type
 
 ```rust
-use tea_client::Client;
-use tea_core::enums::IdentifierType;
-use tea_core::ListParams;
+use cdx_tea_client::Client;
+use cdx_tea_core::enums::IdentifierType;
+use cdx_tea_core::ListParams;
 
 let client = Client::builder().build()?;
 let service = client.service("https://api.example.com", "1.0.0")?;
 let query = ListParams {
-    page_size: None,
-    page_token: None,
-    sort_field: None,
-    sort_order: None,
     id_type: Some(IdentifierType::ComplianceDocument),
-    id_value: None,
+    ..ListParams::default()
 };
 let page = service.query_components(&query).await?;
 ```
 
-`query_components` is the list operation. There is no `list_components` method. The same `ListParams` fields apply to the other list methods (`query_products`, `query_product_releases`, `query_component_releases`, and the per-parent release and collection lists). `ListParams::default()` is only implemented when the sort type implements `Default`. The built-in sort enums do not, so construct the struct as above.
+`query_components` is the list operation. There is no `list_components` method. The same `ListParams` fields apply to the other list methods (`query_products`, `query_product_releases`, `query_component_releases`, and the per-parent release and collection lists). `ListParams::default()` leaves every field unset for any sort type, including the built-in sort enums. Unset fields are omitted from the query. The server then chooses the page size and sort.
 
 | `id_type` | `id_value` | What the client sends |
 | --- | --- | --- |
@@ -127,7 +123,7 @@ The client does not follow `next` URLs. Copy `next_page_token` into `page_token`
 ## Authentication
 
 ```rust
-use tea_client::{ApiKey, Client};
+use cdx_tea_client::{ApiKey, Client};
 
 let client = Client::builder()
     .api_key(ApiKey::new("key-id", "key-secret"))
@@ -142,8 +138,8 @@ Leave `allow_discovered_credentials` unset when the API key must not be posted t
 ## Local servers
 
 ```rust
-use tea_client::Client;
-use tea_core::DestinationPolicy;
+use cdx_tea_client::Client;
+use cdx_tea_core::DestinationPolicy;
 use url::Url;
 
 let origin = Url::parse("http://127.0.0.1:8080")?;
@@ -159,12 +155,12 @@ The exception is that origin only. Other private and cleartext URLs stay refused
 The binary is `tea`. It does not expose list or identifier filters. Those are library calls.
 
 ```sh
-cargo run -p tea-cli -- spec
-cargo run -p tea-cli -- parse-tei 'tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1'
-cargo run -p tea-cli -- conformance
-cargo run -p tea-cli -- discover 'tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1'
-cargo run -p tea-cli -- product-release --base https://api.example.com --uuid d4d9f54a-abcf-11ee-ac79-1a52914d44b1
-cargo run -p tea-cli -- download --base https://api.example.com --artifact d4d9f54a-abcf-11ee-ac79-1a52914d44b1 --revision 1 --media-type application/vnd.cyclonedx+json --output artifact.bin
+cargo run -p cdx-tea-cli -- spec
+cargo run -p cdx-tea-cli -- parse-tei 'tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1'
+cargo run -p cdx-tea-cli -- conformance
+cargo run -p cdx-tea-cli -- discover 'tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1'
+cargo run -p cdx-tea-cli -- product-release --base https://api.example.com --uuid d4d9f54a-abcf-11ee-ac79-1a52914d44b1
+cargo run -p cdx-tea-cli -- download --base https://api.example.com --artifact d4d9f54a-abcf-11ee-ac79-1a52914d44b1 --revision 1 --media-type application/vnd.cyclonedx+json --output artifact.bin
 ```
 
 `discover` accepts `--api-key-id`, `--api-key-secret`, `--allow-discovered-credentials`, `--well-known-url`, and `--allow-origin`. `product-release` and `download` accept `--base`, `--api-version` (default `1.0.0`), `--api-key-id`, `--api-key-secret`, and `--allow-origin`. `download` also accepts `--artifact`, `--revision` (omit it to use the latest-revision endpoint), `--media-type`, and `--output`. Without `--output`, stdout is the artifact bytes and the integrity line is written to stderr. `--api-key-id` and `--api-key-secret` must be passed together.

@@ -6,14 +6,14 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use futures_util::StreamExt;
-use reqwest::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, LOCATION, WWW_AUTHENTICATE};
-use reqwest::{Method, StatusCode};
-use tea_core::checksum::ContentDecoder;
-use tea_core::{
+use cdx_tea_core::checksum::ContentDecoder;
+use cdx_tea_core::{
     classify_ip, origin_key, parse_api_base, tea_error_code, ApiVersion, DestinationPolicy,
     SupportedApi, TeaErrorBody, TokenResponse,
 };
+use futures_util::StreamExt;
+use reqwest::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, LOCATION, WWW_AUTHENTICATE};
+use reqwest::{Method, StatusCode};
 use tokio::sync::Semaphore;
 use url::Url;
 
@@ -226,7 +226,7 @@ impl ClientBuilder {
     /// Returns an error when TLS or the HTTP client cannot be constructed.
     pub fn build(self) -> Result<Client, ClientError> {
         if self.limits.max_in_flight == 0 {
-            return Err(ClientError::Model(tea_core::ModelError::Invalid(
+            return Err(ClientError::Model(cdx_tea_core::ModelError::Invalid(
                 "max_in_flight must be at least 1".into(),
             )));
         }
@@ -552,9 +552,9 @@ impl ClientInner {
         if !origin_allowed(self, api_prefix) {
             return Err(ClientError::AuthenticationRequired);
         }
-        let url = api_prefix
-            .join("token")
-            .map_err(|_| ClientError::Model(tea_core::ModelError::Invalid("token URL".into())))?;
+        let url = api_prefix.join("token").map_err(|_| {
+            ClientError::Model(cdx_tea_core::ModelError::Invalid("token URL".into()))
+        })?;
         let call = Call {
             method: Method::POST,
             url,
@@ -729,9 +729,9 @@ pub(crate) fn operation_url(
     path: &str,
     query: &[(&str, &str)],
 ) -> Result<Url, ClientError> {
-    let mut url = prefix
-        .join(path.trim_start_matches('/'))
-        .map_err(|_| ClientError::Model(tea_core::ModelError::Invalid("operation URL".into())))?;
+    let mut url = prefix.join(path.trim_start_matches('/')).map_err(|_| {
+        ClientError::Model(cdx_tea_core::ModelError::Invalid("operation URL".into()))
+    })?;
     if !query.is_empty() {
         let mut pairs = url.query_pairs_mut();
         pairs.clear();

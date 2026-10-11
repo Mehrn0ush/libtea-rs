@@ -1,7 +1,7 @@
 //! Domain types and protocol rules for the Transparency Exchange API consumer.
 //!
 //! This crate does not open network connections, read the filesystem, or depend
-//! on an async runtime. [`tea_client`](https://docs.rs/tea-client) performs HTTP.
+//! on an async runtime. [`cdx_tea_client`](https://docs.rs/cdx-tea-client) performs HTTP.
 //!
 //! The pinned specification is TEA OpenAPI `1.0.0` from
 //! <https://github.com/CycloneDX/transparency-exchange-api> commit
@@ -60,7 +60,12 @@ pub mod spec {
 }
 
 /// Query parameters shared by list operations.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+///
+/// [`Default`] leaves every field unset. The request then carries no list
+/// query parameters, and the server applies its own page size and sort. `S`
+/// does not need to implement [`Default`], so this works for [`enums::ComponentSort`]
+/// and the other built-in sort enums.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListParams<S> {
     /// `pageSize`, from 1 to 100.
     pub page_size: Option<u32>,
@@ -82,6 +87,19 @@ pub struct ListParams<S> {
     /// not settle that value-only case, so the rejection is not a claim that
     /// TEA 1.0 forbids it.
     pub id_value: Option<String>,
+}
+
+impl<S> Default for ListParams<S> {
+    fn default() -> Self {
+        Self {
+            page_size: None,
+            page_token: None,
+            sort_field: None,
+            sort_order: None,
+            id_type: None,
+            id_value: None,
+        }
+    }
 }
 
 impl<S> ListParams<S> {
@@ -110,7 +128,9 @@ impl<S> ListParams<S> {
 #[cfg(test)]
 mod tests {
     use super::ListParams;
-    use crate::enums::{IdentifierType, SortOrder};
+    use crate::enums::{ComponentSort, IdentifierType, SortOrder};
+
+    struct SortWithoutDefault;
 
     fn params(id_type: Option<IdentifierType>, id_value: Option<&str>) -> ListParams<()> {
         ListParams {
@@ -150,6 +170,31 @@ mod tests {
             .validate()
             .unwrap_err();
         assert_eq!(error.to_string(), "idValue requires idType");
+    }
+
+    #[test]
+    fn default_leaves_every_field_unset_without_a_default_sort() {
+        let query = ListParams::<SortWithoutDefault>::default();
+        assert!(query.page_size.is_none());
+        assert!(query.page_token.is_none());
+        assert!(query.sort_field.is_none());
+        assert!(query.sort_order.is_none());
+        assert!(query.id_type.is_none());
+        assert!(query.id_value.is_none());
+        assert!(query.validate().is_ok());
+
+        let components = ListParams::<ComponentSort>::default();
+        assert!(components.sort_field.is_none());
+        assert!(components.validate().is_ok());
+
+        let value_only = ListParams::<ComponentSort> {
+            id_value: Some("pkg:generic/widget@1".to_owned()),
+            ..ListParams::default()
+        };
+        assert_eq!(
+            value_only.validate().unwrap_err().to_string(),
+            "idValue requires idType"
+        );
     }
 
     #[test]
