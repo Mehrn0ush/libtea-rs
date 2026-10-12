@@ -131,7 +131,7 @@ let client = Client::builder()
     .build()?;
 ```
 
-The key is sent to `POST /token` as HTTP Basic after form-encoding, with `grant_type=client_credentials`. Resource requests then use the returned bearer token. The token is not written to logs. It is not attached to artifact URLs outside the versioned API prefix, and it is removed when a redirect leaves that prefix.
+The key is sent to `POST /token` as HTTP Basic after form-encoding, with `grant_type=client_credentials`. That is the TEA API-key baseline. This client does not implement a general OAuth 2.0 client, refresh tokens, or other grants. Resource requests then use the returned bearer token. The token is not written to logs. It is not attached to artifact URLs outside the versioned API prefix, and it is removed when a redirect leaves that prefix.
 
 Leave `allow_discovered_credentials` unset when the API key must not be posted to hosts learned from `.well-known/tea`.
 

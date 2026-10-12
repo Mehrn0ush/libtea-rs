@@ -10,6 +10,8 @@ cdx-tea-core = "0.1.0"
 
 Edition 2021. MSRV 1.85. License Apache-2.0.
 
+The program below is an illustration. The example that builds in this crate is `examples/parse_tei.rs`.
+
 ```rust
 use cdx_tea_core::Tei;
 

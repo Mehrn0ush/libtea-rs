@@ -362,6 +362,8 @@ pub(crate) struct RawResponse {
     pub final_url: Url,
     /// Artifact bodies are decoded while they are read. JSON bodies are not.
     pub content_decoded: bool,
+    /// Bearer token attached to the request that produced this response.
+    presented_bearer: Option<String>,
 }
 
 pub(crate) struct Call {
@@ -408,9 +410,12 @@ impl ClientInner {
                         && !call.basic_auth
                         && response.status == StatusCode::UNAUTHORIZED =>
                 {
-                    // The token just stored did not authorize the retry. Drop it
-                    // so the next call does not present that same bearer token.
-                    self.discard_token(call.api_prefix.as_ref());
+                    // Drop the bearer token this retry presented, and only when
+                    // that value is still the cache entry. A newer token stored
+                    // for this origin while the 401 was in flight stays cached.
+                    if let Some(presented) = response.presented_bearer.as_deref() {
+                        self.discard_token_if_current(call.api_prefix.as_ref(), presented);
+                    }
                     return Ok(response);
                 }
                 Ok(response) => return Ok(response),
@@ -443,12 +448,16 @@ impl ClientInner {
             if let Some(etag) = &call.if_none_match {
                 request = request.header("if-none-match", etag);
             }
-            if call.basic_auth {
+            let presented_bearer = if call.basic_auth {
                 let header = self.basic_header(&url)?;
                 request = request.header(AUTHORIZATION, header);
+                None
             } else if let Some(token) = self.bearer_for(&url, call.api_prefix.as_ref()) {
                 request = request.header(AUTHORIZATION, format!("Bearer {token}"));
-            }
+                Some(token)
+            } else {
+                None
+            };
             if let Some(content_type) = call.content_type {
                 request = request.header(CONTENT_TYPE, content_type);
             }
@@ -510,6 +519,7 @@ impl ClientInner {
                 body,
                 final_url: url,
                 content_decoded,
+                presented_bearer,
             });
         }
     }
@@ -619,17 +629,20 @@ impl ClientInner {
         Ok(())
     }
 
-    fn discard_token(&self, api_prefix: Option<&Url>) {
+    fn discard_token_if_current(&self, api_prefix: Option<&Url>, presented: &str) {
         let Some(prefix) = api_prefix else {
             return;
         };
         let Ok(origin) = origin_key(prefix) else {
             return;
         };
-        self.tokens
-            .lock()
-            .unwrap_or_else(|err| err.into_inner())
-            .remove(&origin);
+        let mut tokens = self.tokens.lock().unwrap_or_else(|err| err.into_inner());
+        let still_current = tokens
+            .get(&origin)
+            .is_some_and(|stored| stored.value == presented);
+        if still_current {
+            tokens.remove(&origin);
+        }
     }
 
     pub(crate) async fn backoff(&self, attempt: u32) {

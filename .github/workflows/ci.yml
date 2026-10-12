@@ -28,13 +28,30 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         if: matrix.rust == 'stable'
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test --workspace --all-features
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Test all targets
-        run: cargo test --workspace --all-targets --all-features
+        run: cargo test --workspace --all-targets --all-features --locked
       - name: Documentation
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --workspace --no-deps --locked
+
+  package:
+    name: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: "1.85.0"
+      # `cargo package -p cdx-tea-client --locked` asks crates.io for cdx-tea-core
+      # 0.1.0. That fails until core is published. After it is, replace the list
+      # step with `cargo package -p cdx-tea-client --locked` so the client crate
+      # is verified against the registry dependency.
+      - name: Verify cdx-tea-core
+        run: cargo package -p cdx-tea-core --locked
+      - name: List cdx-tea-client files
+        run: cargo package -p cdx-tea-client --locked --no-verify --list
 
   deny:
     name: cargo deny

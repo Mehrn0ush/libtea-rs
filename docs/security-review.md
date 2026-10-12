@@ -8,6 +8,16 @@ Production defaults refuse cleartext, userinfo, literal loopback, literal link-l
 
 Those defaults were not exercised with a live DNS rebinding harness or a hostile certificate.
 
+## 2026-10-11 regression pass
+
+A later pass re-read the transport after the token-cache change in `3da0ba7`. Two defects were confirmed and fixed. This is not a new certification of the 2026-10-10 findings.
+
+`discard_token` removed the origin's cache entry after a rejected retry without comparing it to the bearer token that retry had sent. A delayed `401` for an older token deleted a newer token stored by another request. `stale_401_keeps_a_newer_cached_token` orders that race with a local server and a oneshot, and fails on the old removal. Invalidation now removes the entry only when the stored value is still the presented token. `rejected_bearer_is_dropped_after_one_retry` still requires that a rejected token which is still current is not reused.
+
+`ContentDecoder` checked the decoded length after `write_all` returned, so one compressed chunk could expand the buffer past the cap before the error. The decoder writer now refuses that write. `flate2`'s zlib writer also returned `Ok` for a truncated member: cutting `artifact-bytes` in half came back as `Ok(b"artifact")`. HTTP `deflate` now requires zlib stream end, so that partial member is an error. `gzip_expansion_is_capped` still rejects the oversize output. `truncated_gzip_and_zlib_are_rejected` covers a cut-off gzip member, a cut-off zlib member, and a zlib member with the Adler-32 trailer removed.
+
+No live DNS rebinding harness was added. The connection uses the addresses `PolicyResolver` returned; see `docs/security.md`.
+
 ## TEA-AUD-003 — Origin exceptions are hostname-wide at DNS time
 
 Status after remediation: **Verified**. `host_excepted` is gone. `PolicyResolver` allows a non-public answer only when `allows_resolved_ip` accepts the request URL captured in `REQUEST_URL`. Outside that task, only public addresses are kept. `exception_is_scheme_host_and_port` allows `http://allowed.test:8080` for `10.1.2.3` and `fd00::1`, and refuses the same host on `https` and on port `8443`, and a different host on the same addresses. Default-port keys match (`https://example.test` and `:443`). IPv6 literals use brackets. A live DNS rebinding process was not run; the decision function is deterministic.

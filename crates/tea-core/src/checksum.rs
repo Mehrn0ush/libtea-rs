@@ -321,8 +321,153 @@ pub struct ContentDecoder {
 
 enum DecoderInner {
     Plain(Vec<u8>),
-    Gzip(flate2::write::GzDecoder<Vec<u8>>),
-    Zlib(flate2::write::ZlibDecoder<Vec<u8>>),
+    Gzip(flate2::write::GzDecoder<CappedBuf>),
+    Zlib(ZlibInflate),
+}
+
+/// HTTP `deflate` decoder that accepts a member only at zlib stream end.
+///
+/// `flate2`'s writer decoder returns the bytes inflated so far when `finish`
+/// sees no further output, including a truncated member. This wrapper requires
+/// [`flate2::Status::StreamEnd`].
+struct ZlibInflate {
+    decompressor: flate2::Decompress,
+    output: CappedBuf,
+    ended: bool,
+}
+
+impl ZlibInflate {
+    fn new(max: usize) -> Self {
+        Self {
+            decompressor: flate2::Decompress::new(true),
+            output: CappedBuf::new(max),
+            ended: false,
+        }
+    }
+
+    fn push(&mut self, chunk: &[u8]) -> Result<(), ModelError> {
+        if self.ended {
+            return Err(ModelError::Invalid(
+                "content coding decode failed: trailing data after deflate stream".into(),
+            ));
+        }
+        if inflate(
+            &mut self.decompressor,
+            chunk,
+            &mut self.output,
+            flate2::FlushDecompress::None,
+        )? == flate2::Status::StreamEnd
+        {
+            self.ended = true;
+        }
+        Ok(())
+    }
+
+    fn finish(mut self) -> Result<Vec<u8>, ModelError> {
+        if !self.ended {
+            let status = inflate(
+                &mut self.decompressor,
+                &[],
+                &mut self.output,
+                flate2::FlushDecompress::Finish,
+            )?;
+            if status != flate2::Status::StreamEnd {
+                return Err(ModelError::Invalid(
+                    "content coding decode failed: truncated deflate stream".into(),
+                ));
+            }
+        }
+        Ok(self.output.bytes)
+    }
+
+    fn len(&self) -> usize {
+        self.output.len()
+    }
+}
+
+fn inflate(
+    decompressor: &mut flate2::Decompress,
+    input: &[u8],
+    output: &mut CappedBuf,
+    flush: flate2::FlushDecompress,
+) -> Result<flate2::Status, ModelError> {
+    let mut offset = 0usize;
+    loop {
+        let mut buf = [0u8; 8192];
+        let in_before = decompressor.total_in();
+        let out_before = decompressor.total_out();
+        let available = if offset < input.len() {
+            &input[offset..]
+        } else {
+            &[]
+        };
+        let status = decompressor
+            .decompress(available, &mut buf, flush)
+            .map_err(|_| {
+                ModelError::Invalid("content coding decode failed: corrupt deflate stream".into())
+            })?;
+        let consumed = usize::try_from(decompressor.total_in() - in_before).unwrap_or(usize::MAX);
+        let produced = usize::try_from(decompressor.total_out() - out_before).unwrap_or(usize::MAX);
+        if consumed > available.len() || produced > buf.len() {
+            return Err(ModelError::Invalid(
+                "content coding decode failed: corrupt deflate stream".into(),
+            ));
+        }
+        if produced > 0 {
+            std::io::Write::write_all(output, &buf[..produced]).map_err(decode_error)?;
+        }
+        offset = offset.saturating_add(consumed);
+        if status == flate2::Status::StreamEnd {
+            if offset < input.len() {
+                return Err(ModelError::Invalid(
+                    "content coding decode failed: trailing data after deflate stream".into(),
+                ));
+            }
+            return Ok(status);
+        }
+        if consumed == 0 && produced == 0 {
+            return Ok(status);
+        }
+    }
+}
+
+/// Output buffer that refuses to grow past the decoded-size cap.
+///
+/// The check runs inside `Write::write`, so one compressed chunk cannot expand
+/// the buffer past the cap before the error is returned.
+struct CappedBuf {
+    bytes: Vec<u8>,
+    max: usize,
+}
+
+impl CappedBuf {
+    fn new(max: usize) -> Self {
+        Self {
+            bytes: Vec::new(),
+            max,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.bytes.len()
+    }
+}
+
+impl std::io::Write for CappedBuf {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        if self.bytes.len().saturating_add(data.len()) > self.max {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "decoded artifact exceeds the size limit",
+            ));
+        }
+        self.bytes.extend_from_slice(data);
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 impl ContentDecoder {
@@ -348,10 +493,10 @@ impl ContentDecoder {
             Some(coding)
                 if coding.eq_ignore_ascii_case("gzip") || coding.eq_ignore_ascii_case("x-gzip") =>
             {
-                DecoderInner::Gzip(flate2::write::GzDecoder::new(Vec::new()))
+                DecoderInner::Gzip(flate2::write::GzDecoder::new(CappedBuf::new(max_output)))
             }
             Some(coding) if coding.eq_ignore_ascii_case("deflate") => {
-                DecoderInner::Zlib(flate2::write::ZlibDecoder::new(Vec::new()))
+                DecoderInner::Zlib(ZlibInflate::new(max_output))
             }
             Some(coding) => {
                 return Err(ModelError::Invalid(format!(
@@ -384,9 +529,7 @@ impl ContentDecoder {
             DecoderInner::Gzip(decoder) => {
                 std::io::Write::write_all(decoder, chunk).map_err(decode_error)?;
             }
-            DecoderInner::Zlib(decoder) => {
-                std::io::Write::write_all(decoder, chunk).map_err(decode_error)?;
-            }
+            DecoderInner::Zlib(decoder) => decoder.push(chunk)?,
         }
         if self.output_len() > self.max_output {
             return Err(ModelError::Invalid(
@@ -404,8 +547,8 @@ impl ContentDecoder {
     pub fn finish(self) -> Result<Vec<u8>, ModelError> {
         let output = match self.inner {
             DecoderInner::Plain(output) => output,
-            DecoderInner::Gzip(decoder) => decoder.finish().map_err(decode_error)?,
-            DecoderInner::Zlib(decoder) => decoder.finish().map_err(decode_error)?,
+            DecoderInner::Gzip(decoder) => decoder.finish().map_err(decode_error)?.bytes,
+            DecoderInner::Zlib(decoder) => decoder.finish()?,
         };
         if output.len() > self.max_output {
             return Err(ModelError::Invalid(
@@ -419,7 +562,7 @@ impl ContentDecoder {
         match &self.inner {
             DecoderInner::Plain(output) => output.len(),
             DecoderInner::Gzip(decoder) => decoder.get_ref().len(),
-            DecoderInner::Zlib(decoder) => decoder.get_ref().len(),
+            DecoderInner::Zlib(decoder) => decoder.len(),
         }
     }
 }
@@ -526,6 +669,16 @@ mod tests {
         let compressed = gzip_bytes(&raw);
         assert!(compressed.len() < raw.len());
         assert!(decode_content_coding(&compressed, Some("gzip"), 1024).is_err());
+    }
+
+    #[test]
+    fn truncated_gzip_and_zlib_are_rejected() {
+        let gzip = gzip_bytes(b"artifact-bytes");
+        let zlib = zlib_bytes(b"artifact-bytes");
+        assert!(gzip.len() > 8 && zlib.len() > 8);
+        assert!(decode_content_coding(&gzip[..gzip.len() / 2], Some("gzip"), 1024).is_err());
+        assert!(decode_content_coding(&zlib[..zlib.len() / 2], Some("deflate"), 1024).is_err());
+        assert!(decode_content_coding(&zlib[..zlib.len() - 4], Some("deflate"), 1024).is_err());
     }
 
     fn gzip_bytes(raw: &[u8]) -> Vec<u8> {

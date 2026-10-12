@@ -1,10 +1,14 @@
 //! Token exchange against a local mock. No external authorization server.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
 use cdx_tea_client::{ApiKey, Client, ClientError, Limits};
 use cdx_tea_core::{DestinationPolicy, ProductId, Tei};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+use tokio::sync::{oneshot, Mutex, Notify};
 use url::Url;
 use wiremock::matchers::{body_string, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -533,4 +537,243 @@ async fn discovered_credentials_are_posted_only_when_enabled() {
         .await
         .unwrap();
     assert_eq!(found.len(), 1);
+}
+
+const STALE_TOKEN: &str = "token-stale";
+const FRESH_TOKEN: &str = "token-fresh";
+
+/// A delayed 401 for an older bearer token must not delete a newer token
+/// stored for the same origin while that response was in flight.
+#[tokio::test]
+async fn stale_401_keeps_a_newer_cached_token() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (release_tx, release_rx) = oneshot::channel::<()>();
+    let release_rx = Arc::new(Mutex::new(Some(release_rx)));
+    let held = Arc::new(Notify::new());
+    let log = Arc::new(Mutex::new(Vec::<ObservedRequest>::new()));
+    let gate = Arc::new(TokenGate {
+        release_rx,
+        held: Arc::clone(&held),
+        log: Arc::clone(&log),
+        holding: Mutex::new(false),
+        issued: Mutex::new(0u32),
+    });
+    tokio::spawn(async move {
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+            let gate = Arc::clone(&gate);
+            tokio::spawn(async move {
+                let _ = serve_token_race(socket, &gate).await;
+            });
+        }
+    });
+
+    let base = format!("http://{addr}");
+    let url = Url::parse(&base).unwrap();
+    let service = Client::builder()
+        .limits(limits())
+        .destination_policy(DestinationPolicy::allow_origin(&url).unwrap())
+        .api_key(ApiKey::new("race-id", "race-secret"))
+        .build()
+        .unwrap()
+        .service(&base, "1.0.0")
+        .unwrap();
+    let id = ProductId::parse(PRODUCT_ID).unwrap();
+    let stale = {
+        let service = service.clone();
+        tokio::spawn(async move { service.get_product(id).await })
+    };
+    held.notified().await;
+
+    let fresh = service.get_product(id).await.unwrap();
+    assert_eq!(fresh.name, "Widget");
+    release_tx.send(()).unwrap();
+
+    let stale = stale.await.unwrap().unwrap_err();
+    assert!(matches!(stale, ClientError::Api { status: 401, .. }));
+    assert!(!stale.to_string().contains(STALE_TOKEN));
+    assert!(!stale.to_string().contains(FRESH_TOKEN));
+    assert!(!stale.to_string().contains("race-secret"));
+
+    let after = service.get_product(id).await.unwrap();
+    assert_eq!(after.name, "Widget");
+
+    let log = log.lock().await;
+    let posts = log.iter().filter(|(method, _, _)| method == "POST").count();
+    assert_eq!(posts, 2, "a stale 401 must not exchange the key again");
+    let last_product = log
+        .iter()
+        .rev()
+        .find(|(_, path, _)| path.contains("/product/"))
+        .unwrap();
+    assert_eq!(
+        last_product.2.as_deref(),
+        Some(format!("Bearer {FRESH_TOKEN}").as_str())
+    );
+}
+
+type ObservedRequest = (String, String, Option<String>);
+
+struct TokenGate {
+    release_rx: Arc<Mutex<Option<oneshot::Receiver<()>>>>,
+    held: Arc<Notify>,
+    log: Arc<Mutex<Vec<ObservedRequest>>>,
+    holding: Mutex<bool>,
+    issued: Mutex<u32>,
+}
+
+async fn serve_token_race(
+    mut socket: tokio::net::TcpStream,
+    gate: &TokenGate,
+) -> std::io::Result<()> {
+    let (method, path, authorization) = read_request(&mut socket).await?;
+    let recorded = authorization
+        .as_deref()
+        .filter(|value| value.starts_with("Bearer "))
+        .map(str::to_owned);
+    gate.log
+        .lock()
+        .await
+        .push((method.clone(), path.clone(), recorded));
+
+    if method == "POST" && path == "/v1.0.0/token" {
+        let mut issued = gate.issued.lock().await;
+        *issued += 1;
+        let token = if *issued == 1 {
+            STALE_TOKEN
+        } else {
+            FRESH_TOKEN
+        };
+        let body =
+            format!(r#"{{"access_token":"{token}","token_type":"Bearer","expires_in":3600}}"#);
+        return write_response(
+            &mut socket,
+            200,
+            &[("content-type", "application/json")],
+            &body,
+        )
+        .await;
+    }
+
+    if method == "GET" && path.contains("/product/") {
+        match authorization.as_deref() {
+            Some(value) if value == format!("Bearer {FRESH_TOKEN}") => {
+                return write_response(
+                    &mut socket,
+                    200,
+                    &[("content-type", "application/json")],
+                    &product_json(),
+                )
+                .await;
+            }
+            Some(value) if value == format!("Bearer {STALE_TOKEN}") => {
+                let hold = {
+                    let mut holding = gate.holding.lock().await;
+                    if *holding {
+                        false
+                    } else {
+                        *holding = true;
+                        true
+                    }
+                };
+                if hold {
+                    gate.held.notify_one();
+                    let release = gate.release_rx.lock().await.take();
+                    if let Some(release) = release {
+                        let _ = release.await;
+                    }
+                }
+                return write_response(
+                    &mut socket,
+                    401,
+                    &[(
+                        "www-authenticate",
+                        "Bearer realm=\"tea\", error=\"invalid_token\"",
+                    )],
+                    "",
+                )
+                .await;
+            }
+            _ => {
+                return write_response(
+                    &mut socket,
+                    401,
+                    &[("www-authenticate", "Bearer realm=\"tea\"")],
+                    "",
+                )
+                .await;
+            }
+        }
+    }
+
+    write_response(&mut socket, 404, &[], "").await
+}
+
+async fn read_request(
+    socket: &mut tokio::net::TcpStream,
+) -> std::io::Result<(String, String, Option<String>)> {
+    let mut buf = Vec::new();
+    let mut tmp = [0u8; 2048];
+    let header_end = loop {
+        let n = socket.read(&mut tmp).await?;
+        if n == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "request ended before headers",
+            ));
+        }
+        buf.extend_from_slice(&tmp[..n]);
+        if let Some(pos) = buf.windows(4).position(|window| window == b"\r\n\r\n") {
+            break pos;
+        }
+        if buf.len() > 65_536 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "request headers are too large",
+            ));
+        }
+    };
+    let header = String::from_utf8_lossy(&buf[..header_end]).into_owned();
+    let mut lines = header.lines();
+    let request_line = lines.next().unwrap_or("");
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or("").to_owned();
+    let path = parts.next().unwrap_or("").to_owned();
+    let authorization = lines.find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if name.eq_ignore_ascii_case("authorization") {
+            Some(value.trim().to_owned())
+        } else {
+            None
+        }
+    });
+    Ok((method, path, authorization))
+}
+
+async fn write_response(
+    socket: &mut tokio::net::TcpStream,
+    status: u16,
+    headers: &[(&str, &str)],
+    body: &str,
+) -> std::io::Result<()> {
+    let reason = match status {
+        200 => "OK",
+        401 => "Unauthorized",
+        _ => "Not Found",
+    };
+    let mut message = format!(
+        "HTTP/1.1 {status} {reason}\r\ncontent-length: {}\r\nconnection: close\r\n",
+        body.len()
+    );
+    for (name, value) in headers {
+        message.push_str(name);
+        message.push_str(": ");
+        message.push_str(value);
+        message.push_str("\r\n");
+    }
+    message.push_str("\r\n");
+    message.push_str(body);
+    socket.write_all(message.as_bytes()).await?;
+    Ok(())
 }

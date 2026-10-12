@@ -12,6 +12,8 @@ cdx-tea-client = "0.1.0"
 
 Edition 2021. MSRV 1.85. License Apache-2.0. TLS uses rustls. Certificate verification stays enabled. The default destination policy allows HTTPS to public addresses.
 
+The program below is an illustration. The examples that build in this crate are `examples/filter_by_identifier_type.rs` and `examples/paginate_components.rs`.
+
 ```rust
 use cdx_tea_client::Client;
 use cdx_tea_core::enums::IdentifierType;

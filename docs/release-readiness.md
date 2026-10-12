@@ -75,6 +75,14 @@ Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-
 
 `README.md` and `docs/` describe the pin, the limits, and the single local Oolong result. They do not claim conformance. `docs/requirements-matrix.md` still marks some rows as implemented from code inspection. Readers should use `docs/api-operation-matrix.md` for which operations have a mock test, a live Oolong observation, or neither.
 
+## 2026-10-12 release engineering
+
+`cargo +1.85.0 test --workspace --all-targets --locked` passed on rustc 1.85.0, including the uncommitted authentication and deflate fixes. `cargo package -p cdx-tea-core --allow-dirty --locked` verified the core archive. `cargo package -p cdx-tea-client --allow-dirty --locked` failed because crates.io has no `cdx-tea-core` 0.1.0 yet. `cargo package -p cdx-tea-client --allow-dirty --locked --no-verify --list` listed the client files without that verification. The crates.io API returned HTTP 404 for `cdx-tea-core` and `cdx-tea-client` on this date. A 404 does not reserve either name.
+
+## 2026-10-11 authentication regression
+
+A stale `401` no longer deletes a newer bearer token for the same origin. The decoded-size cap is enforced inside the content decoder write. A truncated HTTP `deflate` member is rejected instead of returned as a short artifact. These are covered by local tests. Overlapping `POST /token` calls remain possible and are not treated as a release blocker. No hostile DNS server was used.
+
 ## Not a blocker
 
 - Missing HTTPS SVCB lookup. The discovery text allows it when a client is known to support it. This client does not.
