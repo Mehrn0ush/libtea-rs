@@ -4,8 +4,8 @@
 
 use std::time::Duration;
 
-use cdx_tea_client::{CleFetch, Client, ClientError, Limits};
-use cdx_tea_core::{
+use libtea_client::{CleFetch, Client, ClientError, Limits};
+use libtea_core::{
     enums::{CollectionSort, IdentifierType, ReleaseSort, SortOrder},
     ArtifactId, ComponentId, ComponentReleaseId, DestinationPolicy, ListParams, ProductId,
     ProductReleaseId,
@@ -464,13 +464,13 @@ async fn artifact_latest_versus_revision_and_media_type() {
         .download_format(&latest, "application/vnd.cyclonedx+json", None)
         .await
         .unwrap();
-    let cdx_tea_client::ArtifactFetch::Body(downloaded) = fetched else {
+    let libtea_client::ArtifactFetch::Body(downloaded) = fetched else {
         panic!("expected body");
     };
     assert_eq!(downloaded.bytes, body);
     assert_eq!(
         downloaded.integrity.outcome,
-        cdx_tea_core::IntegrityOutcome::Verified
+        libtea_core::IntegrityOutcome::Verified
     );
 }
 
@@ -586,7 +586,7 @@ async fn pagination_anomalies_are_visible_to_callers() {
     let boom = service
         .query_components(&ListParams {
             page_token: Some("boom".into()),
-            ..ListParams::<cdx_tea_core::enums::ComponentSort>::default()
+            ..ListParams::<libtea_core::enums::ComponentSort>::default()
         })
         .await
         .unwrap_err();

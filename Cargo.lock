@@ -199,75 +199,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cdx-tea-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "cdx-tea-client",
- "cdx-tea-conformance",
- "cdx-tea-core",
- "clap",
- "serde_json",
- "sha2",
- "tokio",
- "url",
- "wiremock",
-]
-
-[[package]]
-name = "cdx-tea-client"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "cdx-tea-core",
- "flate2",
- "futures-util",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "tokio",
- "tracing",
- "url",
- "wiremock",
-]
-
-[[package]]
-name = "cdx-tea-conformance"
-version = "0.1.0"
-dependencies = [
- "cdx-tea-core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "cdx-tea-core"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "blake2",
- "blake3",
- "digest",
- "flate2",
- "idna",
- "idna_adapter",
- "proptest",
- "semver",
- "serde",
- "serde_json",
- "sha1",
- "sha2",
- "sha3",
- "thiserror",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -945,6 +876,75 @@ name = "libc"
 version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+
+[[package]]
+name = "libtea-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "clap",
+ "libtea-client",
+ "libtea-conformance",
+ "libtea-core",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "libtea-client"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "flate2",
+ "futures-util",
+ "libtea-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "libtea-conformance"
+version = "0.1.0"
+dependencies = [
+ "libtea-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "libtea-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "blake2",
+ "blake3",
+ "digest",
+ "flate2",
+ "idna",
+ "idna_adapter",
+ "proptest",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "sha3",
+ "thiserror",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "linux-raw-sys"

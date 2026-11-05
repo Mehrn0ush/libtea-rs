@@ -1,7 +1,7 @@
 //! Domain types and protocol rules for the Transparency Exchange API consumer.
 //!
 //! This crate does not open network connections, read the filesystem, or depend
-//! on an async runtime. [`cdx_tea_client`](https://docs.rs/cdx-tea-client) performs HTTP.
+//! on an async runtime. [`libtea_client`](https://docs.rs/libtea-client) performs HTTP.
 //!
 //! The pinned specification is TEA OpenAPI `1.0.0` from
 //! <https://github.com/CycloneDX/transparency-exchange-api> commit

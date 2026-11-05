@@ -22,8 +22,8 @@ node dist/main.js
 Then, from this SDK repository:
 
 ```bash
-cargo test -p cdx-tea-client --locked --test oolong_idtype_live -- --ignored --nocapture
-cargo test -p cdx-tea-client --locked --test oolong_surface_live -- --ignored --nocapture
+cargo test -p libtea-client --locked --test oolong_idtype_live -- --ignored --nocapture
+cargo test -p libtea-client --locked --test oolong_surface_live -- --ignored --nocapture
 ```
 
 `cargo test` without `--ignored` does not run these files. CI does not call external TEA servers.

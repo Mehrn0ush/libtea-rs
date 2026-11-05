@@ -1,10 +1,10 @@
 # Conformance
 
-`cdx-tea-conformance` runs checks that use the pinned specification examples and rules. The checks do not contact a network.
+`libtea-conformance` runs checks that use the pinned specification examples and rules. The checks do not contact a network.
 
 ```sh
-cargo test -p cdx-tea-conformance
-cargo run -p cdx-tea-cli -- conformance
+cargo test -p libtea-conformance
+cargo run -p libtea-cli -- conformance
 ```
 
 The report includes the specification commit and version and one result per case. A passing report means those local checks passed. It is not a statement that this SDK is a conforming TEA server, and it is not a statement that any particular server is conformant.
@@ -20,7 +20,7 @@ The report includes the specification commit and version and one result per case
 
 ## What the HTTP tests cover
 
-The default `cdx-tea-client` tests use a local mock server. They cover production destination refusal, JSON size limits, a product read, TEA `404` recognition, failover from a non-TEA `404`, one API-key exchange after a bearer challenge, redirect stripping of `Authorization`, checksum verification of decoded bytes, and identifier query serialization (type only, both parameters, neither parameter, and value-only rejection before a request).
+The default `libtea-client` tests use a local mock server. They cover production destination refusal, JSON size limits, a product read, TEA `404` recognition, failover from a non-TEA `404`, one API-key exchange after a bearer challenge, redirect stripping of `Authorization`, checksum verification of decoded bytes, and identifier query serialization (type only, both parameters, neither parameter, and value-only rejection before a request).
 
 An ignored test, `oolong_idtype_live`, talks to a local Oolong process. It is not part of `cargo test`. See [interoperability.md](interoperability.md).
 

@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use cdx_tea_core::checksum::ContentDecoder;
-use cdx_tea_core::{
+use libtea_core::checksum::ContentDecoder;
+use libtea_core::{
     classify_ip, origin_key, parse_api_base, tea_error_code, ApiVersion, DestinationPolicy,
     SupportedApi, TeaErrorBody, TokenResponse,
 };
@@ -236,7 +236,7 @@ impl ClientBuilder {
     /// Returns an error when TLS or the HTTP client cannot be constructed.
     pub fn build(self) -> Result<Client, ClientError> {
         if self.limits.max_in_flight == 0 {
-            return Err(ClientError::Model(cdx_tea_core::ModelError::Invalid(
+            return Err(ClientError::Model(libtea_core::ModelError::Invalid(
                 "max_in_flight must be at least 1".into(),
             )));
         }
@@ -244,7 +244,7 @@ impl ClientBuilder {
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(self.limits.connect_timeout)
             .timeout(self.limits.request_timeout)
-            .user_agent(concat!("tea-sdk/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("libtea/", env!("CARGO_PKG_VERSION")))
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
             .https_only(false)
             .dns_resolver(Arc::new(PolicyResolver {
@@ -615,7 +615,7 @@ impl ClientInner {
             return Err(ClientError::AuthenticationRequired);
         }
         let url = api_prefix.join("token").map_err(|_| {
-            ClientError::Model(cdx_tea_core::ModelError::Invalid("token URL".into()))
+            ClientError::Model(libtea_core::ModelError::Invalid("token URL".into()))
         })?;
         let call = Call {
             method: Method::POST,
@@ -822,7 +822,7 @@ pub(crate) fn operation_url(
     query: &[(&str, &str)],
 ) -> Result<Url, ClientError> {
     let mut url = prefix.join(path.trim_start_matches('/')).map_err(|_| {
-        ClientError::Model(cdx_tea_core::ModelError::Invalid("operation URL".into()))
+        ClientError::Model(libtea_core::ModelError::Invalid("operation URL".into()))
     })?;
     if !query.is_empty() {
         let mut pairs = url.query_pairs_mut();

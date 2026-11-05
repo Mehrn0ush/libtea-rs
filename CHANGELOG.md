@@ -1,17 +1,21 @@
 # Changelog
 
-All notable changes to this workspace are documented here. The publishable crates are `cdx-tea-core` and `cdx-tea-client`. Versions below refer to those crate versions unless noted.
+All notable changes to this workspace are documented here. The publishable crates are `libtea-core` and `libtea-client`. Versions below refer to those crate versions unless noted.
 
 ## 0.1.0 — unreleased
 
+### Changed
+
+- Repository renamed to `libtea-rs`. Publishable crate names are `libtea-core` and `libtea-client` (replacing the temporary `cdx-tea-*` package names).
+
 ### Added
 
-- Consumer TEA 1.0.0 client surface (`cdx-tea-client::Service`) against pinned OpenAPI commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`.
+- Consumer TEA 1.0.0 client surface (`libtea-client::Service`) against pinned OpenAPI commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`.
 - TEI parsing, discovery, destination policy, checksum verification on decoded artifact bytes, API-key → bearer exchange.
-- CLI (`cdx-tea-cli`, unpublished): `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, `collections`, `download`.
+- CLI (`libtea-cli`, unpublished): `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, `collections`, `download`.
 - Credential environment variables `TEA_API_KEY_ID` / `TEA_API_KEY_SECRET` (preferred over `--api-key-secret`).
 - Concurrent token-refresh serialization via a client-wide async mutex (waiters may reuse a cached bearer; not a guarantee of exactly one exchange); see `docs/security.md`.
-- Offline conformance smoke crate (`cdx-tea-conformance`, unpublished).
+- Offline conformance smoke crate (`libtea-conformance`, unpublished).
 
 ### Security
 

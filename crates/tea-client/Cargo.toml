@@ -1,5 +1,5 @@
 [package]
-name = "cdx-tea-client"
+name = "libtea-client"
 version = "0.1.0"
 description = "Independent async Rust client for the CycloneDX Transparency Exchange API."
 readme = "README.md"
@@ -9,12 +9,12 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-homepage = "https://github.com/Mehrn0ush/teaSDK"
-documentation = "https://docs.rs/cdx-tea-client"
+homepage = "https://github.com/Mehrn0ush/libtea-rs"
+documentation = "https://docs.rs/libtea-client"
 publish = true
 
 [dependencies]
-cdx-tea-core.workspace = true
+libtea-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

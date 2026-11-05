@@ -1,4 +1,4 @@
-use cdx_tea_core::{Tei, WellKnownDocument};
+use libtea_core::{Tei, WellKnownDocument};
 use proptest::prelude::*;
 
 proptest! {

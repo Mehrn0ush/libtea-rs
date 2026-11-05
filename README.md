@@ -10,21 +10,21 @@ These crates are a TEA **consumer** (client). They are not a TEA server, not an 
 
 | Crate | Role |
 | --- | --- |
-| `cdx-tea-core` | TEI, version negotiation, models, checksums, destination classification. No HTTP runtime |
-| `cdx-tea-client` | Async client (`tokio`, `reqwest`, `rustls`) |
-| `cdx-tea-conformance` | Offline checks and a JSON report (`publish = false`) |
-| `cdx-tea-cli` | `tea` binary that calls the libraries (`publish = false`) |
+| `libtea-core` | TEI, version negotiation, models, checksums, destination classification. No HTTP runtime |
+| `libtea-client` | Async client (`tokio`, `reqwest`, `rustls`) |
+| `libtea-conformance` | Offline checks and a JSON report (`publish = false`) |
+| `libtea-cli` | `tea` binary that calls the libraries (`publish = false`) |
 
-Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. Publish `cdx-tea-core` first, then `cdx-tea-client`. The CLI executable name is still `tea`; reconsider that name before publishing the CLI. See [CHANGELOG.md](CHANGELOG.md).
+Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. Publish `libtea-core` first, then `libtea-client`. The CLI executable name is still `tea`; reconsider that name before publishing the CLI. See [CHANGELOG.md](CHANGELOG.md).
 
-Package names still use the `cdx-tea-*` prefix in this tree; they are independent libraries, not CycloneDX-owned packages. A rename before crates.io publish is planned if that prefix must be avoided.
+These packages are independent libraries, not CycloneDX-owned packages.
 
 ## Build
 
 ```sh
 cargo build --workspace
 cargo test --workspace --all-targets --locked
-cargo run -p cdx-tea-cli -- spec
+cargo run -p libtea-cli -- spec
 ```
 
 TLS uses rustls. Certificate verification cannot be turned off. The default destination policy allows HTTPS to public addresses and refuses cleartext, loopback, and metadata addresses. A local HTTP server needs an explicit origin exception. See [docs/security.md](docs/security.md).
@@ -32,8 +32,8 @@ TLS uses rustls. Certificate verification cannot be turned off. The default dest
 ## Workflow A — TEI → collection → artifact integrity
 
 ```rust
-use cdx_tea_client::{ArtifactFetch, Client};
-use cdx_tea_core::{IntegrityOutcome, Tei};
+use libtea_client::{ArtifactFetch, Client};
+use libtea_core::{IntegrityOutcome, Tei};
 
 let tei = Tei::parse("tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1")?;
 let client = Client::builder().build()?;
@@ -59,7 +59,7 @@ if let ArtifactFetch::Body(body) = fetched {
 Pagination is caller-managed. Keep the same `ListParams` and replace only `page_token`. The client does not follow `next` URLs and does not auto-loop on a repeated token.
 
 ```rust
-use cdx_tea_core::ListParams;
+use libtea_core::ListParams;
 
 let mut query = ListParams {
     page_size: Some(2),
@@ -87,7 +87,7 @@ export TEA_API_KEY_SECRET=your-key-secret
 ```
 
 ```rust
-use cdx_tea_client::{ApiKey, Client};
+use libtea_client::{ApiKey, Client};
 
 let client = Client::builder()
     .api_key(ApiKey::new("key-id", "key-secret"))
@@ -102,19 +102,19 @@ The key is sent to `POST /token` as HTTP Basic after form-encoding, with `grant_
 The fenced programs above are illustrations. The program that type-checks with this workspace is [`crates/tea-client/examples/filter_by_identifier_type.rs`](crates/tea-client/examples/filter_by_identifier_type.rs).
 
 ```sh
-cargo run -p cdx-tea-client --example filter_by_identifier_type -- https://api.example.com
+cargo run -p libtea-client --example filter_by_identifier_type -- https://api.example.com
 ```
 
 ## CLI
 
 ```sh
-cargo run -p cdx-tea-cli -- spec --json
-cargo run -p cdx-tea-cli -- parse-tei 'tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1'
-cargo run -p cdx-tea-cli -- discover 'tei://example.com/uuid/…'
-cargo run -p cdx-tea-cli -- product-release --base https://api.example.com --uuid …
-cargo run -p cdx-tea-cli -- collections --base https://api.example.com --uuid … --page-size 2 --json
-cargo run -p cdx-tea-cli -- collections --base https://api.example.com --uuid … --latest --json
-cargo run -p cdx-tea-cli -- download --base https://api.example.com --artifact … --revision 1 --output artifact.bin
+cargo run -p libtea-cli -- spec --json
+cargo run -p libtea-cli -- parse-tei 'tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1'
+cargo run -p libtea-cli -- discover 'tei://example.com/uuid/…'
+cargo run -p libtea-cli -- product-release --base https://api.example.com --uuid …
+cargo run -p libtea-cli -- collections --base https://api.example.com --uuid … --page-size 2 --json
+cargo run -p libtea-cli -- collections --base https://api.example.com --uuid … --latest --json
+cargo run -p libtea-cli -- download --base https://api.example.com --artifact … --revision 1 --output artifact.bin
 ```
 
 **Credentials precedence:** complete `--api-key-id` + `--api-key-secret` pair (secret on argv is **insecure**), else complete `TEA_API_KEY_ID` + `TEA_API_KEY_SECRET`, else anonymous. Partial pairs and mixing CLI id with env secret are errors. JSON modes write structured data to stdout; diagnostics go to stderr.
@@ -139,7 +139,7 @@ cargo run -p cdx-tea-cli -- download --base https://api.example.com --artifact �
 - Signature formats and trust anchors are not interpreted.
 - Value-only identifier filters are rejected (`idValue requires idType`).
 - CLI is intentionally thin; list identifier filters remain library calls.
-- `cdx-tea-conformance` is offline smoke, not official certification.
+- `libtea-conformance` is offline smoke, not official certification.
 
 ## License
 

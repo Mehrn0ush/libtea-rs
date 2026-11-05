@@ -2,7 +2,7 @@
 
 Audit date: 2026-10-10. Auditor role: independent review of the existing workspace. No implementation code was changed.
 
-Later work fixed the defects named in this report and added mock tests plus one local Oolong run. Those results are in [interoperability.md](interoperability.md), [api-operation-matrix.md](api-operation-matrix.md), and [release-readiness.md](release-readiness.md). The findings below are the 2026-10-10 record. Where they say interoperability was not run, or that `deflate` and `HEAD` were incorrect, that describes this audit, not the tree after remediation. Package names in this record are the names from that date (`tea-core`, `tea-client`, `tea-conformance`, `tea-cli`). The current names are `cdx-tea-core`, `cdx-tea-client`, `cdx-tea-conformance`, and `cdx-tea-cli`. Directory paths did not change.
+Later work fixed the defects named in this report and added mock tests plus one local Oolong run. Those results are in [interoperability.md](interoperability.md), [api-operation-matrix.md](api-operation-matrix.md), and [release-readiness.md](release-readiness.md). The findings below are the 2026-10-10 record. Where they say interoperability was not run, or that `deflate` and `HEAD` were incorrect, that describes this audit, not the tree after remediation. Package names in this record are the names from that date (`tea-core`, `tea-client`, `tea-conformance`, `tea-cli`). The current names are `libtea-core`, `libtea-client`, `libtea-conformance`, and `libtea-cli`. Directory paths did not change.
 
 ## Executive summary
 

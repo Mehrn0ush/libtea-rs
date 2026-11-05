@@ -4,7 +4,7 @@
 //! `fixtures/tea-1.0.0` content used by `docker-compose.tea-interop.yml`.
 //!
 //! ```text
-//! cargo test -p cdx-tea-client --test oolong_surface_live -- --ignored --nocapture
+//! cargo test -p libtea-client --test oolong_surface_live -- --ignored --nocapture
 //! ```
 //!
 //! These tests record SDK behavior against one server. They do not certify
@@ -13,9 +13,9 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use cdx_tea_client::{ApiKey, ArtifactFetch, CleFetch, Client, ClientError, SignatureFetch};
-use cdx_tea_core::enums::{CollectionSort, IdentifierType, ProductSort, ReleaseSort, SortOrder};
-use cdx_tea_core::{
+use libtea_client::{ApiKey, ArtifactFetch, CleFetch, Client, ClientError, SignatureFetch};
+use libtea_core::enums::{CollectionSort, IdentifierType, ProductSort, ReleaseSort, SortOrder};
+use libtea_core::{
     ArtifactId, ComponentId, ComponentReleaseId, IntegrityOutcome, ListParams, ProductId,
     ProductReleaseId, Tei,
 };
@@ -293,16 +293,16 @@ fn closes(headers: &str) -> bool {
     })
 }
 
-fn live_policy(proxy_base: &str) -> cdx_tea_core::DestinationPolicy {
+fn live_policy(proxy_base: &str) -> libtea_core::DestinationPolicy {
     let proxy = Url::parse(proxy_base).expect("proxy origin");
     let upstream = Url::parse(&format!("http://{UPSTREAM}")).expect("upstream origin");
-    cdx_tea_core::DestinationPolicy::allow_origin(&proxy)
+    libtea_core::DestinationPolicy::allow_origin(&proxy)
         .expect("proxy")
         .and_allow(&upstream)
         .expect("upstream")
 }
 
-fn service(base: &str) -> cdx_tea_client::Service {
+fn service(base: &str) -> libtea_client::Service {
     Client::builder()
         .destination_policy(live_policy(base))
         .well_known_fetch_url(Url::parse(&format!("{base}/.well-known/tea")).expect("wk"))

@@ -1,5 +1,5 @@
 [package]
-name = "cdx-tea-cli"
+name = "libtea-cli"
 version = "0.1.0"
 description = "Command line for the TEA consumer SDK"
 edition.workspace = true
@@ -13,9 +13,9 @@ name = "tea"
 path = "src/main.rs"
 
 [dependencies]
-cdx-tea-core.workspace = true
-cdx-tea-client.workspace = true
-cdx-tea-conformance.workspace = true
+libtea-core.workspace = true
+libtea-client.workspace = true
+libtea-conformance.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 tokio.workspace = true

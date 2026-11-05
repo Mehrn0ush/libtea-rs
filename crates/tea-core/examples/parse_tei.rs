@@ -1,8 +1,8 @@
 //! Parse a TEI without rewriting it.
 //!
-//! Run with `cargo run -p cdx-tea-core --example parse_tei`.
+//! Run with `cargo run -p libtea-core --example parse_tei`.
 
-use cdx_tea_core::Tei;
+use libtea_core::Tei;
 
 fn main() {
     let tei = Tei::parse("tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1")

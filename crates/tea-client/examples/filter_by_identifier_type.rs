@@ -8,14 +8,14 @@
 //! addresses. No credential is set.
 //!
 //! ```text
-//! cargo run -p cdx-tea-client --example filter_by_identifier_type -- https://api.example.com
+//! cargo run -p libtea-client --example filter_by_identifier_type -- https://api.example.com
 //! ```
 //!
 //! A local HTTP server needs an exception for that one origin. Other origins
 //! stay on the default policy.
 //!
 //! ```text
-//! cargo run -p cdx-tea-client --example filter_by_identifier_type -- \
+//! cargo run -p libtea-client --example filter_by_identifier_type -- \
 //!   --allow-origin http://127.0.0.1:8080 \
 //!   http://127.0.0.1:8080
 //! ```
@@ -27,9 +27,9 @@ use std::error::Error;
 use std::fmt;
 use std::process::ExitCode;
 
-use cdx_tea_client::{Client, ClientBuilder};
-use cdx_tea_core::enums::{ComponentSort, IdentifierType};
-use cdx_tea_core::{DestinationPolicy, ListParams};
+use libtea_client::{Client, ClientBuilder};
+use libtea_core::enums::{ComponentSort, IdentifierType};
+use libtea_core::{DestinationPolicy, ListParams};
 use url::Url;
 
 #[derive(Debug)]

@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use cdx_tea_client::{ApiKey, ArtifactFetch, Client, ClientError, Limits};
-use cdx_tea_core::{Checksum, ChecksumAlgorithm, DestinationPolicy, ProductId, Tei};
+use libtea_client::{ApiKey, ArtifactFetch, Client, ClientError, Limits};
+use libtea_core::{Checksum, ChecksumAlgorithm, DestinationPolicy, ProductId, Tei};
 use sha2::{Digest, Sha256};
 use url::Url;
 use wiremock::matchers::{header, header_exists, method, path, query_param};
@@ -279,7 +279,7 @@ async fn artifact_checksum_covers_decoded_bytes_and_not_a_redirect_with_credenti
         .service(&server.uri(), "1.0.0")
         .unwrap()
         .download_artifact(
-            cdx_tea_core::ArtifactId::parse(PRODUCT_ID).unwrap(),
+            libtea_core::ArtifactId::parse(PRODUCT_ID).unwrap(),
             1,
             Some("application/json"),
             &[checksum],
@@ -294,7 +294,7 @@ async fn artifact_checksum_covers_decoded_bytes_and_not_a_redirect_with_credenti
     assert!(!body.strong_etag);
     assert!(matches!(
         body.integrity.outcome,
-        cdx_tea_core::IntegrityOutcome::Verified
+        libtea_core::IntegrityOutcome::Verified
     ));
 
     let wrong = Checksum::new(
@@ -306,7 +306,7 @@ async fn artifact_checksum_covers_decoded_bytes_and_not_a_redirect_with_credenti
         .service(&server.uri(), "1.0.0")
         .unwrap()
         .download_artifact(
-            cdx_tea_core::ArtifactId::parse(PRODUCT_ID).unwrap(),
+            libtea_core::ArtifactId::parse(PRODUCT_ID).unwrap(),
             1,
             None,
             &[wrong],

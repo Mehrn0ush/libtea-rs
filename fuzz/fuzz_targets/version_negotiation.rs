@@ -1,8 +1,8 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use cdx_tea_core::version::{ApiVersion, OrderedPriority, VersionedEndpoint};
-use cdx_tea_core::{select_endpoints, SupportedApi};
+use libtea_core::version::{ApiVersion, OrderedPriority, VersionedEndpoint};
+use libtea_core::{select_endpoints, SupportedApi};
 
 fuzz_target!(|data: &[u8]| {
     let text = String::from_utf8_lossy(data);

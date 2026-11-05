@@ -44,16 +44,16 @@ jobs:
         uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
         with:
           toolchain: "1.85.0"
-      # `cargo package -p cdx-tea-client --locked` asks crates.io for cdx-tea-core
+      # `cargo package -p libtea-client --locked` asks crates.io for libtea-core
       # 0.1.0. That fails until core is published. After it is, replace the list
-      # step with `cargo package -p cdx-tea-client --locked` so the client crate
+      # step with `cargo package -p libtea-client --locked` so the client crate
       # is verified against the registry dependency.
-      - name: Verify cdx-tea-core
-        run: cargo package -p cdx-tea-core --locked
-      # Until cdx-tea-core 0.1.0 is on crates.io, full client verify against the
+      - name: Verify libtea-core
+        run: cargo package -p libtea-core --locked
+      # Until libtea-core 0.1.0 is on crates.io, full client verify against the
       # registry dependency cannot succeed. List packaged files only.
-      - name: List cdx-tea-client files
-        run: cargo package -p cdx-tea-client --locked --no-verify --list
+      - name: List libtea-client files
+        run: cargo package -p libtea-client --locked --no-verify --list
       - name: Confirm CLI and conformance stay unpublished
         run: |
           grep -q 'publish = false' crates/tea-cli/Cargo.toml

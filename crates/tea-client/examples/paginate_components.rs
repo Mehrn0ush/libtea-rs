@@ -5,8 +5,8 @@
 //! synthetic response. Pass an API base URL to run the same query:
 //!
 //! ```text
-//! cargo run -p cdx-tea-client --example paginate_components
-//! cargo run -p cdx-tea-client --example paginate_components -- https://api.example.com
+//! cargo run -p libtea-client --example paginate_components
+//! cargo run -p libtea-client --example paginate_components -- https://api.example.com
 //! ```
 //!
 //! Compilation does not establish that a live TEA server accepts the query.
@@ -14,9 +14,9 @@
 use std::env;
 use std::process::ExitCode;
 
-use cdx_tea_client::{Client, ClientError};
-use cdx_tea_core::enums::{ComponentSort, IdentifierType};
-use cdx_tea_core::{Component, ComponentId, ListParams, Page};
+use libtea_client::{Client, ClientError};
+use libtea_core::enums::{ComponentSort, IdentifierType};
+use libtea_core::{Component, ComponentId, ListParams, Page};
 
 fn compliance_query() -> ListParams<ComponentSort> {
     ListParams {

@@ -1,12 +1,12 @@
 # Release readiness
 
-The 2026-10-10 sections below keep the package names from that audit. Current package names are `cdx-tea-core`, `cdx-tea-client`, `cdx-tea-conformance`, and `cdx-tea-cli`. Directory paths are unchanged. Nothing has been published.
+The 2026-10-10 sections below keep the package names from that audit. Current package names are `libtea-core`, `libtea-client`, `libtea-conformance`, and `libtea-cli`. Directory paths are unchanged. Nothing has been published.
 
 ## Verdict
 
-The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong fixture profile has been exercised by checked-in ignored tests; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. The old `tea-core` and `tea-cli` names are still taken on crates.io. This workspace now uses the `cdx-tea-*` names recorded below. `cdx-tea-cli` and `cdx-tea-conformance` remain `publish = false`.
+The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong fixture profile has been exercised by checked-in ignored tests; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. The old `tea-core` and `tea-cli` names are still taken on crates.io. This workspace now uses the `libtea-*` names recorded below. `libtea-cli` and `libtea-conformance` remain `publish = false`.
 
-**Current publication posture (2026-11-05 working tree):** libraries are prepared for owner review (env credentials, token coalescing, expanded mock surface, packaging metadata, CHANGELOG, Vulnetix interop notes). The candidate is **not** published until the owner commits a reviewed SHA, GitHub Actions is green on that SHA, `cdx-tea-core` is published, then `cdx-tea-client` is published. Do not commit local download artifacts such as `vulnetix-sbom.cdx.json`.
+**Current publication posture (2026-11-05 working tree):** libraries are prepared for owner review (env credentials, token coalescing, expanded mock surface, packaging metadata, CHANGELOG, Vulnetix interop notes). The candidate is **not** published until the owner commits a reviewed SHA, GitHub Actions is green on that SHA, `libtea-core` is published, then `libtea-client` is published. Do not commit local download artifacts such as `vulnetix-sbom.cdx.json`.
 
 ## Blockers before a conformance claim
 
@@ -20,20 +20,20 @@ The five items below were the audit blockers. They are fixed in this tree. A con
 
 ## Publication names
 
-Checked again with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-11. HTTP 404 means the name was absent at that request. It is not reserved.
+Recheck with `GET https://crates.io/api/v1/crates/{name}` before publish. HTTP 404 means the name is absent at that request; it is not reserved.
 
-| Package | Registry on 2026-10-11 | Publish |
-| --- | --- | --- |
-| `cdx-tea-core` | HTTP 404 | `publish = true`. Publish this first |
-| `cdx-tea-client` | HTTP 404 | `publish = true`. Publish only after `cdx-tea-core` 0.1.0 is on crates.io |
-| `cdx-tea-conformance` | HTTP 404 | `publish = false` |
-| `cdx-tea-cli` | HTTP 404 | `publish = false` |
+| Package | Publish |
+| --- | --- |
+| `libtea-core` | `publish = true`. Publish this first |
+| `libtea-client` | `publish = true`. Publish only after `libtea-core` 0.1.0 is on crates.io |
+| `libtea-conformance` | `publish = false` |
+| `libtea-cli` | `publish = false` |
 
-`cdx-tea-client` depends on `cdx-tea-core` and does not depend on the CLI or the conformance crate. Workspace directories stay `crates/tea-core`, `crates/tea-client`, `crates/tea-conformance`, and `crates/tea-cli`. Rust import paths are `cdx_tea_core` and `cdx_tea_client`.
+`libtea-client` depends on `libtea-core` and does not depend on the CLI or the conformance crate. Workspace directories stay `crates/tea-core`, `crates/tea-client`, `crates/tea-conformance`, and `crates/tea-cli`. Rust import paths are `libtea_core` and `libtea_client`.
 
-The CLI package was renamed. The executable name is still `tea`. That name collides with another tool. Reconsider the binary name before publishing `cdx-tea-cli`. This pass does not publish the CLI.
+The CLI package was renamed. The executable name is still `tea`. That name collides with another tool. Reconsider the binary name before publishing `libtea-cli`. This pass does not publish the CLI.
 
-These libraries are an independent consumer implementation of the CycloneDX Transparency Exchange API. The `cdx-tea` prefix does not make them a CycloneDX project release.
+These libraries are an independent consumer implementation of the CycloneDX Transparency Exchange API. The `libtea` prefix does not make them a CycloneDX project release.
 
 ## Blockers before crates.io
 
@@ -50,7 +50,7 @@ Checked with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-10, before 
 
 `publish` is false on the workspace, which is appropriate. There is no `[package] repository`, `documentation`, `homepage`, or `readme` path on the member crates. The license field is `Apache-2.0` and `LICENSE` is the Apache 2.0 text. There are no feature flags. The public API is `0.1.0` and should be treated as unstable.
 
-That 2026-10-10 note said not to rename during the audit. The rename to `cdx-tea-*` happened afterward. `tea-core` and `tea-cli` still cannot be used as crates.io names while those other packages exist. Publish `cdx-tea-core` 0.1.0, then `cdx-tea-client` 0.1.0. Leave `cdx-tea-conformance` and `cdx-tea-cli` unpublished. The executable is still named `tea`; change that only when the CLI itself is prepared for publication.
+That 2026-10-10 note said not to rename during the audit. Names later moved from the taken `tea-*` crates.io names through a temporary `cdx-tea-*` prefix to the current `libtea-*` packages. `tea-core` and `tea-cli` still cannot be used as crates.io names while those other packages exist. Publish `libtea-core` 0.1.0, then `libtea-client` 0.1.0. Leave `libtea-conformance` and `libtea-cli` unpublished. The executable is still named `tea`; change that only when the CLI itself is prepared for publication.
 
 ## Tooling gaps
 
@@ -81,7 +81,7 @@ Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-
 
 Working tree on top of `b92faab` (dirty until committed). Changes in this pass:
 
-- MSRV consumer contract: published `cdx-tea-core` pins `url = "=2.5.4"`, `idna = "=1.0.3"`, `idna_adapter = "=1.2.0"`, and `uuid = ">=1.26.0, <1.27.0"`. A fresh Rust 1.85 consumer of the packaged archive succeeds without this repository's `.cargo/config.toml`.
+- MSRV consumer contract: published `libtea-core` pins `url = "=2.5.4"`, `idna = "=1.0.3"`, `idna_adapter = "=1.2.0"`, and `uuid = ">=1.26.0, <1.27.0"`. A fresh Rust 1.85 consumer of the packaged archive succeeds without this repository's `.cargo/config.toml`.
 - Dependency advisories addressed in `Cargo.lock` (`rustls` 0.23.46, `rustls-webpki` 0.103.16, `webpki-roots` 1.0.11, `tokio` 1.54.1).
 - Public error enums are `#[non_exhaustive]`.
 - Transport logs and `ClientError::Transport` redact URL query values.
@@ -92,12 +92,12 @@ Still required before publication (authorization gates):
 
 1. Maintainer review and commit of this working tree.
 2. Push and green GitHub Actions on that exact SHA.
-3. Recheck crates.io names; publish `cdx-tea-core` 0.1.0; wait for index; verify then publish `cdx-tea-client` 0.1.0.
+3. Recheck crates.io names; publish `libtea-core` 0.1.0; wait for index; verify then publish `libtea-client` 0.1.0.
 4. Fresh registry consumer smoke after both packages exist.
 
 ## 2026-10-12 release engineering
 
-`cargo +1.85.0 test --workspace --all-targets --locked` passed on rustc 1.85.0, including the uncommitted authentication and deflate fixes. `cargo package -p cdx-tea-core --allow-dirty --locked` verified the core archive. `cargo package -p cdx-tea-client --allow-dirty --locked` failed because crates.io has no `cdx-tea-core` 0.1.0 yet. `cargo package -p cdx-tea-client --allow-dirty --locked --no-verify --list` listed the client files without that verification. The crates.io API returned HTTP 404 for `cdx-tea-core` and `cdx-tea-client` on this date. A 404 does not reserve either name.
+`cargo +1.85.0 test --workspace --all-targets --locked` passed on rustc 1.85.0, including the uncommitted authentication and deflate fixes. `cargo package -p libtea-core --allow-dirty --locked` verified the core archive. `cargo package -p libtea-client --allow-dirty --locked` failed because crates.io has no `libtea-core` 0.1.0 yet. `cargo package -p libtea-client --allow-dirty --locked --no-verify --list` listed the client files without that verification. The crates.io API returned HTTP 404 for `libtea-core` and `libtea-client` on this date. A 404 does not reserve either name.
 
 ## 2026-10-11 authentication regression
 

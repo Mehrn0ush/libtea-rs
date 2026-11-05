@@ -5,7 +5,7 @@
 //! listening on `127.0.0.1:3005`:
 //!
 //! ```text
-//! cargo test -p cdx-tea-client --test oolong_idtype_live -- --ignored --nocapture
+//! cargo test -p libtea-client --test oolong_idtype_live -- --ignored --nocapture
 //! ```
 //!
 //! The client is the SDK. A loopback proxy records the request line the SDK
@@ -15,9 +15,9 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use cdx_tea_client::{Client, ClientError};
-use cdx_tea_core::enums::{ComponentSort, IdentifierType, ProductSort, ReleaseSort};
-use cdx_tea_core::{Identifier, ListParams};
+use libtea_client::{Client, ClientError};
+use libtea_core::enums::{ComponentSort, IdentifierType, ProductSort, ReleaseSort};
+use libtea_core::{Identifier, ListParams};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use url::Url;
@@ -185,10 +185,10 @@ fn closes(headers: &str) -> bool {
     })
 }
 
-fn client(base: &str) -> cdx_tea_client::Service {
+fn client(base: &str) -> libtea_client::Service {
     let origin = Url::parse(base).expect("proxy origin");
     Client::builder()
-        .destination_policy(cdx_tea_core::DestinationPolicy::allow_origin(&origin).expect("origin"))
+        .destination_policy(libtea_core::DestinationPolicy::allow_origin(&origin).expect("origin"))
         .build()
         .expect("client")
         .service(base, "1.0.0")
@@ -381,7 +381,7 @@ async fn value_only_filter_does_not_reach_oolong() {
     eprintln!("test 4 error: {error}");
     assert!(requests.is_empty(), "no HTTP request: {requests:?}");
     match error {
-        ClientError::Model(cdx_tea_core::ModelError::Invalid(message)) => {
+        ClientError::Model(libtea_core::ModelError::Invalid(message)) => {
             assert_eq!(message, "idValue requires idType");
         }
         other => panic!("unexpected error: {other}"),

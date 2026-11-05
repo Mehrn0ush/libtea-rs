@@ -10,7 +10,7 @@ const ID: &str = "2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d";
 const KEY_ID: &str = "cli-key-id";
 const KEY_SECRET: &str = "cli-key-secret-value";
 
-/// Match `cdx_tea_client` token Basic construction: form-encode each part, then Base64.
+/// Match `libtea_client` token Basic construction: form-encode each part, then Base64.
 fn basic_authorization(id: &str, secret: &str) -> String {
     let id: String = url::form_urlencoded::byte_serialize(id.as_bytes()).collect();
     let secret: String = url::form_urlencoded::byte_serialize(secret.as_bytes()).collect();

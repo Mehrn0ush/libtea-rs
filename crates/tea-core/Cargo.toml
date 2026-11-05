@@ -1,5 +1,5 @@
 [package]
-name = "cdx-tea-core"
+name = "libtea-core"
 version = "0.1.0"
 description = "Independent Rust types and protocol rules for the CycloneDX Transparency Exchange API. No network I/O."
 readme = "README.md"
@@ -9,8 +9,8 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-homepage = "https://github.com/Mehrn0ush/teaSDK"
-documentation = "https://docs.rs/cdx-tea-core"
+homepage = "https://github.com/Mehrn0ush/libtea-rs"
+documentation = "https://docs.rs/libtea-core"
 publish = true
 
 [dependencies]

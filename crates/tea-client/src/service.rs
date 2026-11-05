@@ -1,6 +1,6 @@
 //! Typed TEA consumer operations.
 
-use cdx_tea_core::{
+use libtea_core::{
     is_json_content_type, parse_artifact, parse_collection, parse_component_release,
     parse_product_release, versioned_api_prefix, Artifact, Checksum, Cle, Collection, Component,
     ComponentId, ComponentRelease, ComponentReleaseId, ComponentReleaseWithCollection,
@@ -49,7 +49,7 @@ pub struct DownloadedArtifact {
     /// Final URL after redirects.
     pub final_url: String,
     /// Checksum report. [`IntegrityOutcome::Verified`] means every declared checksum matched.
-    pub integrity: cdx_tea_core::IntegrityReport,
+    pub integrity: libtea_core::IntegrityReport,
 }
 
 /// Artifact download result.
@@ -102,7 +102,7 @@ impl Service {
     ) -> Result<Self, ClientError> {
         let prefix = versioned_api_prefix(root.as_str().trim_end_matches('/'), &version)?;
         let prefix = Url::parse(&prefix).map_err(|_| {
-            ClientError::Model(cdx_tea_core::ModelError::Invalid(
+            ClientError::Model(libtea_core::ModelError::Invalid(
                 "versioned API prefix is not a URL".into(),
             ))
         })?;
@@ -140,7 +140,7 @@ impl Service {
     ) -> Result<Vec<DiscoveryInfo>, ClientError> {
         match (tei, purl) {
             (Some(_), Some(_)) | (None, None) => {
-                return Err(ClientError::Model(cdx_tea_core::ModelError::Invalid(
+                return Err(ClientError::Model(libtea_core::ModelError::Invalid(
                     "exactly one of tei or purl is required".into(),
                 )));
             }
@@ -155,11 +155,11 @@ impl Service {
         }
         let response = self.get_raw("discovery", &query, false).await?;
         if response.status.as_u16() == 404 {
-            if let Some(error) = cdx_tea_core::tea_error_code(
+            if let Some(error) = libtea_core::tea_error_code(
                 header_str(&response.headers, CONTENT_TYPE_HEADER),
                 &response.body,
             ) {
-                let message = cdx_tea_core::TeaErrorBody::parse(&response.body)
+                let message = libtea_core::TeaErrorBody::parse(&response.body)
                     .ok()
                     .and_then(|body| body.message);
                 return Err(ClientError::Unresolved { error, message });
@@ -179,7 +179,7 @@ impl Service {
     /// Returns an error on transport failure or a non-success status.
     pub async fn query_products(
         &self,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::ProductSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::ProductSort>,
     ) -> Result<Page<Product>, ClientError> {
         self.page("products", query, |sort| sort.as_str()).await
     }
@@ -193,7 +193,7 @@ impl Service {
     pub async fn list_product_releases(
         &self,
         id: ProductId,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::ReleaseSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::ReleaseSort>,
     ) -> Result<Page<ProductRelease>, ClientError> {
         self.page(&format!("product/{id}/releases"), query, |sort| {
             sort.as_str()
@@ -209,7 +209,7 @@ impl Service {
     /// `GET /productReleases`.
     pub async fn query_product_releases(
         &self,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::ReleaseSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::ReleaseSort>,
     ) -> Result<Page<ProductRelease>, ClientError> {
         self.page("productReleases", query, |sort| sort.as_str())
             .await
@@ -236,7 +236,7 @@ impl Service {
     pub async fn list_product_release_collections(
         &self,
         id: ProductReleaseId,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::CollectionSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::CollectionSort>,
     ) -> Result<Page<Collection>, ClientError> {
         let page: Page<Collection> = self
             .page(&format!("productRelease/{id}/collections"), query, |sort| {
@@ -275,7 +275,7 @@ impl Service {
     /// `GET /components`.
     pub async fn query_components(
         &self,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::ComponentSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::ComponentSort>,
     ) -> Result<Page<Component>, ClientError> {
         self.page("components", query, |sort| sort.as_str()).await
     }
@@ -289,7 +289,7 @@ impl Service {
     pub async fn list_component_releases(
         &self,
         id: ComponentId,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::ReleaseSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::ReleaseSort>,
     ) -> Result<Page<ComponentRelease>, ClientError> {
         self.page(&format!("component/{id}/releases"), query, |sort| {
             sort.as_str()
@@ -305,7 +305,7 @@ impl Service {
     /// `GET /componentReleases`.
     pub async fn query_component_releases(
         &self,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::ReleaseSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::ReleaseSort>,
     ) -> Result<Page<ComponentRelease>, ClientError> {
         self.page("componentReleases", query, |sort| sort.as_str())
             .await
@@ -334,7 +334,7 @@ impl Service {
     pub async fn list_component_release_collections(
         &self,
         id: ComponentReleaseId,
-        query: &cdx_tea_core::ListParams<cdx_tea_core::enums::CollectionSort>,
+        query: &libtea_core::ListParams<libtea_core::enums::CollectionSort>,
     ) -> Result<Page<Collection>, ClientError> {
         let page: Page<Collection> = self
             .page(
@@ -375,7 +375,7 @@ impl Service {
     /// `GET /artifact/{uuid}/latest`.
     pub async fn get_latest_artifact(
         &self,
-        id: cdx_tea_core::ArtifactId,
+        id: libtea_core::ArtifactId,
     ) -> Result<Artifact, ClientError> {
         let bytes = self
             .get_bytes(&format!("artifact/{id}/latest"), &[])
@@ -386,7 +386,7 @@ impl Service {
     /// `GET /artifact/{uuid}/{version}`.
     pub async fn get_artifact(
         &self,
-        id: cdx_tea_core::ArtifactId,
+        id: libtea_core::ArtifactId,
         version: u64,
     ) -> Result<Artifact, ClientError> {
         let bytes = self
@@ -408,7 +408,7 @@ impl Service {
         if_none_match: Option<&str>,
     ) -> Result<ArtifactFetch, ClientError> {
         let format = artifact.format(media_type).ok_or_else(|| {
-            ClientError::Model(cdx_tea_core::ModelError::Invalid(format!(
+            ClientError::Model(libtea_core::ModelError::Invalid(format!(
                 "artifact has no format `{media_type}`"
             )))
         })?;
@@ -416,7 +416,7 @@ impl Service {
         let checksums = format.checksums.clone().unwrap_or_default();
         if let Some(external) = &format.url {
             let url = Url::parse(external).map_err(|_| {
-                ClientError::Model(cdx_tea_core::ModelError::Invalid(
+                ClientError::Model(libtea_core::ModelError::Invalid(
                     "external artifact URL".into(),
                 ))
             })?;
@@ -436,7 +436,7 @@ impl Service {
     /// `GET /artifact/{uuid}/latest/download`.
     pub async fn download_latest_artifact(
         &self,
-        id: cdx_tea_core::ArtifactId,
+        id: libtea_core::ArtifactId,
         media_type: Option<&str>,
         checksums: &[Checksum],
         if_none_match: Option<&str>,
@@ -453,7 +453,7 @@ impl Service {
     /// `GET /artifact/{uuid}/{version}/download`.
     pub async fn download_artifact(
         &self,
-        id: cdx_tea_core::ArtifactId,
+        id: libtea_core::ArtifactId,
         version: u64,
         media_type: Option<&str>,
         checksums: &[Checksum],
@@ -479,13 +479,13 @@ impl Service {
         if_none_match: Option<&str>,
     ) -> Result<SignatureFetch, ClientError> {
         let format = artifact.format(media_type).ok_or_else(|| {
-            ClientError::Model(cdx_tea_core::ModelError::Invalid(format!(
+            ClientError::Model(libtea_core::ModelError::Invalid(format!(
                 "artifact has no format `{media_type}`"
             )))
         })?;
         if let Some(external) = &format.signature_url {
             let url = Url::parse(external).map_err(|_| {
-                ClientError::Model(cdx_tea_core::ModelError::Invalid(
+                ClientError::Model(libtea_core::ModelError::Invalid(
                     "external artifact URL".into(),
                 ))
             })?;
@@ -511,7 +511,7 @@ impl Service {
     /// `GET /artifact/{uuid}/{version}/signature/download`.
     pub async fn download_signature(
         &self,
-        id: cdx_tea_core::ArtifactId,
+        id: libtea_core::ArtifactId,
         version: u64,
         media_type: Option<&str>,
         if_none_match: Option<&str>,
@@ -527,7 +527,7 @@ impl Service {
     /// `GET /artifact/{uuid}/latest/signature/download`.
     pub async fn download_latest_signature(
         &self,
-        id: cdx_tea_core::ArtifactId,
+        id: libtea_core::ArtifactId,
         media_type: Option<&str>,
         if_none_match: Option<&str>,
     ) -> Result<SignatureFetch, ClientError> {
@@ -542,7 +542,7 @@ impl Service {
     /// `HEAD` the versioned artifact download and return the response headers without a body.
     pub async fn head_artifact(
         &self,
-        id: cdx_tea_core::ArtifactId,
+        id: libtea_core::ArtifactId,
         version: u64,
         media_type: Option<&str>,
     ) -> Result<std::collections::HashMap<String, String>, ClientError> {
@@ -588,7 +588,7 @@ impl Service {
     async fn page<T, S, F>(
         &self,
         path: &str,
-        query: &cdx_tea_core::ListParams<S>,
+        query: &libtea_core::ListParams<S>,
         sort_name: F,
     ) -> Result<Page<T>, ClientError>
     where
@@ -625,12 +625,12 @@ impl Service {
     async fn cle(&self, path: &str) -> Result<CleFetch, ClientError> {
         let response = self.get_raw(path, &[], false).await?;
         if response.status.as_u16() == 404 {
-            if let Some(code) = cdx_tea_core::tea_error_code(
+            if let Some(code) = libtea_core::tea_error_code(
                 header_str(&response.headers, CONTENT_TYPE_HEADER),
                 &response.body,
             ) {
                 if code == "NOT_IMPLEMENTED" {
-                    let message = cdx_tea_core::TeaErrorBody::parse(&response.body)
+                    let message = libtea_core::TeaErrorBody::parse(&response.body)
                         .ok()
                         .and_then(|body| body.message);
                     return Ok(CleFetch::NotImplemented { message });
@@ -749,13 +749,13 @@ impl Service {
         let decoded = if response.content_decoded {
             response.body.to_vec()
         } else {
-            cdx_tea_core::checksum::decode_content_coding(
+            libtea_core::checksum::decode_content_coding(
                 &response.body,
                 encoding.as_deref(),
                 self.client.inner.limits.max_artifact_bytes,
             )?
         };
-        let integrity = cdx_tea_core::verify_checksums(&decoded, checksums);
+        let integrity = libtea_core::verify_checksums(&decoded, checksums);
         if !matches!(
             integrity.outcome,
             IntegrityOutcome::Verified | IntegrityOutcome::NotDeclared
@@ -810,7 +810,7 @@ fn require_json(response: &crate::transport::RawResponse) -> Result<(), ClientEr
     if is_json_content_type(header_str(&response.headers, CONTENT_TYPE_HEADER)) {
         Ok(())
     } else {
-        Err(ClientError::Model(cdx_tea_core::ModelError::Invalid(
+        Err(ClientError::Model(libtea_core::ModelError::Invalid(
             "expected application/json".into(),
         )))
     }

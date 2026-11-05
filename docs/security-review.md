@@ -1,6 +1,6 @@
 # Security review
 
-Date: 2026-10-10. Scope: `tea-core` destination policy, `tea-client` transport and downloads, credential handling, and the CLI. No implementation file was changed. Findings below are from reading the pinned sources and from the tests that actually ran. Those package names are the names from this review. The current names are `cdx-tea-core`, `cdx-tea-client`, `cdx-tea-conformance`, and `cdx-tea-cli`. Directory paths did not change.
+Date: 2026-10-10. Scope: `tea-core` destination policy, `tea-client` transport and downloads, credential handling, and the CLI. No implementation file was changed. Findings below are from reading the pinned sources and from the tests that actually ran. Those package names are the names from this review. The current names are `libtea-core`, `libtea-client`, `libtea-conformance`, and `libtea-cli`. Directory paths did not change.
 
 Remediation after this review added the origin-scoped DNS check, zlib `deflate`, HEAD handling, and a mock test that strips a real bearer token off the API prefix. Current behavior is summarized in [security.md](security.md). A matching checksum is still not detached-signature verification or publisher authentication. The paragraphs below keep the 2026-10-10 findings, including notes that were true before those tests existed.
 

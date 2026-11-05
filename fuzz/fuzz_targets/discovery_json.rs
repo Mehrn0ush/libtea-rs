@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use cdx_tea_core::{tea_error_code, DiscoveryInfo, WellKnownDocument};
+use libtea_core::{tea_error_code, DiscoveryInfo, WellKnownDocument};
 
 fuzz_target!(|data: &[u8]| {
     let _ = WellKnownDocument::parse(data);

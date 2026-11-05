@@ -639,7 +639,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cdx-tea-core"
+name = "libtea-core"
 version = "0.1.0"
 dependencies = [
  "base64",
@@ -663,7 +663,7 @@ name = "tea-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
- "cdx-tea-core",
+ "libtea-core",
 ]
 
 [[package]]

@@ -22,7 +22,7 @@ Review of work added after the pre-existing staged release candidate.
 | `collections` command | Thin reuse of public `Service` APIs; caller-managed pagination |
 | `--json` on discover/spec/parse-tei/collections/product-release | Script-friendly stdout |
 
-Keep these in the candidate only if you accept the added CLI surface. They are not required to publish `cdx-tea-core` / `cdx-tea-client`.
+Keep these in the candidate only if you accept the added CLI surface. They are not required to publish `libtea-core` / `libtea-client`.
 
 ## Explicitly out of this release candidate
 

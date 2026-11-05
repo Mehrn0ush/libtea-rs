@@ -1,19 +1,19 @@
 # Architecture
 
 ```text
-cdx-tea-cli
-  -> cdx-tea-conformance (offline checks and reports)
-  -> cdx-tea-client     (HTTP, auth, streaming, retries)
-       -> cdx-tea-core  (TEI, versions, models, checksums, policy)
+libtea-cli
+  -> libtea-conformance (offline checks and reports)
+  -> libtea-client     (HTTP, auth, streaming, retries)
+       -> libtea-core  (TEI, versions, models, checksums, policy)
 ```
 
-`cdx-tea-core` has no Tokio, reqwest, filesystem, or process-global state. Parsing and validation can be used by another HTTP stack.
+`libtea-core` has no Tokio, reqwest, filesystem, or process-global state. Parsing and validation can be used by another HTTP stack.
 
-`cdx-tea-client` owns the HTTP session, destination policy, token cache, and resource limits. `Service` is one versioned API base. `Client::discover` walks well-known endpoints and calls `/discovery` on each selected base.
+`libtea-client` owns the HTTP session, destination policy, token cache, and resource limits. `Service` is one versioned API base. `Client::discover` walks well-known endpoints and calls `/discovery` on each selected base.
 
-`cdx-tea-conformance` runs checks that do not contact a network and writes a JSON report. A passing report means the local checks passed. It does not certify a server.
+`libtea-conformance` runs checks that do not contact a network and writes a JSON report. A passing report means the local checks passed. It does not certify a server.
 
-`cdx-tea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, and `download`. Identifier filters are `ListParams` on `cdx-tea-client` list methods. The CLI does not expose them.
+`libtea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, and `download`. Identifier filters are `ListParams` on `libtea-client` list methods. The CLI does not expose them.
 
 ## Request path
 
@@ -35,4 +35,4 @@ Well-known documents, discovery entries, and server-info objects reject unknown 
 
 ## Dependency direction
 
-`cdx-tea-core` does not depend on `cdx-tea-client`. `cdx-tea-client` does not depend on `cdx-tea-cli` or `cdx-tea-conformance`. The fuzz crate is excluded from the workspace so `cargo test --workspace` does not require `cargo-fuzz`.
+`libtea-core` does not depend on `libtea-client`. `libtea-client` does not depend on `libtea-cli` or `libtea-conformance`. The fuzz crate is excluded from the workspace so `cargo test --workspace` does not require `cargo-fuzz`.

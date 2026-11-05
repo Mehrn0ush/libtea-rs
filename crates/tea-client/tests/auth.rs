@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
-use cdx_tea_client::{ApiKey, Client, ClientError, Limits};
-use cdx_tea_core::{DestinationPolicy, ProductId, Tei};
+use libtea_client::{ApiKey, Client, ClientError, Limits};
+use libtea_core::{DestinationPolicy, ProductId, Tei};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex, Notify};

@@ -1,6 +1,6 @@
 //! Command line for the TEA consumer SDK.
 //!
-//! Protocol behavior lives in `cdx-tea-core` and `cdx-tea-client`. This binary only
+//! Protocol behavior lives in `libtea-core` and `libtea-client`. This binary only
 //! parses arguments and prints results.
 
 #![forbid(unsafe_code)]
@@ -8,8 +8,8 @@
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
-use cdx_tea_client::{ApiKey, ArtifactFetch, Client, ClientBuilder};
-use cdx_tea_core::{spec, IntegrityOutcome, ListParams, Tei};
+use libtea_client::{ApiKey, ArtifactFetch, Client, ClientBuilder};
+use libtea_core::{spec, IntegrityOutcome, ListParams, Tei};
 use clap::{Parser, Subcommand};
 use url::Url;
 
@@ -192,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Command::Conformance => {
-            let report = cdx_tea_conformance::static_report();
+            let report = libtea_conformance::static_report();
             println!("{}", report.to_json()?);
             if !report.passed() {
                 anyhow::bail!("conformance checks failed");
@@ -214,7 +214,7 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Some(origin) = &allow_origin {
                 builder = builder
-                    .destination_policy(cdx_tea_core::DestinationPolicy::allow_origin(origin)?);
+                    .destination_policy(libtea_core::DestinationPolicy::allow_origin(origin)?);
             }
             if let Some(url) = well_known_url {
                 builder = builder.well_known_fetch_url(url);
@@ -251,7 +251,7 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let client = configured_client(&credentials, allow_origin)?;
             let service = client.service(&base, &api_version)?;
-            let id = cdx_tea_core::ProductReleaseId::parse(&uuid)?;
+            let id = libtea_core::ProductReleaseId::parse(&uuid)?;
             let release = service.get_product_release(id).await?;
             if json {
                 println!("{}", serde_json::to_string(&release)?);
@@ -276,7 +276,7 @@ async fn main() -> anyhow::Result<()> {
             }
             let client = configured_client(&credentials, allow_origin)?;
             let service = client.service(&base, &api_version)?;
-            let id = cdx_tea_core::ProductReleaseId::parse(&uuid)?;
+            let id = libtea_core::ProductReleaseId::parse(&uuid)?;
             if latest {
                 let collection = service.get_latest_product_release_collection(id).await?;
                 print_collection(&collection, json)?;
@@ -321,7 +321,7 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let client = configured_client(&credentials, allow_origin)?;
             let service = client.service(&base, &api_version)?;
-            let id = cdx_tea_core::ArtifactId::parse(&artifact)?;
+            let id = libtea_core::ArtifactId::parse(&artifact)?;
             let metadata = if let Some(revision) = revision {
                 service.get_artifact(id, revision).await?
             } else {
@@ -366,7 +366,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_collection(collection: &cdx_tea_core::Collection, json: bool) -> anyhow::Result<()> {
+fn print_collection(collection: &libtea_core::Collection, json: bool) -> anyhow::Result<()> {
     if json {
         println!("{}", serde_json::to_string_pretty(collection)?);
     } else {
@@ -435,7 +435,7 @@ fn configured_client(
     }
     if let Some(origin) = allow_origin {
         builder =
-            builder.destination_policy(cdx_tea_core::DestinationPolicy::allow_origin(&origin)?);
+            builder.destination_policy(libtea_core::DestinationPolicy::allow_origin(&origin)?);
     }
     Ok(builder.build()?)
 }
