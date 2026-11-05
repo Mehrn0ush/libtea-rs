@@ -4,9 +4,7 @@
 
 use std::time::Duration;
 
-use libtea_client::{
-    ApiKey, ArtifactFetch, CleFetch, Client, ClientError, Limits, SignatureFetch,
-};
+use libtea_client::{ApiKey, ArtifactFetch, CleFetch, Client, ClientError, Limits, SignatureFetch};
 use libtea_core::{Checksum, ChecksumAlgorithm, DestinationPolicy, ListParams, ProductId, Tei};
 use sha2::{Digest, Sha256};
 use url::Url;

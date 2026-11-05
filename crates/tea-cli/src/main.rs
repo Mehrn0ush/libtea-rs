@@ -8,9 +8,9 @@
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context};
+use clap::{Parser, Subcommand};
 use libtea_client::{ApiKey, ArtifactFetch, Client, ClientBuilder};
 use libtea_core::{spec, IntegrityOutcome, ListParams, Tei};
-use clap::{Parser, Subcommand};
 use url::Url;
 
 const ENV_API_KEY_ID: &str = "TEA_API_KEY_ID";

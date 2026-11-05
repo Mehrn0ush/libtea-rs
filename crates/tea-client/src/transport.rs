@@ -6,12 +6,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
+use futures_util::StreamExt;
 use libtea_core::checksum::ContentDecoder;
 use libtea_core::{
     classify_ip, origin_key, parse_api_base, tea_error_code, ApiVersion, DestinationPolicy,
     SupportedApi, TeaErrorBody, TokenResponse,
 };
-use futures_util::StreamExt;
 use reqwest::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, LOCATION, WWW_AUTHENTICATE};
 use reqwest::{Method, StatusCode};
 use tokio::sync::Semaphore;
