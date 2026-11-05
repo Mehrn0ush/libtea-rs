@@ -1,10 +1,10 @@
-# TEA consumer SDK
+# libtea-rs
 
-Rust libraries for the consumer side of the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api).
+Independent Rust client libraries for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 
-This repository targets commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (2026-10-08). The OpenAPI document at that commit is version `1.0.0` (`OpenAPI 3.1.1`). The specification README still says "Beta 2"; this SDK follows the OpenAPI document and the normative discovery, authentication, collection, and TEI files at that commit. The baseline is [docs/specification-baseline.md](docs/specification-baseline.md).
+This repository targets commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (2026-10-08). The OpenAPI document at that commit is version `1.0.0` (`OpenAPI 3.1.1`). The specification README still says "Beta 2"; this project follows the OpenAPI document and the normative discovery, authentication, collection, and TEI files at that commit. The baseline is [docs/specification-baseline.md](docs/specification-baseline.md).
 
-The SDK is a client. It is not a TEA server. A response from a server does not make that server conformant, and the checks in this repository are not a CycloneDX conformance certificate. Interoperability evidence to date is one local Oolong fixture and one public Vulnetix TEA 1.0.0 deployment. That is not universal compatibility. See [docs/interoperability.md](docs/interoperability.md).
+These crates are a TEA **consumer** (client). They are not a TEA server, not an official CycloneDX release, and not a conformance certificate. Interoperability evidence to date is one local Oolong fixture and one public Vulnetix TEA 1.0.0 deployment. That is not universal compatibility. See [docs/interoperability.md](docs/interoperability.md).
 
 ## Crates
 
@@ -16,6 +16,8 @@ The SDK is a client. It is not a TEA server. A response from a server does not m
 | `cdx-tea-cli` | `tea` binary that calls the libraries (`publish = false`) |
 
 Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. Publish `cdx-tea-core` first, then `cdx-tea-client`. The CLI executable name is still `tea`; reconsider that name before publishing the CLI. See [CHANGELOG.md](CHANGELOG.md).
+
+Package names still use the `cdx-tea-*` prefix in this tree; they are independent libraries, not CycloneDX-owned packages. A rename before crates.io publish is planned if that prefix must be avoided.
 
 ## Build
 
@@ -119,7 +121,7 @@ cargo run -p cdx-tea-cli -- download --base https://api.example.com --artifact â
 
 ## Integrity versus authenticity
 
-| Layer | What this SDK does |
+| Layer | What this library does |
 | --- | --- |
 | Transport (TLS) | Enforced (rustls); no verify bypass |
 | Content integrity | Declared checksums over decoded bytes |
