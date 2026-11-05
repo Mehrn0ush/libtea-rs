@@ -1,7 +1,7 @@
 [package]
 name = "libtea-cli"
 version = "0.1.0"
-description = "Command line for the TEA consumer SDK"
+description = "Command-line tool for the Transparency Exchange API (TEA) consumer libraries"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 publish = false
 
 [[bin]]
-name = "tea"
+name = "libtea"
 path = "src/main.rs"
 
 [dependencies]

@@ -48,7 +48,7 @@ async fn stdout_contains_only_verified_artifact_bytes() {
         .expect(1)
         .mount(&server)
         .await;
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .args([
             "download",
             "--base",
@@ -88,7 +88,7 @@ async fn a_wrong_checksum_does_not_write_artifact_bytes() {
         .respond_with(ResponseTemplate::new(200).set_body_raw("tea-bytes", "application/json"))
         .mount(&server)
         .await;
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .args([
             "download",
             "--base",

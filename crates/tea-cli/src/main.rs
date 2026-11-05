@@ -1,4 +1,4 @@
-//! Command line for the TEA consumer SDK.
+//! Command-line tool for the TEA consumer libraries (`libtea-cli`).
 //!
 //! Protocol behavior lives in `libtea-core` and `libtea-client`. This binary only
 //! parses arguments and prints results.
@@ -18,8 +18,8 @@ const ENV_API_KEY_SECRET: &str = "TEA_API_KEY_SECRET";
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "tea",
-    about = "Transparency Exchange API consumer",
+    name = "libtea",
+    about = "Transparency Exchange API consumer (libtea-rs)",
     after_help = "Credentials: prefer TEA_API_KEY_ID and TEA_API_KEY_SECRET. \
 CLI --api-key-secret is supported for compatibility but is insecure (process list / shell history). \
 Do not mix a CLI id with an environment secret (or the reverse). Precedence: complete CLI pair, else complete environment pair, else anonymous."

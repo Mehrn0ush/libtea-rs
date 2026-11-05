@@ -7,6 +7,7 @@ All notable changes to this workspace are documented here. The publishable crate
 ### Changed
 
 - Repository renamed to `libtea-rs`. Publishable crate names are `libtea-core` and `libtea-client` (replacing the temporary `cdx-tea-*` package names).
+- CLI package/binary aligned with the new names: package `libtea-cli`, executable `libtea` (was `tea`). Still `publish = false`.
 
 ### Added
 
@@ -26,4 +27,4 @@ All notable changes to this workspace are documented here. The publishable crate
 
 - No cryptographic signature verification, publisher authenticity verification, or Sigstore trust-policy evaluation. Signature bytes may be downloaded; they are not interpreted.
 - Live interoperability evidence is Oolong (local) and Vulnetix (public read-only); not universal compatibility.
-- CLI binary name remains `tea` (reconsider before publishing the CLI).
+- CLI remains unpublished (`libtea-cli` / binary `libtea`).

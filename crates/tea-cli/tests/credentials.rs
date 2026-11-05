@@ -67,7 +67,7 @@ async fn environment_credentials_authenticate_product_release() {
         .mount(&server)
         .await;
 
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .args([
             "product-release",
             "--base",
@@ -125,7 +125,7 @@ async fn environment_credentials_preserve_spaces_in_basic_header() {
         .mount(&server)
         .await;
 
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .args([
             "product-release",
             "--base",
@@ -180,7 +180,7 @@ async fn cli_credentials_preserve_spaces_in_basic_header() {
         .mount(&server)
         .await;
 
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .args([
             "product-release",
             "--base",
@@ -210,7 +210,7 @@ async fn cli_credentials_preserve_spaces_in_basic_header() {
 
 #[tokio::test]
 async fn partial_environment_credentials_fail_without_leaking_secret() {
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .args([
             "product-release",
             "--base",
@@ -250,7 +250,7 @@ async fn collections_list_emits_json_without_mixing_diagnostics() {
         .mount(&server)
         .await;
 
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .args([
             "collections",
             "--base",
@@ -280,7 +280,7 @@ async fn collections_list_emits_json_without_mixing_diagnostics() {
 
 #[test]
 fn help_mentions_environment_credentials() {
-    let output = Command::new(env!("CARGO_BIN_EXE_tea"))
+    let output = Command::new(env!("CARGO_BIN_EXE_libtea"))
         .arg("--help")
         .output()
         .unwrap();

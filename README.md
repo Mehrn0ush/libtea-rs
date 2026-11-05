@@ -13,9 +13,9 @@ These crates are a TEA **consumer** (client). They are not a TEA server, not an 
 | `libtea-core` | TEI, version negotiation, models, checksums, destination classification. No HTTP runtime |
 | `libtea-client` | Async client (`tokio`, `reqwest`, `rustls`) |
 | `libtea-conformance` | Offline checks and a JSON report (`publish = false`) |
-| `libtea-cli` | `tea` binary that calls the libraries (`publish = false`) |
+| `libtea-cli` | `libtea` binary that calls the libraries (`publish = false`) |
 
-Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. Publish `libtea-core` first, then `libtea-client`. The CLI executable name is still `tea`; reconsider that name before publishing the CLI. See [CHANGELOG.md](CHANGELOG.md).
+Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. Publish `libtea-core` first, then `libtea-client`. The CLI stays unpublished for now. See [CHANGELOG.md](CHANGELOG.md).
 
 These packages are independent libraries, not CycloneDX-owned packages.
 
