@@ -7,6 +7,7 @@ use thiserror::Error;
 
 /// Failure while parsing or validating a Transparency Exchange Identifier.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TeiError {
     /// The input was empty.
     #[error("TEI is empty")]
@@ -41,6 +42,7 @@ pub enum TeiError {
 
 /// Failure while parsing a TEA model, discovery document, or version.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ModelError {
     /// JSON was not valid.
     #[error("JSON parse error: {0}")]
@@ -58,6 +60,7 @@ impl From<serde_json::Error> for ModelError {
 
 /// Failure of destination policy checks that do not contact the network.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PolicyError {
     /// The URL used a scheme other than `https`, or `http` outside an explicit exception.
     #[error("URL scheme is not allowed: {0}")]

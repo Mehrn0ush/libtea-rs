@@ -111,10 +111,17 @@ pub(crate) struct ClientInner {
     /// Origins this client may send the API key to.
     credential_origins: Mutex<BTreeSet<String>>,
     pub(crate) allow_discovered_credentials: bool,
-    /// The lock is not held across `POST /token`, so overlapping challenges
-    /// may each exchange the API key. That duplicate is bounded by one exchange
-    /// per in-flight request.
     tokens: Mutex<std::collections::HashMap<String, StoredToken>>,
+    /// Client-wide gate for `POST /token` (not per origin).
+    ///
+    /// One `Client` holds one API key, and the bearer cache is already keyed by
+    /// origin. Concurrent challenges wait on this mutex; a waiter may reuse a
+    /// bearer another request just stored when that value differs from the one
+    /// that received `401`. That often yields one exchange, but failed
+    /// exchanges, expired cache entries, or other origins can require more.
+    /// The lock may briefly serialize refreshes across unrelated origins. It is
+    /// held across the token exchange await only; ordinary GETs are not.
+    token_refresh: tokio::sync::Mutex<()>,
     semaphore: Arc<Semaphore>,
     pub(crate) well_known_override: Option<Url>,
 }
@@ -262,6 +269,7 @@ impl ClientBuilder {
                 credential_origins: Mutex::new(BTreeSet::new()),
                 allow_discovered_credentials: self.allow_discovered_credentials,
                 tokens: Mutex::new(std::collections::HashMap::new()),
+                token_refresh: tokio::sync::Mutex::new(()),
                 well_known_override: self.well_known_override,
             }),
         })
@@ -396,7 +404,8 @@ impl ClientInner {
                             .api_prefix
                             .as_ref()
                             .ok_or(ClientError::AuthenticationRequired)?;
-                        self.fetch_token(prefix).await?;
+                        self.refresh_token_coalesced(prefix, response.presented_bearer.as_deref())
+                            .await?;
                         refreshed = true;
                         continue;
                     }
@@ -464,7 +473,11 @@ impl ClientInner {
             if let Some(body) = &call.body {
                 request = request.body(body.clone());
             }
-            tracing::debug!(%url, method = %call.method, "tea request");
+            tracing::debug!(
+                url = %redact_url_for_log(&url),
+                method = %call.method,
+                "tea request"
+            );
             let response = REQUEST_URL
                 .scope(url.clone(), request.send())
                 .await
@@ -512,7 +525,11 @@ impl ClientInner {
             } else {
                 (read_limited(response, call.max_body).await?, false)
             };
-            tracing::debug!(%url, status = status.as_u16(), "tea response");
+            tracing::debug!(
+                url = %redact_url_for_log(&url),
+                status = status.as_u16(),
+                "tea response"
+            );
             return Ok(RawResponse {
                 status,
                 headers,
@@ -569,6 +586,28 @@ impl ClientInner {
             format!("{id}:{secret}"),
         );
         Ok(format!("Basic {encoded}"))
+    }
+
+    /// Coalesce concurrent token exchanges for one client.
+    ///
+    /// Waiters that find a cached bearer different from the value that just
+    /// received `401` reuse that token and skip another `POST /token`.
+    async fn refresh_token_coalesced(
+        &self,
+        api_prefix: &Url,
+        presented: Option<&str>,
+    ) -> Result<(), ClientError> {
+        let _guard = self.token_refresh.lock().await;
+        if let Some(current) = self.bearer_for(api_prefix, Some(api_prefix)) {
+            let reusable = match presented {
+                Some(old) => current != old,
+                None => true,
+            };
+            if reusable {
+                return Ok(());
+            }
+        }
+        self.fetch_token(api_prefix).await
     }
 
     pub(crate) async fn fetch_token(&self, api_prefix: &Url) -> Result<(), ClientError> {
@@ -797,6 +836,72 @@ pub(crate) fn operation_url(
 
 pub(crate) use reqwest::header::CONTENT_TYPE as CONTENT_TYPE_HEADER;
 
+/// Log and error text must not keep query values (tokens, signed URLs, filters).
+pub(crate) fn redact_url_for_log(url: &Url) -> String {
+    let mut safe = url.clone();
+    let _ = safe.set_username("");
+    let _ = safe.set_password(None);
+    safe.set_fragment(None);
+    if url.query().is_none() {
+        return safe.to_string();
+    }
+    let keys: Vec<String> = url.query_pairs().map(|(k, _)| k.into_owned()).collect();
+    {
+        let mut pairs = safe.query_pairs_mut();
+        pairs.clear();
+        for key in keys {
+            pairs.append_pair(&key, "redacted");
+        }
+    }
+    safe.to_string()
+}
+
+/// Sanitize free-form transport error text.
+///
+/// Structured URL removal happens in [`ClientError::transport`] via
+/// `reqwest::Error::without_url`. This helper only rewrites residual absolute
+/// HTTP(S) spans. Each span is the full whitespace-bounded token starting at
+/// the scheme. That token is rewritten with [`redact_url_for_log`] only when
+/// `Url::parse` accepts the entire token. Otherwise the whole message becomes
+/// a generic `"request failed"` — partial rewrites must not leave query-value
+/// fragments (for example after a quote bound or after trimming `!`).
+pub(crate) fn sanitize_transport_text(text: &str) -> String {
+    match try_redact_sensitive_text(text) {
+        Some(redacted) => redacted,
+        None => "request failed".into(),
+    }
+}
+
+/// Rewrite residual absolute HTTP(S) URLs, or `None` when a span is ambiguous.
+pub(crate) fn try_redact_sensitive_text(text: &str) -> Option<String> {
+    let mut output = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = next_url_start(rest) {
+        output.push_str(&rest[..start]);
+        let after = &rest[start..];
+        let end = after.find(char::is_whitespace).unwrap_or(after.len());
+        let token = &after[..end];
+        match Url::parse(token) {
+            Ok(url) if url.scheme() == "http" || url.scheme() == "https" => {
+                output.push_str(&redact_url_for_log(&url));
+                rest = &after[end..];
+            }
+            _ => return None,
+        }
+    }
+    output.push_str(rest);
+    Some(output)
+}
+
+fn next_url_start(text: &str) -> Option<usize> {
+    match (text.find("http://"), text.find("https://")) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    }
+}
+
 #[cfg(test)]
 mod token_expiry_tests {
     use std::time::{Duration, Instant};
@@ -821,5 +926,155 @@ mod token_expiry_tests {
             Some(now + Duration::from_secs(3595))
         );
         assert_eq!(token_expires_at(Some(u64::MAX), now), None);
+    }
+}
+
+#[cfg(test)]
+mod url_redaction_tests {
+    use super::{redact_url_for_log, sanitize_transport_text, try_redact_sensitive_text};
+    use url::Url;
+
+    #[test]
+    fn query_values_are_redacted_and_keys_remain() {
+        let url = Url::parse(
+            "https://tea.example/v1.0.0/artifact/x/latest/download?mediaType=application%2Fjson&pageToken=secret-token",
+        )
+        .unwrap();
+        let redacted = redact_url_for_log(&url);
+        assert!(redacted.contains("mediaType=redacted"));
+        assert!(redacted.contains("pageToken=redacted"));
+        assert!(!redacted.contains("secret-token"));
+        assert!(!redacted.contains("application/json"));
+        assert!(!redacted.contains("application%2Fjson"));
+    }
+
+    #[test]
+    fn userinfo_is_stripped_from_logged_urls() {
+        let url = Url::parse("https://user:pass@tea.example/v1.0.0/token?grant=secret").unwrap();
+        let redacted = redact_url_for_log(&url);
+        assert!(!redacted.contains("user"));
+        assert!(!redacted.contains("pass"));
+        assert!(redacted.contains("grant=redacted"));
+        assert!(redacted.starts_with("https://tea.example/"));
+    }
+
+    #[test]
+    fn urls_without_query_are_unchanged_aside_from_userinfo() {
+        let url = Url::parse("https://tea.example/v1.0.0/products").unwrap();
+        assert_eq!(
+            redact_url_for_log(&url),
+            "https://tea.example/v1.0.0/products"
+        );
+    }
+
+    #[test]
+    fn embedded_urls_in_transport_text_are_redacted() {
+        let text = "error downloading https://cdn.example/file?sig=abc123&Expires=99 (timeout)";
+        let redacted = try_redact_sensitive_text(text).expect("whitespace-bounded URL");
+        assert!(redacted.contains("sig=redacted"));
+        assert!(redacted.contains("Expires=redacted"));
+        assert!(!redacted.contains("abc123"));
+        assert!(redacted.contains("(timeout)"));
+    }
+
+    #[test]
+    fn earliest_url_is_chosen_when_https_precedes_http() {
+        // `find("http://").or_else(|| find("https://"))` would skip the leading
+        // https URL and leave `t=two` in the unredacted prefix.
+        let text = "fallback https://secure.example/b?t=two then http://plain.example/a?t=one";
+        let redacted = try_redact_sensitive_text(text).expect("mixed schemes");
+        assert!(redacted.contains("https://secure.example/b?t=redacted"));
+        assert!(redacted.contains("http://plain.example/a?t=redacted"));
+        assert!(!redacted.contains("t=one"));
+        assert!(!redacted.contains("t=two"));
+    }
+
+    #[test]
+    fn trailing_punctuation_stays_inside_the_query_and_is_redacted() {
+        // Sentence punctuation is not peeled off; it is part of the token/query.
+        let text = "failed: https://cdn.example/item?token=secret.";
+        let redacted = try_redact_sensitive_text(text).expect("period in query");
+        assert!(redacted.contains("token=redacted"));
+        assert!(!redacted.contains("secret"));
+        assert!(!redacted.contains("secret."));
+    }
+
+    #[test]
+    fn quote_inside_query_does_not_leave_a_secret_suffix() {
+        // Stopping at `"` used to emit: ...?sig=redacted"SECRET_SUFFIX
+        let text = "https://cdn.example/a?sig=prefix\"SECRET_SUFFIX";
+        let redacted = try_redact_sensitive_text(text).expect("quote in query");
+        assert_eq!(redacted, "https://cdn.example/a?sig=redacted");
+        assert!(!redacted.contains("SECRET_SUFFIX"));
+        assert!(!redacted.contains("prefix"));
+        assert!(!sanitize_transport_text(text).contains("SECRET_SUFFIX"));
+    }
+
+    #[test]
+    fn trailing_exclamation_marks_stay_in_the_query_and_are_redacted() {
+        // Trimming `!` used to emit: ...?sig=redacted!!!
+        let text = "https://cdn.example/a?sig=secret!!!";
+        let redacted = try_redact_sensitive_text(text).expect("bang in query");
+        assert_eq!(redacted, "https://cdn.example/a?sig=redacted");
+        assert!(!redacted.contains('!'));
+        assert!(!redacted.contains("secret"));
+        assert!(!sanitize_transport_text(text).contains("secret"));
+    }
+
+    #[test]
+    fn commas_semicolons_and_parentheses_do_not_leak_query_secrets() {
+        let text = concat!(
+            "a=https://cdn.example/a?sig=comma-secret, ",
+            "b=(https://cdn.example/b?sig=paren-secret); ",
+            "c=https://cdn.example/c?sig=semi-secret; trailing"
+        );
+        let redacted = try_redact_sensitive_text(text).expect("punctuation in query");
+        assert!(!redacted.contains("comma-secret"));
+        assert!(!redacted.contains("paren-secret"));
+        assert!(!redacted.contains("semi-secret"));
+        assert_eq!(redacted.matches("sig=redacted").count(), 3);
+        assert!(redacted.contains("trailing"));
+    }
+
+    #[test]
+    fn fragments_are_stripped_and_query_secrets_are_redacted() {
+        let url = Url::parse("https://cdn.example/item?token=frag-secret#section-name").unwrap();
+        let redacted = redact_url_for_log(&url);
+        assert!(redacted.contains("token=redacted"));
+        assert!(!redacted.contains("frag-secret"));
+        assert!(!redacted.contains("section-name"));
+        assert!(!redacted.contains('#'));
+
+        let text = "see https://cdn.example/item?token=frag-secret#section-name please";
+        let embedded = try_redact_sensitive_text(text).expect("fragment token");
+        assert!(!embedded.contains("frag-secret"));
+        assert!(!embedded.contains("section-name"));
+        assert!(embedded.contains("token=redacted"));
+        assert!(embedded.ends_with(" please"));
+    }
+
+    #[test]
+    fn mixed_schemes_and_delimiters_redact_every_query_value() {
+        let text = concat!(
+            "https://one.example/x?a=one-secret, ",
+            "http://two.example/y?b=two-secret; ",
+            "(https://three.example/z?c=three-secret)."
+        );
+        let redacted = try_redact_sensitive_text(text).expect("mixed tokens");
+        assert!(!redacted.contains("one-secret"));
+        assert!(!redacted.contains("two-secret"));
+        assert!(!redacted.contains("three-secret"));
+        assert!(redacted.contains("https://one.example/x?a=redacted"));
+        assert!(redacted.contains("http://two.example/y?b=redacted"));
+        assert!(redacted.contains("https://three.example/z?c=redacted"));
+    }
+
+    #[test]
+    fn ambiguous_residual_url_falls_back_to_a_generic_message() {
+        // A scheme match whose whitespace token is not a parseable absolute URL
+        // must not be partially rewritten.
+        let text = "broken http://";
+        assert!(try_redact_sensitive_text(text).is_none());
+        assert_eq!(sanitize_transport_text(text), "request failed");
     }
 }

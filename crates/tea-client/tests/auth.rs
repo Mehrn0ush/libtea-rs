@@ -542,6 +542,76 @@ async fn discovered_credentials_are_posted_only_when_enabled() {
 const STALE_TOKEN: &str = "token-stale";
 const FRESH_TOKEN: &str = "token-fresh";
 
+const SHARED_TOKEN: &str = "shared-token";
+
+/// Under a forced two-challenge gate, concurrent refreshes share one `POST /token`.
+///
+/// Both callers are forced to observe a challenge before the token endpoint
+/// answers, so the assertion does not depend on scheduling luck. This does not
+/// claim every concurrent workload yields exactly one exchange.
+#[tokio::test]
+async fn concurrent_challenges_share_one_token_exchange() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let gate = Arc::new(CoalesceGate {
+        log: Mutex::new(Vec::new()),
+        challenges: Mutex::new(0u32),
+        both_challenged: Notify::new(),
+        issued: Mutex::new(0u32),
+    });
+    tokio::spawn({
+        let gate = Arc::clone(&gate);
+        async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                let gate = Arc::clone(&gate);
+                tokio::spawn(async move {
+                    let _ = serve_coalesce(socket, &gate).await;
+                });
+            }
+        }
+    });
+
+    let base = format!("http://{addr}");
+    let url = Url::parse(&base).unwrap();
+    let service = Client::builder()
+        .limits(limits())
+        .destination_policy(DestinationPolicy::allow_origin(&url).unwrap())
+        .api_key(ApiKey::new(KEY_ID, KEY_SECRET))
+        .build()
+        .unwrap()
+        .service(&base, "1.0.0")
+        .unwrap();
+    let id = ProductId::parse(PRODUCT_ID).unwrap();
+    let left = {
+        let service = service.clone();
+        tokio::spawn(async move { service.get_product(id).await })
+    };
+    let right = {
+        let service = service.clone();
+        tokio::spawn(async move { service.get_product(id).await })
+    };
+    let left = left.await.unwrap().unwrap();
+    let right = right.await.unwrap().unwrap();
+    assert_eq!(left.name, "Widget");
+    assert_eq!(right.name, "Widget");
+
+    let log = gate.log.lock().await;
+    let posts = log.iter().filter(|(method, _, _)| method == "POST").count();
+    assert_eq!(
+        posts, 1,
+        "expected one coalesced token exchange, log={log:?}"
+    );
+    assert_eq!(*gate.issued.lock().await, 1);
+    let challenges = log
+        .iter()
+        .filter(|(method, path, auth)| {
+            method == "GET" && path.contains("/product/") && auth.is_none()
+        })
+        .count();
+    assert_eq!(challenges, 2);
+}
+
 /// A delayed 401 for an older bearer token must not delete a newer token
 /// stored for the same origin while that response was in flight.
 #[tokio::test]
@@ -614,6 +684,90 @@ async fn stale_401_keeps_a_newer_cached_token() {
 }
 
 type ObservedRequest = (String, String, Option<String>);
+
+struct CoalesceGate {
+    log: Mutex<Vec<ObservedRequest>>,
+    challenges: Mutex<u32>,
+    both_challenged: Notify,
+    issued: Mutex<u32>,
+}
+
+async fn serve_coalesce(
+    mut socket: tokio::net::TcpStream,
+    gate: &CoalesceGate,
+) -> std::io::Result<()> {
+    let (method, path, authorization) = read_request(&mut socket).await?;
+    let recorded = authorization
+        .as_deref()
+        .filter(|value| value.starts_with("Bearer ") || value.starts_with("Basic "))
+        .map(str::to_owned);
+    // Log product GETs and token POSTs; Basic values are redacted in asserts.
+    let logged_auth = match recorded.as_deref() {
+        Some(value) if value.starts_with("Basic ") => Some("Basic <redacted>".to_owned()),
+        other => other.map(str::to_owned),
+    };
+    gate.log
+        .lock()
+        .await
+        .push((method.clone(), path.clone(), logged_auth));
+
+    if method == "POST" && path == "/v1.0.0/token" {
+        // Wait until both resource requests have been challenged so a fast
+        // first exchange cannot starve the second challenge path. Subscribe
+        // before reading the counter so a notify between check and await is
+        // not lost.
+        loop {
+            let wait = gate.both_challenged.notified();
+            if *gate.challenges.lock().await >= 2 {
+                break;
+            }
+            wait.await;
+        }
+        *gate.issued.lock().await += 1;
+        let body = format!(
+            r#"{{"access_token":"{SHARED_TOKEN}","token_type":"Bearer","expires_in":3600}}"#
+        );
+        return write_response(
+            &mut socket,
+            200,
+            &[("content-type", "application/json")],
+            &body,
+        )
+        .await;
+    }
+
+    if method == "GET" && path.contains("/product/") {
+        match authorization.as_deref() {
+            Some(value) if value == format!("Bearer {SHARED_TOKEN}") => {
+                return write_response(
+                    &mut socket,
+                    200,
+                    &[("content-type", "application/json")],
+                    &product_json(),
+                )
+                .await;
+            }
+            _ => {
+                {
+                    let mut challenges = gate.challenges.lock().await;
+                    *challenges += 1;
+                    if *challenges >= 2 {
+                        gate.both_challenged.notify_waiters();
+                    }
+                }
+                return write_response(
+                    &mut socket,
+                    401,
+                    &[("www-authenticate", "Bearer realm=\"tea\"")],
+                    "",
+                )
+                .await;
+            }
+        }
+    }
+
+    write_response(&mut socket, 404, &[], "").await
+}
 
 struct TokenGate {
     release_rx: Arc<Mutex<Option<oneshot::Receiver<()>>>>,

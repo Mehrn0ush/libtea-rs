@@ -28,4 +28,8 @@ let query = ListParams {
 let page = service.query_components(&query).await?;
 ```
 
-`ListParams::default()` leaves every field unset and does not require the sort type to implement `Default`. A local HTTP origin needs `DestinationPolicy::allow_origin` for that origin only. The workspace guide is at <https://github.com/Mehrn0ush/teaSDK>.
+`ListParams::default()` leaves every field unset and does not require the sort type to implement `Default`. Pagination is caller-managed: copy `next_page_token` into `page_token` and keep the other fields. A local HTTP origin needs `DestinationPolicy::allow_origin` for that origin only.
+
+Checksum `IntegrityOutcome::Verified` covers decoded artifact bytes only. It does not establish publisher authenticity. Detached signature and Sigstore verification are not implemented in 0.1.0; signature downloads are not cryptographically interpreted.
+
+The workspace guide is at <https://github.com/Mehrn0ush/teaSDK>.

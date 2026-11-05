@@ -3,3 +3,6 @@
 **/*.rs.bk
 .DS_Store
 _upstream/
+# Local interoperability downloads (never publish or commit)
+vulnetix-sbom.cdx.json
+*.downloaded.bin

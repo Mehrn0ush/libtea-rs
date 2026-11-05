@@ -8,6 +8,7 @@ use thiserror::Error;
 
 /// Failure of a consumer HTTP operation.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ClientError {
     /// The URL was rejected by destination policy.
     #[error(transparent)]
@@ -99,12 +100,17 @@ impl ClientError {
         if err.is_timeout() {
             return Self::Timeout;
         }
-        let message = err.to_string();
+        // Prefer structured removal: reqwest's Display appends
+        // ` for url (https://...?secret=...)`. Drop that URL object first.
+        let message = err.without_url().to_string();
         if message.to_ascii_lowercase().contains("authorization")
             || message.to_ascii_lowercase().contains("bearer ")
         {
             return Self::Transport("request failed".into());
         }
-        Self::Transport(message)
+        // Residual free-text URLs are rewritten only when the whole
+        // whitespace-bounded span can be parsed; otherwise use a generic
+        // message rather than risk leaving query-value fragments.
+        Self::Transport(crate::transport::sanitize_transport_text(&message))
     }
 }

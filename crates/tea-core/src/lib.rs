@@ -9,6 +9,11 @@
 
 #![forbid(unsafe_code)]
 
+// Direct dependencies so published consumers keep an MSRV-compatible IDNA/ICU stack.
+// url alone does not constrain those transitive crates.
+use idna as _;
+use idna_adapter as _;
+
 pub mod checksum;
 pub mod discovery;
 pub mod enums;
@@ -65,6 +70,28 @@ pub mod spec {
 /// query parameters, and the server applies its own page size and sort. `S`
 /// does not need to implement [`Default`], so this works for [`enums::ComponentSort`]
 /// and the other built-in sort enums.
+///
+/// # Continuing a page
+///
+/// Keep the same [`ListParams`] value and replace only [`page_token`](Self::page_token)
+/// with [`Page::next_page_token`](crate::Page::next_page_token). That preserves
+/// `pageSize`, sort fields, and identifier filters. Building a new value that
+/// sets only the token drops those fields and can change the result set.
+///
+/// Callers must detect pagination anomalies themselves (empty intermediate pages,
+/// repeated tokens, missing tokens when `has_next` is true, or server errors).
+/// This crate does not auto-paginate and does not break loops on a repeated token.
+///
+/// ```ignore
+/// let mut query = ListParams {
+///     page_size: Some(1),
+///     id_type: Some(IdentifierType::Purl),
+///     ..ListParams::default()
+/// };
+/// let first = service.query_products(&query).await?;
+/// query.page_token = first.next_page_token.clone();
+/// let second = service.query_products(&query).await?;
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListParams<S> {
     /// `pageSize`, from 1 to 100.

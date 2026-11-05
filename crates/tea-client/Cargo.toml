@@ -9,6 +9,8 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
+homepage = "https://github.com/Mehrn0ush/teaSDK"
+documentation = "https://docs.rs/cdx-tea-client"
 publish = true
 
 [dependencies]

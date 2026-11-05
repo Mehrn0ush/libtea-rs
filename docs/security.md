@@ -15,11 +15,23 @@ Artifact `url` and `signatureUrl` values are third-party fetches. They never rec
 
 ## Authentication
 
-The API key is form-urlencoded and then placed in the Basic credential for `POST /token`. Resource requests use `Authorization: Bearer`. Tokens are not logged. `Debug` for `ApiKey` and the token cache redacts the secret and the token.
+The API key is form-urlencoded and then placed in the Basic credential for `POST /token`. Resource requests use `Authorization: Bearer`. Tokens are not logged. `Debug` for `ApiKey` and the token cache redacts the secret and the token. Debug request and response logs print URLs with userinfo and fragments removed and query values replaced by `redacted`. `ClientError::transport` drops the structured URL on a `reqwest::Error` (`without_url`) before storing text in `ClientError::Transport`. Residual absolute URLs in nested error text are rewritten only when the full whitespace-bounded token parses as a URL; otherwise the message is replaced with `request failed`. Quote boundaries and trailing punctuation are not treated as safe delimiters. Unit coverage is `url_redaction_tests` in `transport.rs`.
 
 A `401` with `WWW-Authenticate: Bearer`, with no error or with `error=invalid_token`, obtains a token and retries the resource request once. A challenge with another `error` value, including `insufficient_scope`, is not retried. If the retry is still `401`, the bearer token that retry presented is removed only when it is still the cached value for that origin. A newer token stored by another request is left in place. `403` is returned to the caller. The client does not call `/token` before a resource asks for a token. `POST /token` is not followed if it redirects.
 
-The request body is only `grant_type=client_credentials`. No `scope` or `audience` parameter is sent. A `scope` on the token response is ignored. When `expires_in` is greater than five seconds, the cached token is treated as expired five seconds early. A shorter positive lifetime is kept for its full `expires_in`. `expires_in` of `0` is already expired. If `expires_in` is omitted, the token stays cached until the server rejects it. Two overlapping challenges can each call `POST /token`; the cache lock is not held across that request. That duplicate exchange is a performance limit, not a second credential. The cache key is the origin (scheme, host, and port). It is not the API prefix and it is not the key identifier. One client holds one API key. Two version prefixes on that origin share the cached token, and the token is attached only when the request URL is under the prefix for that call.
+The request body is only `grant_type=client_credentials`. No `scope` or `audience` parameter is sent. A `scope` on the token response is ignored. When `expires_in` is greater than five seconds, the cached token is treated as expired five seconds early. A shorter positive lifetime is kept for its full `expires_in`. `expires_in` of `0` is already expired. If `expires_in` is omitted, the token stays cached until the server rejects it.
+
+**Token-refresh serialization (0.1.0 decision):** refresh uses one **client-wide** `tokio::sync::Mutex`, not a per-origin map of locks. Rationale: a `Client` carries a single API key; the bearer cache is already origin-keyed. Behavior:
+
+1. A challenge that should refresh acquires the mutex before `POST /token`.
+2. After waiting, if the cache already holds a usable bearer different from the value that received `401` (or any bearer when none was presented), that token is reused and no additional exchange runs.
+3. Otherwise the client exchanges the API key once under the lock and stores the result for that origin.
+
+This often collapses overlapping challenges into one exchange, but it is **not** a guarantee of exactly one `POST /token` for every concurrent set: a failed exchange, an expired or discarded cache entry, or challenges against another origin can each produce another request. The client-wide lock can also temporarily serialize refreshes for unrelated origins. Ordinary resource GETs are not serialized by this lock. Per-origin refresh locks were considered and deferred. Regression under a forced two-challenge gate: `concurrent_challenges_share_one_token_exchange`. The token cache key remains the origin (scheme, host, and port). Two version prefixes on that origin share the cached token, and the token is attached only when the request URL is under the prefix for that call.
+
+### CLI credentials
+
+Prefer `TEA_API_KEY_ID` and `TEA_API_KEY_SECRET`. A complete `--api-key-id` / `--api-key-secret` pair still works for compatibility, but placing the secret on the command line exposes it to process listings and shell history. Partial pairs and mixing a CLI id with an environment secret (or the reverse) are rejected. The CLI never prints the secret. Unit tests that temporarily clear those variables restore the previous process environment on exit so `cargo test` does not erase a developer's configured keys.
 
 ## Transport
 
@@ -53,4 +65,4 @@ The lockfile is committed. `deny.toml` allows common permissive licenses and den
 
 ## Out of scope
 
-This SDK does not verify detached signature technology, trust anchors, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. Callers who need that assurance have to verify signatures themselves. The client can download signature bytes and does not interpret them.
+This SDK does not verify detached signature technology, trust anchors, Sigstore trust policy, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. Callers who need that assurance have to verify signatures themselves. The client can download signature bytes and does not interpret them.

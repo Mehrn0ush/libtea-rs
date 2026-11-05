@@ -50,8 +50,14 @@ jobs:
       # is verified against the registry dependency.
       - name: Verify cdx-tea-core
         run: cargo package -p cdx-tea-core --locked
+      # Until cdx-tea-core 0.1.0 is on crates.io, full client verify against the
+      # registry dependency cannot succeed. List packaged files only.
       - name: List cdx-tea-client files
         run: cargo package -p cdx-tea-client --locked --no-verify --list
+      - name: Confirm CLI and conformance stay unpublished
+        run: |
+          grep -q 'publish = false' crates/tea-cli/Cargo.toml
+          grep -q 'publish = false' crates/tea-conformance/Cargo.toml
 
   deny:
     name: cargo deny

@@ -4,7 +4,9 @@ The 2026-10-10 sections below keep the package names from that audit. Current pa
 
 ## Verdict
 
-The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong server has been called by this client; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. Many get, collection, and CLE operations still have no dedicated test. The old `tea-core` and `tea-cli` names are still taken on crates.io. This workspace now uses the `cdx-tea-*` names recorded below. `cdx-tea-cli` and `cdx-tea-conformance` remain `publish = false`.
+The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong fixture profile has been exercised by checked-in ignored tests; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. The old `tea-core` and `tea-cli` names are still taken on crates.io. This workspace now uses the `cdx-tea-*` names recorded below. `cdx-tea-cli` and `cdx-tea-conformance` remain `publish = false`.
+
+**Current publication posture (2026-11-05 working tree):** libraries are prepared for owner review (env credentials, token coalescing, expanded mock surface, packaging metadata, CHANGELOG, Vulnetix interop notes). The candidate is **not** published until the owner commits a reviewed SHA, GitHub Actions is green on that SHA, `cdx-tea-core` is published, then `cdx-tea-client` is published. Do not commit local download artifacts such as `vulnetix-sbom.cdx.json`.
 
 ## Blockers before a conformance claim
 
@@ -74,6 +76,24 @@ Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-
 ## Documentation
 
 `README.md` and `docs/` describe the pin, the limits, and the single local Oolong result. They do not claim conformance. `docs/requirements-matrix.md` still marks some rows as implemented from code inspection. Readers should use `docs/api-operation-matrix.md` for which operations have a mock test, a live Oolong observation, or neither.
+
+## 2026-11-04 release readiness update
+
+Working tree on top of `b92faab` (dirty until committed). Changes in this pass:
+
+- MSRV consumer contract: published `cdx-tea-core` pins `url = "=2.5.4"`, `idna = "=1.0.3"`, `idna_adapter = "=1.2.0"`, and `uuid = ">=1.26.0, <1.27.0"`. A fresh Rust 1.85 consumer of the packaged archive succeeds without this repository's `.cargo/config.toml`.
+- Dependency advisories addressed in `Cargo.lock` (`rustls` 0.23.46, `rustls-webpki` 0.103.16, `webpki-roots` 1.0.11, `tokio` 1.54.1).
+- Public error enums are `#[non_exhaustive]`.
+- Transport logs and `ClientError::Transport` redact URL query values.
+- `ListParams` docs describe safe pagination continuation.
+- Live Oolong coverage expanded in `oolong_surface_live.rs` (see `docs/interoperability.md`).
+
+Still required before publication (authorization gates):
+
+1. Maintainer review and commit of this working tree.
+2. Push and green GitHub Actions on that exact SHA.
+3. Recheck crates.io names; publish `cdx-tea-core` 0.1.0; wait for index; verify then publish `cdx-tea-client` 0.1.0.
+4. Fresh registry consumer smoke after both packages exist.
 
 ## 2026-10-12 release engineering
 
