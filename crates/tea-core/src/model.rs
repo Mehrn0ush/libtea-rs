@@ -21,6 +21,7 @@ use crate::ids::{
 /// An external identifier attached to a TEA object.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Identifier {
     /// Identifier scheme.
     pub id_type: IdentifierType,
@@ -31,6 +32,7 @@ pub struct Identifier {
 /// A TEA Product.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Product {
     /// Product UUID.
     pub uuid: ProductId,
@@ -42,6 +44,7 @@ pub struct Product {
 
 /// A component included by a product release.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ComponentRef {
     /// Component UUID.
     pub uuid: ComponentId,
@@ -53,6 +56,7 @@ pub struct ComponentRef {
 /// A TEA Product Release without its collection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ProductRelease {
     /// Product release UUID.
     pub uuid: ProductReleaseId,
@@ -81,6 +85,7 @@ pub struct ProductRelease {
 /// A product release and its latest collection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ProductReleaseWithCollection {
     /// Release fields.
     #[serde(flatten)]
@@ -92,6 +97,7 @@ pub struct ProductReleaseWithCollection {
 /// A TEA Component.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Component {
     /// Component UUID.
     pub uuid: ComponentId,
@@ -104,6 +110,7 @@ pub struct Component {
 /// One distribution of a component release.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ReleaseDistribution {
     /// Distribution UUID.
     pub distribution_id: DistributionId,
@@ -127,6 +134,7 @@ pub struct ReleaseDistribution {
 /// A TEA Component Release without its collection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ComponentRelease {
     /// Component release UUID.
     pub uuid: ComponentReleaseId,
@@ -156,6 +164,7 @@ pub struct ComponentRelease {
 /// A component release and its latest collection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ComponentReleaseWithCollection {
     /// Release fields.
     #[serde(flatten)]
@@ -166,6 +175,7 @@ pub struct ComponentReleaseWithCollection {
 
 /// Why a collection version was published.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CollectionUpdateReason {
     /// Update classification.
     #[serde(rename = "type")]
@@ -178,6 +188,7 @@ pub struct CollectionUpdateReason {
 /// One format of an artifact revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ArtifactFormat {
     /// Media type. Unique within the revision.
     pub media_type: String,
@@ -224,6 +235,7 @@ impl ArtifactFormat {
 /// A TEA Artifact revision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Artifact {
     /// Artifact UUID.
     pub uuid: ArtifactId,
@@ -288,6 +300,7 @@ impl Artifact {
 /// A TEA Collection version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Collection {
     /// Collection UUID. Equal to the parent release UUID.
     pub uuid: CollectionId,
@@ -323,6 +336,7 @@ impl Collection {
 /// A page of results.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Page<T> {
     /// Whether another page exists.
     pub has_next: bool,
@@ -333,12 +347,25 @@ pub struct Page<T> {
     pub results: Vec<T>,
 }
 
+impl<T> Page<T> {
+    /// Build a page, for example in a test double or an adapter.
+    #[must_use]
+    pub fn new(results: Vec<T>, has_next: bool, next_page_token: Option<String>) -> Self {
+        Self {
+            has_next,
+            next_page_token,
+            results,
+        }
+    }
+}
+
 /// TEA error body.
 ///
 /// Unknown `error` strings are preserved. Extra JSON properties are ignored so
 /// recognition matches the discovery document rather than failing closed on an
 /// additive field.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TeaErrorBody {
     /// Machine-readable error code.
     pub error: TeaErrorCode,
@@ -360,6 +387,7 @@ impl TeaErrorBody {
 
 /// OAuth token error body from `POST /token`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TokenErrorBody {
     /// OAuth error code.
     pub error: String,
@@ -373,6 +401,7 @@ pub struct TokenErrorBody {
 
 /// Successful token response. The access token is opaque.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
 pub struct TokenResponse {
     /// Opaque access token.
     pub access_token: String,
@@ -408,6 +437,7 @@ impl TokenResponse {
 
 /// CLE support definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CleSupportDefinition {
     /// Support identifier.
     pub id: String,
@@ -420,6 +450,7 @@ pub struct CleSupportDefinition {
 
 /// CLE definition block.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CleDefinitions {
     /// Support definitions.
     #[serde(default)]
@@ -429,6 +460,7 @@ pub struct CleDefinitions {
 /// One CLE event in the TEA projection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct CleEvent {
     /// Event id.
     pub id: i64,
@@ -473,6 +505,7 @@ pub struct CleEvent {
 
 /// CLE version specifier.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CleVersionSpecifier {
     /// Exact version.
     #[serde(default)]
@@ -484,6 +517,7 @@ pub struct CleVersionSpecifier {
 
 /// TEA projection of CLE events. This is not a full ECMA-428 document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Cle {
     /// Events.
     pub events: Vec<CleEvent>,

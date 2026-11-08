@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -9,8 +10,8 @@ use bytes::Bytes;
 use futures_util::StreamExt;
 use libtea_core::checksum::ContentDecoder;
 use libtea_core::{
-    classify_ip, origin_key, parse_api_base, tea_error_code, ApiVersion, DestinationPolicy,
-    SupportedApi, TeaErrorBody, TokenResponse,
+    classify_ip, origin_key, parse_api_base, tea_error_code, ApiVersion, ChecksumPolicy,
+    DestinationPolicy, SupportedApi, TeaErrorBody, TokenResponse,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, LOCATION, WWW_AUTHENTICATE};
 use reqwest::{Method, StatusCode};
@@ -20,7 +21,11 @@ use url::Url;
 use crate::error::ClientError;
 
 /// Bounds for untrusted TEA responses.
+///
+/// `#[non_exhaustive]`: start from [`Limits::default`] and use the `with_*`
+/// setters (or assign fields on a default value).
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Limits {
     /// Maximum `.well-known/tea` document size.
     pub max_discovery_bytes: usize,
@@ -58,6 +63,78 @@ impl Default for Limits {
             initial_backoff: Duration::from_millis(200),
             max_in_flight: 8,
         }
+    }
+}
+
+impl Limits {
+    /// Set [`Self::max_discovery_bytes`].
+    #[must_use]
+    pub fn with_max_discovery_bytes(mut self, value: usize) -> Self {
+        self.max_discovery_bytes = value;
+        self
+    }
+
+    /// Set [`Self::max_json_bytes`].
+    #[must_use]
+    pub fn with_max_json_bytes(mut self, value: usize) -> Self {
+        self.max_json_bytes = value;
+        self
+    }
+
+    /// Set [`Self::max_artifact_bytes`].
+    #[must_use]
+    pub fn with_max_artifact_bytes(mut self, value: usize) -> Self {
+        self.max_artifact_bytes = value;
+        self
+    }
+
+    /// Set [`Self::max_redirects`].
+    #[must_use]
+    pub fn with_max_redirects(mut self, value: usize) -> Self {
+        self.max_redirects = value;
+        self
+    }
+
+    /// Set [`Self::request_timeout`].
+    #[must_use]
+    pub fn with_request_timeout(mut self, value: Duration) -> Self {
+        self.request_timeout = value;
+        self
+    }
+
+    /// Set [`Self::connect_timeout`].
+    #[must_use]
+    pub fn with_connect_timeout(mut self, value: Duration) -> Self {
+        self.connect_timeout = value;
+        self
+    }
+
+    /// Set [`Self::max_retries`].
+    #[must_use]
+    pub fn with_max_retries(mut self, value: u32) -> Self {
+        self.max_retries = value;
+        self
+    }
+
+    /// Set [`Self::max_discovery_attempts`].
+    #[must_use]
+    pub fn with_max_discovery_attempts(mut self, value: u32) -> Self {
+        self.max_discovery_attempts = value;
+        self
+    }
+
+    /// Set [`Self::initial_backoff`].
+    #[must_use]
+    pub fn with_initial_backoff(mut self, value: Duration) -> Self {
+        self.initial_backoff = value;
+        self
+    }
+
+    /// Set [`Self::max_in_flight`].
+    #[must_use]
+    pub fn with_max_in_flight(mut self, value: usize) -> Self {
+        self.max_in_flight = value;
+        self
     }
 }
 
@@ -102,6 +179,106 @@ impl std::fmt::Debug for StoredToken {
     }
 }
 
+/// Single-flight state for one origin's token exchange.
+#[derive(Default)]
+struct RefreshSlot {
+    /// Number of exchanges for this origin that ran to completion.
+    completed: AtomicU64,
+    /// Failure of the most recent completed exchange, `None` after a success.
+    last_failure: tokio::sync::Mutex<Option<SharedFailure>>,
+}
+
+/// A caller's hold on one origin's [`RefreshSlot`].
+///
+/// Dropping the last lease removes the slot from the map, including when the
+/// holder is cancelled. The map therefore only holds origins with a refresh in
+/// progress or queued, and a stored failure never outlives its burst.
+struct SlotLease<'a> {
+    inner: &'a ClientInner,
+    origin: String,
+    slot: Arc<RefreshSlot>,
+}
+
+impl<'a> SlotLease<'a> {
+    fn acquire(inner: &'a ClientInner, origin: String) -> Self {
+        let mut slots = inner
+            .token_refresh
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let slot = Arc::clone(slots.entry(origin.clone()).or_default());
+        Self {
+            inner,
+            origin,
+            slot,
+        }
+    }
+}
+
+impl Drop for SlotLease<'_> {
+    fn drop(&mut self) {
+        let mut slots = self
+            .inner
+            .token_refresh
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        // Leases are only cloned under this lock, so the count is exact here:
+        // one reference in the map and one held by this lease.
+        let last = slots
+            .get(&self.origin)
+            .is_some_and(|stored| Arc::ptr_eq(stored, &self.slot))
+            && Arc::strong_count(&self.slot) == 2;
+        if last {
+            slots.remove(&self.origin);
+        }
+    }
+}
+
+/// Cloneable summary of a token exchange failure, handed to queued waiters.
+#[derive(Clone)]
+enum SharedFailure {
+    Timeout,
+    Token(String),
+    Api {
+        status: u16,
+        tea_error: Option<String>,
+    },
+    AuthenticationRequired,
+    Other,
+}
+
+impl SharedFailure {
+    fn from_error(error: &ClientError) -> Self {
+        match error {
+            ClientError::Timeout => Self::Timeout,
+            ClientError::Token { error } => Self::Token(error.clone()),
+            ClientError::Api {
+                status, tea_error, ..
+            } => Self::Api {
+                status: *status,
+                tea_error: tea_error.clone(),
+            },
+            ClientError::AuthenticationRequired => Self::AuthenticationRequired,
+            _ => Self::Other,
+        }
+    }
+
+    fn to_error(&self) -> ClientError {
+        match self {
+            Self::Timeout => ClientError::Timeout,
+            Self::Token(error) => ClientError::Token {
+                error: error.clone(),
+            },
+            Self::Api { status, tea_error } => ClientError::Api {
+                status: *status,
+                tea_error: tea_error.clone(),
+                message: None,
+            },
+            Self::AuthenticationRequired => ClientError::AuthenticationRequired,
+            Self::Other => ClientError::Transport("token exchange failed".into()),
+        }
+    }
+}
+
 pub(crate) struct ClientInner {
     http: reqwest::Client,
     pub(crate) limits: Limits,
@@ -111,17 +288,20 @@ pub(crate) struct ClientInner {
     /// Origins this client may send the API key to.
     credential_origins: Mutex<BTreeSet<String>>,
     pub(crate) allow_discovered_credentials: bool,
+    pub(crate) checksum_policy: ChecksumPolicy,
     tokens: Mutex<std::collections::HashMap<String, StoredToken>>,
-    /// Client-wide gate for `POST /token` (not per origin).
+    /// Per-origin single-flight gates for `POST /token`.
     ///
-    /// One `Client` holds one API key, and the bearer cache is already keyed by
-    /// origin. Concurrent challenges wait on this mutex; a waiter may reuse a
-    /// bearer another request just stored when that value differs from the one
-    /// that received `401`. That often yields one exchange, but failed
-    /// exchanges, expired cache entries, or other origins can require more.
-    /// The lock may briefly serialize refreshes across unrelated origins. It is
-    /// held across the token exchange await only; ordinary GETs are not.
-    token_refresh: tokio::sync::Mutex<()>,
+    /// At most one `POST /token` per origin runs at a time on a given
+    /// [`Client`]; different origins do not wait for each other. Waiters
+    /// re-check the bearer cache under the lock and skip another exchange when
+    /// a usable bearer is already stored. Waiters that queued while an
+    /// exchange for that origin was in flight share its failure instead of
+    /// repeating it. See `docs/auth.md` for the exact bound. An entry exists
+    /// only while a refresh for that origin is running or queued
+    /// ([`SlotLease`] removes it), so origin churn cannot grow the map.
+    /// Ordinary GETs are not held behind these locks.
+    token_refresh: Mutex<std::collections::HashMap<String, Arc<RefreshSlot>>>,
     semaphore: Arc<Semaphore>,
     pub(crate) well_known_override: Option<Url>,
 }
@@ -143,6 +323,9 @@ pub struct ClientBuilder {
     allow_discovered_credentials: bool,
     well_known_override: Option<Url>,
     roots_pem: Vec<u8>,
+    checksum_policy: ChecksumPolicy,
+    ignore_env_proxies: bool,
+    lenient_versions: bool,
 }
 
 impl Default for ClientBuilder {
@@ -155,6 +338,9 @@ impl Default for ClientBuilder {
             allow_discovered_credentials: false,
             well_known_override: None,
             roots_pem: Vec::new(),
+            checksum_policy: ChecksumPolicy::default(),
+            ignore_env_proxies: false,
+            lenient_versions: false,
         }
     }
 }
@@ -221,6 +407,55 @@ impl ClientBuilder {
         self
     }
 
+    /// Accept API versions that are not exactly a supported one (default `false`).
+    ///
+    /// When `true`, `/.well-known/tea` and `/discovery` may advertise `1` or
+    /// `1.0` (read as `1.0.0`; the advertised spelling stays in the request
+    /// path, so `1` calls `/v1/…`), and any *stable* version with the same
+    /// major as a supported version is accepted, for example `1.0.1` and
+    /// `1.1.0` for a client that supports `1.0.0`. Pre-releases (`1.2.0-rc.1`)
+    /// are accepted only on an exact match.
+    ///
+    /// Selection order: exact supported versions first (highest version, then
+    /// priority), then same-major stable versions (highest first). An exact
+    /// match is never outranked by a version this client was not written for.
+    ///
+    /// **Risk:** this client's models were checked against the pinned 1.0.0
+    /// schemas only. A server that passes the version check may still send
+    /// responses that fail to parse or that are misread. The default (`false`)
+    /// is unchanged from earlier behavior.
+    #[must_use]
+    pub fn lenient_versions(mut self, lenient: bool) -> Self {
+        self.lenient_versions = lenient;
+        self
+    }
+
+    /// Accept artifact downloads whose only declared checksums use weak
+    /// algorithms (SHA-1).
+    ///
+    /// Off by default: such a download fails with [`ClientError::Integrity`]
+    /// and [`libtea_core::IntegrityOutcome::Weak`]. When set, a full match is
+    /// reported as [`libtea_core::IntegrityOutcome::Verified`] and each
+    /// [`libtea_core::ChecksumCheck::weak`] stays `true`.
+    #[must_use]
+    pub fn allow_weak_checksums(mut self, allow: bool) -> Self {
+        self.checksum_policy = self.checksum_policy.with_allow_weak(allow);
+        self
+    }
+
+    /// Ignore `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` (and lowercase forms).
+    ///
+    /// By default environment proxies are honored. Through a proxy, the
+    /// proxy resolves the target hostname, so the DNS-based
+    /// [`DestinationPolicy`] checks are **not** enforced for hostnames; only
+    /// scheme, userinfo, literal-IP, and redirect checks still apply. Set this
+    /// to `true` to connect directly and keep the DNS checks.
+    #[must_use]
+    pub fn ignore_env_proxies(mut self, ignore: bool) -> Self {
+        self.ignore_env_proxies = ignore;
+        self
+    }
+
     /// Add a PEM trust anchor. System or webpki roots remain in use as well.
     #[must_use]
     pub fn add_root_pem(mut self, pem: impl Into<Vec<u8>>) -> Self {
@@ -250,6 +485,9 @@ impl ClientBuilder {
             .dns_resolver(Arc::new(PolicyResolver {
                 policy: self.policy.clone(),
             }));
+        if self.ignore_env_proxies {
+            builder = builder.no_proxy();
+        }
         if !self.roots_pem.is_empty() {
             let cert = reqwest::Certificate::from_pem(&self.roots_pem)
                 .map_err(|err| ClientError::Transport(format!("invalid trust anchor: {err}")))?;
@@ -264,12 +502,17 @@ impl ClientBuilder {
                 semaphore: Arc::new(Semaphore::new(self.limits.max_in_flight)),
                 limits: self.limits,
                 policy: self.policy,
-                supported: self.supported,
+                supported: if self.lenient_versions {
+                    self.supported.with_lenient(true)
+                } else {
+                    self.supported
+                },
                 credentials: self.credentials,
                 credential_origins: Mutex::new(BTreeSet::new()),
                 allow_discovered_credentials: self.allow_discovered_credentials,
                 tokens: Mutex::new(std::collections::HashMap::new()),
-                token_refresh: tokio::sync::Mutex::new(()),
+                token_refresh: Mutex::new(std::collections::HashMap::new()),
+                checksum_policy: self.checksum_policy,
                 well_known_override: self.well_known_override,
             }),
         })
@@ -302,7 +545,11 @@ impl Client {
     pub fn service(&self, root: &str, version: &str) -> Result<crate::Service, ClientError> {
         let root_url = parse_api_base(root)?;
         self.inner.policy.check_url(&root_url)?;
-        let version = ApiVersion::parse(version)?;
+        let version = if self.inner.supported.is_lenient() {
+            ApiVersion::parse_lenient(version)?
+        } else {
+            ApiVersion::parse(version)?
+        };
         self.authorize_origin(&root_url)?;
         crate::Service::from_parts(self.clone(), root_url, version.as_str().to_owned())
     }
@@ -588,16 +835,22 @@ impl ClientInner {
         Ok(format!("Basic {encoded}"))
     }
 
-    /// Coalesce concurrent token exchanges for one client.
+    /// Coalesce concurrent token exchanges for one origin.
     ///
     /// Waiters that find a cached bearer different from the value that just
-    /// received `401` reuse that token and skip another `POST /token`.
+    /// received `401` reuse that token and skip another `POST /token`. A
+    /// waiter that queued while an exchange was in flight and finds that it
+    /// failed returns the same failure. If the exchanging task is cancelled,
+    /// nothing is recorded and the next waiter performs its own exchange.
     async fn refresh_token_coalesced(
         &self,
         api_prefix: &Url,
         presented: Option<&str>,
     ) -> Result<(), ClientError> {
-        let _guard = self.token_refresh.lock().await;
+        let lease = SlotLease::acquire(self, origin_key(api_prefix)?);
+        let slot = &lease.slot;
+        let seen = slot.completed.load(Ordering::Acquire);
+        let mut last_failure = slot.last_failure.lock().await;
         if let Some(current) = self.bearer_for(api_prefix, Some(api_prefix)) {
             let reusable = match presented {
                 Some(old) => current != old,
@@ -607,7 +860,15 @@ impl ClientInner {
                 return Ok(());
             }
         }
-        self.fetch_token(api_prefix).await
+        if slot.completed.load(Ordering::Acquire) != seen {
+            if let Some(failure) = last_failure.as_ref() {
+                return Err(failure.to_error());
+            }
+        }
+        let result = self.fetch_token(api_prefix).await;
+        *last_failure = result.as_ref().err().map(SharedFailure::from_error);
+        slot.completed.fetch_add(1, Ordering::Release);
+        result
     }
 
     pub(crate) async fn fetch_token(&self, api_prefix: &Url) -> Result<(), ClientError> {
@@ -635,7 +896,8 @@ impl ClientInner {
                 tea_error: tea_error_code(
                     header_str(&response.headers, CONTENT_TYPE),
                     &response.body,
-                ),
+                )
+                .map(|code| libtea_core::escape_control_chars(&code)),
                 message: None,
             });
         }
@@ -649,7 +911,9 @@ impl ClientInner {
                         .map(str::to_owned)
                 })
                 .unwrap_or_else(|| response.status.as_str().to_owned());
-            return Err(ClientError::Token { error: code });
+            return Err(ClientError::Token {
+                error: libtea_core::escape_control_chars(&code),
+            });
         }
         let token: TokenResponse = serde_json::from_slice(&response.body)?;
         let token = token.bearer()?;
@@ -809,10 +1073,11 @@ pub(crate) fn map_api_error(response: &RawResponse) -> ClientError {
     } else {
         None
     };
+    // Server text: escape control characters before it reaches an error value.
     ClientError::Api {
         status: response.status.as_u16(),
-        tea_error: tea,
-        message,
+        tea_error: tea.map(|code| libtea_core::escape_control_chars(&code)),
+        message: message.map(|text| libtea_core::escape_control_chars(&text)),
     }
 }
 
@@ -1069,6 +1334,50 @@ mod url_redaction_tests {
         assert!(redacted.contains("https://three.example/z?c=redacted"));
     }
 
+    /// The redaction and challenge parsers slice `str` by byte offsets from
+    /// `find`; every combination of multi-byte and delimiter pieces must stay
+    /// on character boundaries.
+    #[test]
+    fn text_helpers_do_not_panic_on_unicode() {
+        const PIECES: [&str; 14] = [
+            "http://",
+            "https://",
+            "a",
+            "?",
+            "=",
+            "&",
+            " ",
+            ",",
+            "\"",
+            "\u{e9}",
+            "\u{20ac}",
+            "\u{1f600}",
+            "\u{2003}",
+            "%",
+        ];
+        let mut inputs = vec![String::new()];
+        for _ in 0..4 {
+            let mut next = Vec::new();
+            for prefix in &inputs {
+                for piece in PIECES {
+                    next.push(format!("{prefix}{piece}"));
+                }
+            }
+            inputs.extend(next);
+            inputs.dedup();
+        }
+        for text in &inputs {
+            let _ = sanitize_transport_text(text);
+            let _ = try_redact_sensitive_text(text);
+            let _ = super::challenge_error(text);
+            let _ = super::is_bearer_challenge(text);
+            if let Ok(url) = Url::parse(text) {
+                let _ = redact_url_for_log(&url);
+            }
+        }
+        assert!(inputs.len() > 10_000);
+    }
+
     #[test]
     fn ambiguous_residual_url_falls_back_to_a_generic_message() {
         // A scheme match whose whitespace token is not a parseable absolute URL
@@ -1076,5 +1385,74 @@ mod url_redaction_tests {
         let text = "broken http://";
         assert!(try_redact_sensitive_text(text).is_none());
         assert_eq!(sanitize_transport_text(text), "request failed");
+    }
+}
+
+#[cfg(test)]
+mod refresh_slot_tests {
+    use std::time::Duration;
+
+    use super::{ApiKey, ClientBuilder, ClientError};
+    use url::Url;
+
+    fn slot_count(client: &crate::Client) -> usize {
+        client
+            .inner
+            .token_refresh
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .len()
+    }
+
+    /// Many distinct origins must not leave one lock entry each behind.
+    #[tokio::test]
+    async fn refresh_slots_do_not_grow_with_origin_churn() {
+        let client = ClientBuilder::new()
+            .api_key(ApiKey::new("id", "secret"))
+            .build()
+            .unwrap();
+        for index in 0..500 {
+            let prefix = Url::parse(&format!("https://h{index}.example/v1.0.0/")).unwrap();
+            // Not an authorized origin, so the exchange fails before any I/O.
+            let error = client
+                .inner
+                .refresh_token_coalesced(&prefix, None)
+                .await
+                .unwrap_err();
+            assert!(matches!(error, ClientError::AuthenticationRequired));
+        }
+        assert_eq!(slot_count(&client), 0);
+    }
+
+    /// A refresh that is cancelled mid-exchange removes its entry too.
+    #[tokio::test]
+    async fn a_cancelled_refresh_leaves_no_slot() {
+        // Accepts connections and never answers.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let hold = tokio::spawn(async move {
+            let mut open = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                open.push(socket);
+            }
+        });
+        let origin = Url::parse(&format!("http://{address}")).unwrap();
+        let client = ClientBuilder::new()
+            .api_key(ApiKey::new("id", "secret"))
+            .destination_policy(libtea_core::DestinationPolicy::allow_origin(&origin).unwrap())
+            .build()
+            .unwrap();
+        let prefix = origin.join("v1.0.0/").unwrap();
+        client.authorize_origin(&prefix).unwrap();
+        let inner = std::sync::Arc::clone(&client.inner);
+        let task = tokio::spawn(async move {
+            let _ = inner.refresh_token_coalesced(&prefix, None).await;
+        });
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(slot_count(&client), 1, "the exchange is in flight");
+        task.abort();
+        let _ = task.await;
+        assert_eq!(slot_count(&client), 0);
+        hold.abort();
     }
 }

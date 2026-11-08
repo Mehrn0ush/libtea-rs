@@ -18,13 +18,11 @@ const KEY_ID: &str = "id:ent";
 const KEY_SECRET: &str = "p@ss:word";
 
 fn limits() -> Limits {
-    Limits {
-        initial_backoff: Duration::ZERO,
-        max_retries: 0,
-        request_timeout: Duration::from_secs(5),
-        connect_timeout: Duration::from_secs(2),
-        ..Limits::default()
-    }
+    Limits::default()
+        .with_initial_backoff(Duration::ZERO)
+        .with_max_retries(0)
+        .with_request_timeout(Duration::from_secs(5))
+        .with_connect_timeout(Duration::from_secs(2))
 }
 
 fn client(server: &MockServer, key: bool) -> Client {
@@ -202,7 +200,7 @@ async fn invalid_client_is_one_token_request() {
         .await
         .unwrap_err();
     match error {
-        ClientError::Token { error } => assert_eq!(error, "invalid_client"),
+        ClientError::Token { error, .. } => assert_eq!(error, "invalid_client"),
         other => panic!("unexpected {other}"),
     }
 }
@@ -350,7 +348,7 @@ async fn token_endpoint_errors_are_single_attempts() {
             .await
             .unwrap_err();
         match error {
-            ClientError::Token { error } => assert_eq!(error, expected),
+            ClientError::Token { error, .. } => assert_eq!(error, expected),
             other => panic!("unexpected {other}"),
         }
     }
@@ -378,7 +376,7 @@ async fn token_503_is_not_retried() {
         .await
         .unwrap_err();
     match error {
-        ClientError::Token { error } => assert_eq!(error, "503"),
+        ClientError::Token { error, .. } => assert_eq!(error, "503"),
         other => panic!("unexpected {other}"),
     }
 }
@@ -610,6 +608,79 @@ async fn concurrent_challenges_share_one_token_exchange() {
         })
         .count();
     assert_eq!(challenges, 2);
+}
+
+/// `N` concurrent challenges on one `Client` and one origin perform a single
+/// successful `POST /token` when the cache is empty at start, all tasks observe
+/// `401` before any bearer is stored, and the first exchange succeeds
+/// (single-flight + cache re-check under the refresh mutex).
+#[tokio::test]
+async fn concurrent_n32_challenges_one_token_exchange() {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::Barrier;
+
+    const N: usize = 32;
+    let server = MockServer::start().await;
+    // Artificial delay so waiters pile up on the refresh mutex / race window
+    // before the first exchange finishes writing the cache.
+    Mock::given(method("POST"))
+        .and(path("/v1.0.0/token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(200))
+                .set_body_raw(
+                    r#"{"access_token":"shared-token","token_type":"Bearer","expires_in":3600}"#,
+                    "application/json",
+                ),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1.0.0/product/{PRODUCT_ID}")))
+        .and(header("authorization", "Bearer shared-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(product_json(), "application/json"))
+        .with_priority(1)
+        .expect(N as u64)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1.0.0/product/{PRODUCT_ID}")))
+        .respond_with(challenge())
+        .with_priority(2)
+        .expect(N as u64)
+        .mount(&server)
+        .await;
+
+    let service = client(&server, true)
+        .service(&server.uri(), "1.0.0")
+        .unwrap();
+    let id = ProductId::parse(PRODUCT_ID).unwrap();
+    let barrier = Arc::new(Barrier::new(N));
+    let mut joins = Vec::with_capacity(N);
+    for _ in 0..N {
+        let service = service.clone();
+        let barrier = Arc::clone(&barrier);
+        joins.push(tokio::spawn(async move {
+            barrier.wait().await;
+            service.get_product(id).await
+        }));
+    }
+    for join in joins {
+        let product = join.await.unwrap().unwrap();
+        assert_eq!(product.name, "Widget");
+    }
+    let requests = server.received_requests().await.unwrap();
+    let posts = requests
+        .iter()
+        .filter(|request| request.method == "POST")
+        .count();
+    assert_eq!(
+        posts, 1,
+        "bound for empty-cache same-origin coalesce with successful first exchange is 1; log posts={}",
+        posts
+    );
 }
 
 /// A delayed 401 for an older bearer token must not delete a newer token
@@ -930,4 +1001,341 @@ async fn write_response(
     message.push_str(body);
     socket.write_all(message.as_bytes()).await?;
     Ok(())
+}
+
+/// Client whose request timeout is short and whose key may be sent to both origins.
+fn two_origin_client(a: &MockServer, b: &MockServer, timeout: Duration) -> Client {
+    let a_url = Url::parse(&a.uri()).unwrap();
+    let b_url = Url::parse(&b.uri()).unwrap();
+    Client::builder()
+        .limits(limits().with_request_timeout(timeout))
+        .destination_policy(
+            DestinationPolicy::allow_origin(&a_url)
+                .unwrap()
+                .and_allow(&b_url)
+                .unwrap(),
+        )
+        .api_key(ApiKey::new(KEY_ID, KEY_SECRET))
+        .build()
+        .unwrap()
+}
+
+/// How long the mock token endpoint hangs. Assertions compare against this
+/// (not against fixed wall-clock budgets), so a slow runner cannot fail them.
+const HANG: Duration = Duration::from_secs(30);
+
+async fn mount_hanging_token(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/v1.0.0/token"))
+        .respond_with(ResponseTemplate::new(200).set_delay(HANG).set_body_raw(
+            r#"{"access_token":"never","token_type":"Bearer","expires_in":3600}"#,
+            "application/json",
+        ))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1.0.0/product/{PRODUCT_ID}")))
+        .respond_with(challenge())
+        .mount(server)
+        .await;
+}
+
+/// `POST /token` is bounded by `Limits::request_timeout`, fails with a typed
+/// error, and the error text does not carry the secret.
+#[tokio::test]
+async fn hanging_token_endpoint_times_out_without_the_secret() {
+    let hanging = MockServer::start().await;
+    let other = MockServer::start().await;
+    mount_hanging_token(&hanging).await;
+    let timeout = Duration::from_secs(1);
+    let client = two_origin_client(&hanging, &other, timeout);
+    let service = client.service(&hanging.uri(), "1.0.0").unwrap();
+    let started = std::time::Instant::now();
+    let error = service
+        .get_product(ProductId::parse(PRODUCT_ID).unwrap())
+        .await
+        .unwrap_err();
+    let elapsed = started.elapsed();
+    assert!(matches!(error, ClientError::Timeout), "{error:?}");
+    // Ended by the request timeout, not by the 30 s hang and not instantly.
+    assert!(elapsed >= timeout / 2, "failed too early: {elapsed:?}");
+    assert!(
+        elapsed < HANG / 2,
+        "was not bounded by the timeout: {elapsed:?}"
+    );
+    let text = format!("{error} {error:?}");
+    assert!(!text.contains(KEY_SECRET));
+    assert!(!text.contains("p%40ss"));
+}
+
+/// Waiters queued behind a failed exchange for the same origin share that
+/// failure instead of each repeating a full timeout, and a hanging origin does
+/// not hold up the token exchange for another origin on the same `Client`.
+///
+/// Timing is asserted causally or relative to the configured timeout, never
+/// against a tight wall-clock budget: the healthy origin must finish while
+/// every stuck waiter is still unfinished, and the stuck waiters together must
+/// take about one timeout, not one per waiter.
+#[tokio::test]
+async fn hanging_token_origin_does_not_stall_waiters_or_other_origins() {
+    const WAITERS: u32 = 4;
+    let timeout = Duration::from_secs(5);
+    let hanging = MockServer::start().await;
+    let healthy = MockServer::start().await;
+    mount_hanging_token(&hanging).await;
+    mount_product(
+        &healthy,
+        r#"{"access_token":"healthy-token","token_type":"Bearer","expires_in":3600}"#,
+        "healthy-token",
+    )
+    .await;
+    let client = two_origin_client(&hanging, &healthy, timeout);
+    let stuck = client.service(&hanging.uri(), "1.0.0").unwrap();
+    let fine = client.service(&healthy.uri(), "1.0.0").unwrap();
+    let id = ProductId::parse(PRODUCT_ID).unwrap();
+
+    let started = std::time::Instant::now();
+    let barrier = Arc::new(tokio::sync::Barrier::new(WAITERS as usize));
+    let mut joins = Vec::new();
+    for _ in 0..WAITERS {
+        let stuck = stuck.clone();
+        let barrier = Arc::clone(&barrier);
+        joins.push(tokio::spawn(async move {
+            barrier.wait().await;
+            stuck.get_product(id).await
+        }));
+    }
+    // Wait until the hanging exchange is on the wire.
+    wait_for_posts(&hanging, 1).await;
+    // The healthy origin completes (including its own token exchange) ...
+    let product = fine.get_product(id).await.unwrap();
+    assert_eq!(product.name, "Widget");
+    // ... while every stuck waiter is still waiting for the hanging exchange.
+    assert!(
+        joins.iter().all(|join| !join.is_finished()),
+        "a waiter finished before the hanging exchange could time out"
+    );
+
+    for join in joins {
+        let error = join.await.unwrap().unwrap_err();
+        assert!(matches!(error, ClientError::Timeout), "{error:?}");
+        assert!(!format!("{error} {error:?}").contains(KEY_SECRET));
+    }
+    // One shared timeout (about 1x); serial repeats would take about WAITERS x.
+    let total = started.elapsed();
+    assert!(
+        total < timeout * (WAITERS - 1),
+        "waiters repeated the timeout serially: {total:?}"
+    );
+    assert_eq!(
+        post_count(&hanging).await,
+        1,
+        "queued waiters share the in-flight failure"
+    );
+}
+
+async fn post_count(server: &MockServer) -> usize {
+    server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|request| request.method == "POST")
+        .count()
+}
+
+/// Wait (up to 30 s) until the mock has received `count` POSTs.
+async fn wait_for_posts(server: &MockServer, count: usize) {
+    for _ in 0..600 {
+        if post_count(server).await >= count {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("the mock never received {count} POST request(s)");
+}
+
+/// A call that starts after a failed exchange has finished tries again; the
+/// shared failure only covers waiters that queued during that exchange.
+#[tokio::test]
+async fn a_later_call_retries_after_a_shared_token_failure() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1.0.0/token"))
+        .respond_with(ResponseTemplate::new(500))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    mount_product(
+        &server,
+        r#"{"access_token":"second-token","token_type":"Bearer","expires_in":3600}"#,
+        "second-token",
+    )
+    .await;
+    let service = client(&server, true)
+        .service(&server.uri(), "1.0.0")
+        .unwrap();
+    let id = ProductId::parse(PRODUCT_ID).unwrap();
+    assert!(matches!(
+        service.get_product(id).await.unwrap_err(),
+        ClientError::Token { .. }
+    ));
+    assert_eq!(service.get_product(id).await.unwrap().name, "Widget");
+}
+
+/// Dropping the task that is exchanging a token must not wedge the next
+/// waiter: it performs its own exchange promptly.
+#[tokio::test]
+async fn a_cancelled_refresh_does_not_wedge_the_next_caller() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1.0.0/token"))
+        .respond_with(ResponseTemplate::new(200).set_delay(HANG).set_body_raw(
+            r#"{"access_token":"never","token_type":"Bearer","expires_in":3600}"#,
+            "application/json",
+        ))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1.0.0/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{"access_token":"second","token_type":"Bearer","expires_in":3600}"#,
+            "application/json",
+        ))
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1.0.0/product/{PRODUCT_ID}")))
+        .and(header("authorization", "Bearer second"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(product_json(), "application/json"))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1.0.0/product/{PRODUCT_ID}")))
+        .respond_with(challenge())
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    let service = client(&server, true)
+        .service(&server.uri(), "1.0.0")
+        .unwrap();
+    let id = ProductId::parse(PRODUCT_ID).unwrap();
+
+    let first = {
+        let service = service.clone();
+        tokio::spawn(async move { service.get_product(id).await })
+    };
+    // Wait until the first exchange is on the wire, then cancel it.
+    wait_for_posts(&server, 1).await;
+    first.abort();
+    assert!(first.await.unwrap_err().is_cancelled());
+
+    // The next caller must not wait for the cancelled 30 s exchange. The bound
+    // is relative to that hang, so a slow runner cannot trip it.
+    let started = std::time::Instant::now();
+    let product = service.get_product(id).await.unwrap();
+    assert_eq!(product.name, "Widget");
+    assert!(
+        started.elapsed() < HANG / 2,
+        "next caller waited on the cancelled exchange: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(post_count(&server).await, 2);
+}
+
+/// A failure shared within one burst is not handed to the next burst.
+#[tokio::test]
+async fn shared_failure_does_not_outlive_its_burst() {
+    const WAITERS: usize = 4;
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1.0.0/token"))
+        .respond_with(ResponseTemplate::new(500).set_delay(Duration::from_secs(2)))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1.0.0/token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_secs(2))
+                .set_body_raw(
+                    r#"{"access_token":"later","token_type":"Bearer","expires_in":3600}"#,
+                    "application/json",
+                ),
+        )
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1.0.0/product/{PRODUCT_ID}")))
+        .and(header("authorization", "Bearer later"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(product_json(), "application/json"))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1.0.0/product/{PRODUCT_ID}")))
+        .respond_with(challenge())
+        .with_priority(2)
+        .mount(&server)
+        .await;
+    let service = client(&server, true)
+        .service(&server.uri(), "1.0.0")
+        .unwrap();
+    let id = ProductId::parse(PRODUCT_ID).unwrap();
+
+    async fn burst(
+        service: &libtea_client::Service,
+        id: ProductId,
+    ) -> Vec<Result<libtea_core::Product, ClientError>> {
+        let barrier = Arc::new(tokio::sync::Barrier::new(WAITERS));
+        let mut joins = Vec::new();
+        for _ in 0..WAITERS {
+            let service = service.clone();
+            let barrier = Arc::clone(&barrier);
+            joins.push(tokio::spawn(async move {
+                barrier.wait().await;
+                service.get_product(id).await
+            }));
+        }
+        let mut results = Vec::new();
+        for join in joins {
+            results.push(join.await.unwrap());
+        }
+        results
+    }
+
+    let failed = burst(&service, id).await;
+    assert!(failed
+        .iter()
+        .all(|result| matches!(result, Err(ClientError::Token { .. }))));
+    let posts_after_first = server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|request| request.method == "POST")
+        .count();
+    assert_eq!(
+        posts_after_first, 1,
+        "one shared exchange for the first burst"
+    );
+
+    let succeeded = burst(&service, id).await;
+    assert!(succeeded.iter().all(Result::is_ok), "{succeeded:?}");
+    let posts = server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|request| request.method == "POST")
+        .count();
+    assert_eq!(posts, 2, "the second burst did a fresh exchange");
 }

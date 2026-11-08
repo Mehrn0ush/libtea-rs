@@ -12,3 +12,8 @@ publish = false
 libtea-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# Compile the workspace README snippets as doctests (see `RootReadmeDoctests`).
+libtea-client.workspace = true
+tokio.workspace = true

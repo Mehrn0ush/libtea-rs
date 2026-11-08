@@ -31,7 +31,7 @@ Recheck with `GET https://crates.io/api/v1/crates/{name}` before publish. HTTP 4
 
 `libtea-client` depends on `libtea-core` and does not depend on the CLI or the conformance crate. Workspace directories stay `crates/tea-core`, `crates/tea-client`, `crates/tea-conformance`, and `crates/tea-cli`. Rust import paths are `libtea_core` and `libtea_client`.
 
-The CLI package was renamed. The executable name is still `tea`. That name collides with another tool. Reconsider the binary name before publishing `libtea-cli`. This pass does not publish the CLI.
+The CLI package is `libtea-cli` and the executable is `libtea` (no longer the colliding `tea` binary name). This pass still does not publish the CLI (`publish = false`).
 
 These libraries are an independent consumer implementation of the CycloneDX Transparency Exchange API. The `libtea` prefix does not make them a CycloneDX project release.
 
@@ -50,7 +50,7 @@ Checked with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-10, before 
 
 `publish` is false on the workspace, which is appropriate. There is no `[package] repository`, `documentation`, `homepage`, or `readme` path on the member crates. The license field is `Apache-2.0` and `LICENSE` is the Apache 2.0 text. There are no feature flags. The public API is `0.1.0` and should be treated as unstable.
 
-That 2026-10-10 note said not to rename during the audit. Names later moved from the taken `tea-*` crates.io names through a temporary `cdx-tea-*` prefix to the current `libtea-*` packages. `tea-core` and `tea-cli` still cannot be used as crates.io names while those other packages exist. Publish `libtea-core` 0.1.0, then `libtea-client` 0.1.0. Leave `libtea-conformance` and `libtea-cli` unpublished. The executable is still named `tea`; change that only when the CLI itself is prepared for publication.
+That 2026-10-10 note said not to rename during the audit. Names later moved from the taken `tea-*` crates.io names through a temporary `cdx-tea-*` prefix to the current `libtea-*` packages. `tea-core` and `tea-cli` still cannot be used as crates.io names while those other packages exist. Publish `libtea-core` 0.1.0, then `libtea-client` 0.1.0. Leave `libtea-conformance` and `libtea-cli` unpublished. The local executable is now `libtea`.
 
 ## Tooling gaps
 
@@ -71,7 +71,7 @@ Duplicate `synstructure` 0.13.2 and 0.14.0 appeared when ICU 1.5 was selected fo
 
 Those download, HEAD, and policy defects are fixed in this tree. `0.1.0` is still unpublished and the public API should be treated as unstable. Tightening `download_artifact` so an empty checksum list becomes an error would be a breaking change. Prefer a new method, or a 0.2.0 bump, if that default changes. The value-only identifier error text is `idValue requires idType`. That change does not change which inputs are rejected.
 
-Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-version` 1.85. Leave the edition alone unless a separate migration is requested.
+Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-version` 1.89 (it was 1.85 until 2026-11-08). Leave the edition alone unless a separate migration is requested.
 
 ## Documentation
 
@@ -81,7 +81,7 @@ Edition 2024 is not a release requirement. The crate is edition 2021 with `rust-
 
 Working tree on top of `b92faab` (dirty until committed). Changes in this pass:
 
-- MSRV consumer contract: published `libtea-core` pins `url = "=2.5.4"`, `idna = "=1.0.3"`, `idna_adapter = "=1.2.0"`, and `uuid = ">=1.26.0, <1.27.0"`. A fresh Rust 1.85 consumer of the packaged archive succeeds without this repository's `.cargo/config.toml`.
+- MSRV consumer contract (as of 2026-10-10; superseded on 2026-11-08, when the MSRV became 1.89 and the exact pins were removed): published `libtea-core` pinned `url = "=2.5.4"`, `idna = "=1.0.3"`, `idna_adapter = "=1.2.0"`, and `uuid = ">=1.26.0, <1.27.0"`. A fresh Rust 1.85 consumer of the packaged archive succeeds without this repository's `.cargo/config.toml`.
 - Dependency advisories addressed in `Cargo.lock` (`rustls` 0.23.46, `rustls-webpki` 0.103.16, `webpki-roots` 1.0.11, `tokio` 1.54.1).
 - Public error enums are `#[non_exhaustive]`.
 - Transport logs and `ClientError::Transport` redact URL query values.

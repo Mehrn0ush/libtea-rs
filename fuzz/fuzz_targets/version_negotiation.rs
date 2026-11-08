@@ -8,17 +8,22 @@ fuzz_target!(|data: &[u8]| {
     let text = String::from_utf8_lossy(data);
     let mut versions = Vec::new();
     for piece in text.split(|c: char| c.is_whitespace() || c == ',').take(8) {
-        if let Ok(version) = ApiVersion::parse(piece) {
+        // Strict and lenient parsing must both be panic-free; lenient is a
+        // superset, so keep whatever it accepts.
+        let _ = ApiVersion::parse(piece);
+        if let Ok(version) = ApiVersion::parse_lenient(piece) {
             versions.push(version);
         }
     }
     if versions.is_empty() {
         return;
     }
-    let endpoint = VersionedEndpoint {
-        root_url: "https://api.example.com".into(),
+    let endpoint = VersionedEndpoint::new(
+        "https://api.example.com",
         versions,
-        priority: OrderedPriority::default_priority(),
-    };
-    let _ = select_endpoints(&[endpoint], &SupportedApi::tea_1_0_0());
+        OrderedPriority::default_priority(),
+    );
+    let endpoints = [endpoint];
+    let _ = select_endpoints(&endpoints, &SupportedApi::tea_1_0_0());
+    let _ = select_endpoints(&endpoints, &SupportedApi::tea_1_0_0().with_lenient(true));
 });

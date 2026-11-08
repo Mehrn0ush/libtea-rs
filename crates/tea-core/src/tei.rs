@@ -37,6 +37,12 @@ impl Tei {
         if input.is_empty() {
             return Err(TeiError::Empty);
         }
+        if input
+            .get(..8)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("urn:tei:"))
+        {
+            return Err(TeiError::LegacyUrn);
+        }
         let rest = input.strip_prefix(SCHEME).ok_or(TeiError::Scheme)?;
         if rest.contains(['?', '#', ' ']) {
             return Err(TeiError::Structure);
@@ -205,11 +211,13 @@ fn validate_identifier_segment(identifier: &str) -> Result<(), TeiError> {
             if index + 2 >= bytes.len() {
                 return Err(TeiError::PercentEncoding);
             }
-            let hex = &identifier[index + 1..index + 3];
-            if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            // Compare bytes, not a `str` slice: a multi-byte character after
+            // `%` would put `index + 3` inside a character and panic.
+            let (high, low) = (bytes[index + 1], bytes[index + 2]);
+            if !high.is_ascii_hexdigit() || !low.is_ascii_hexdigit() {
                 return Err(TeiError::PercentEncoding);
             }
-            if hex.eq_ignore_ascii_case("2F") {
+            if high == b'2' && low.eq_ignore_ascii_case(&b'f') {
                 return Err(TeiError::Identifier);
             }
             index += 3;
@@ -228,8 +236,10 @@ fn uppercase_percent_hex(identifier: &str) -> bool {
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'%' && index + 2 < bytes.len() {
-            let hex = &identifier[index + 1..index + 3];
-            if hex.chars().any(|c| c.is_ascii_lowercase()) {
+            if bytes[index + 1..index + 3]
+                .iter()
+                .any(u8::is_ascii_lowercase)
+            {
                 return false;
             }
             index += 3;
@@ -374,6 +384,24 @@ pub fn encode_query_component(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn non_ascii_after_percent_is_an_error_not_a_panic() {
+        for text in [
+            "tei://example.com/uuid/%a\u{e9}",
+            "tei://example.com/purl/x%a\u{e9}",
+            "tei://example.com/purl/%\u{e9}a",
+            "tei://example.com/hash/%4\u{1f600}",
+            "tei://example.com/x/%\u{e9}",
+        ] {
+            assert!(Tei::parse(text).is_err(), "{text}");
+        }
+        // A valid escape followed by non-ASCII text is still checked byte-wise.
+        let tei = Tei::parse("tei://example.com/x/%41\u{e9}").unwrap();
+        assert!(tei.publication_issues().is_empty());
+        let lower = Tei::parse("tei://example.com/x/%4a\u{e9}").unwrap();
+        assert_eq!(lower.publication_issues().len(), 1);
+    }
+
     use super::*;
 
     const UUID_TEI: &str = "tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1";

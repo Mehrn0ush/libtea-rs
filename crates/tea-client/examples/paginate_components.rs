@@ -16,13 +16,10 @@ use std::process::ExitCode;
 
 use libtea_client::{Client, ClientError};
 use libtea_core::enums::{ComponentSort, IdentifierType};
-use libtea_core::{Component, ComponentId, ListParams, Page};
+use libtea_core::{Component, ListParams, Page};
 
 fn compliance_query() -> ListParams<ComponentSort> {
-    ListParams {
-        id_type: Some(IdentifierType::ComplianceDocument),
-        ..ListParams::default()
-    }
+    ListParams::default().with_id_type(IdentifierType::ComplianceDocument)
 }
 
 /// Keep the caller's filters and page size, and replace only the page token.
@@ -43,15 +40,19 @@ fn offline() -> Result<(), ClientError> {
     let _client = Client::builder().build()?;
     let query = compliance_query();
     query.validate()?;
-    let page = Page {
-        has_next: true,
-        next_page_token: Some("opaque-token".to_owned()),
-        results: vec![Component {
-            uuid: ComponentId::parse("d4d9f54a-abcf-11ee-ac79-1a52914d44b1")?,
-            name: "Example component".to_owned(),
-            identifiers: Vec::new(),
-        }],
-    };
+    // `Page` and `Component` are `#[non_exhaustive]`: read them from JSON, as a
+    // server response would deliver them.
+    let page: Page<Component> = serde_json::from_str(
+        r#"{
+            "hasNext": true,
+            "nextPageToken": "opaque-token",
+            "results": [{
+                "uuid": "d4d9f54a-abcf-11ee-ac79-1a52914d44b1",
+                "name": "Example component",
+                "identifiers": []
+            }]
+        }"#,
+    )?;
     let next = continue_with(&query, &page).expect("a token is present");
     assert_eq!(next.id_type, query.id_type);
     assert_eq!(next.id_value, query.id_value);

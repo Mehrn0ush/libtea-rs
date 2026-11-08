@@ -48,11 +48,9 @@ fn usage(message: impl Into<String>) -> Usage {
 }
 
 fn compliance_document_query() -> ListParams<ComponentSort> {
-    ListParams {
-        page_size: Some(25),
-        id_type: Some(IdentifierType::ComplianceDocument),
-        ..ListParams::default()
-    }
+    ListParams::default()
+        .with_page_size(25)
+        .with_id_type(IdentifierType::ComplianceDocument)
 }
 
 fn parse_args(args: &[String]) -> Result<(String, Option<Url>), Usage> {

@@ -6,3 +6,4 @@ _upstream/
 # Local interoperability downloads (never publish or commit)
 vulnetix-sbom.cdx.json
 *.downloaded.bin
+interop-results/

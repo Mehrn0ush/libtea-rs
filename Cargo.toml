@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "crates/tea-core",
     "crates/tea-client",
@@ -11,7 +11,7 @@ exclude = ["fuzz"]
 [workspace.package]
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.89"
 repository = "https://github.com/Mehrn0ush/libtea-rs"
 
 [workspace.dependencies]
@@ -21,13 +21,10 @@ libtea-conformance = { version = "0.1.0", path = "crates/tea-conformance" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-# Pin the URL/IDNA stack that builds on rustc 1.85 without resolver fallback.
-# url alone does not constrain transitive idna_adapter/ICU selection.
-url = "=2.5.4"
-idna = "=1.0.3"
-idna_adapter = "=1.2.0"
-# 1.27.0 and newer declare rust-version 1.89.
-uuid = { version = ">=1.26.0, <1.27.0", features = ["serde"] }
+# Plain caret ranges: no caps and no exact pins. The MSRV (1.89) is the
+# highest rust-version among the resolved dependencies (uuid 1.29).
+url = "2"
+uuid = { version = "1", features = ["serde"] }
 semver = "1"
 sha1 = "0.10"
 sha2 = "0.10"
@@ -45,5 +42,4 @@ bytes = "1"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 proptest = "1"
-# 0.6.5 uses let-chains, which need rustc 1.88. Keep 0.6.4 so the 1.85 dev-dependency graph builds.
-wiremock = "=0.6.4"
+wiremock = "0.6"

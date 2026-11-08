@@ -196,14 +196,7 @@ fn client(base: &str) -> libtea_client::Service {
 }
 
 fn params<S>() -> ListParams<S> {
-    ListParams {
-        page_size: None,
-        page_token: None,
-        sort_field: None,
-        sort_order: None,
-        id_type: None,
-        id_value: None,
-    }
+    ListParams::default()
 }
 
 fn purl(identifiers: &[Identifier]) -> bool {

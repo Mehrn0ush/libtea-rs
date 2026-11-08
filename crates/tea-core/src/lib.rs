@@ -1,18 +1,21 @@
 //! Domain types and protocol rules for the Transparency Exchange API consumer.
 //!
+//! **Independent implementation.** Not an official CycloneDX project release.
+//! Not a conformance certificate. [`IntegrityOutcome::Verified`] means declared
+//! digests matched **decoded** artifact bytes only — it is **not** publisher
+//! authenticity and not cryptographic signature verification.
+//!
 //! This crate does not open network connections, read the filesystem, or depend
 //! on an async runtime. [`libtea_client`](https://docs.rs/libtea-client) performs HTTP.
 //!
 //! The pinned specification is TEA OpenAPI `1.0.0` from
 //! <https://github.com/CycloneDX/transparency-exchange-api> commit
 //! `962a0228af1bfcc1232ac3f79239317ff33fdb04`.
-
+//!
+//! The crate README follows; its Rust snippets run as doctests.
+//!
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
-
-// Direct dependencies so published consumers keep an MSRV-compatible IDNA/ICU stack.
-// url alone does not constrain those transitive crates.
-use idna as _;
-use idna_adapter as _;
 
 pub mod checksum;
 pub mod discovery;
@@ -24,12 +27,20 @@ pub mod policy;
 pub mod tei;
 pub mod version;
 
+// Third-party crates whose types appear in this crate's public API. Re-exported
+// so callers name the exact version this crate was built against; a major
+// version bump of any of them is a breaking change of `libtea-core`.
+pub use semver;
+pub use url;
+pub use uuid;
+
 pub use checksum::{
-    verify_checksums, Checksum, ChecksumVerifier, IntegrityOutcome, IntegrityReport,
+    verify_checksums, verify_checksums_with_policy, Checksum, ChecksumCheck, ChecksumPolicy,
+    ChecksumVerifier, IntegrityOutcome, IntegrityReport,
 };
 pub use discovery::{is_json_content_type, tea_error_code, DiscoveryInfo, WellKnownDocument};
 pub use enums::{ChecksumAlgorithm, SortOrder};
-pub use error::{ModelError, PolicyError, TeiError};
+pub use error::{escape_control_chars, ModelError, PolicyError, TeiError};
 pub use ids::{
     ArtifactId, CollectionId, ComponentId, ComponentReleaseId, DistributionId, ProductId,
     ProductReleaseId, TeaTimestamp, TeaUuid,
@@ -83,16 +94,18 @@ pub mod spec {
 /// This crate does not auto-paginate and does not break loops on a repeated token.
 ///
 /// ```ignore
-/// let mut query = ListParams {
-///     page_size: Some(1),
-///     id_type: Some(IdentifierType::Purl),
-///     ..ListParams::default()
-/// };
+/// let mut query = ListParams::default()
+///     .with_page_size(1)
+///     .with_id_type(IdentifierType::Purl);
 /// let first = service.query_products(&query).await?;
 /// query.page_token = first.next_page_token.clone();
 /// let second = service.query_products(&query).await?;
 /// ```
+///
+/// The struct is `#[non_exhaustive]`: build it with [`ListParams::default`]
+/// and the `with_*` setters, or assign the public fields of a default value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ListParams<S> {
     /// `pageSize`, from 1 to 100.
     pub page_size: Option<u32>,
@@ -130,6 +143,48 @@ impl<S> Default for ListParams<S> {
 }
 
 impl<S> ListParams<S> {
+    /// Set `pageSize`.
+    #[must_use]
+    pub fn with_page_size(mut self, size: u32) -> Self {
+        self.page_size = Some(size);
+        self
+    }
+
+    /// Set the opaque `pageToken` from a previous page.
+    #[must_use]
+    pub fn with_page_token(mut self, token: impl Into<String>) -> Self {
+        self.page_token = Some(token.into());
+        self
+    }
+
+    /// Set `sortField`.
+    #[must_use]
+    pub fn with_sort_field(mut self, field: S) -> Self {
+        self.sort_field = Some(field);
+        self
+    }
+
+    /// Set `sortOrder`.
+    #[must_use]
+    pub fn with_sort_order(mut self, order: enums::SortOrder) -> Self {
+        self.sort_order = Some(order);
+        self
+    }
+
+    /// Set the `idType` filter.
+    #[must_use]
+    pub fn with_id_type(mut self, id_type: enums::IdentifierType) -> Self {
+        self.id_type = Some(id_type);
+        self
+    }
+
+    /// Set the `idValue` filter. Requires [`Self::with_id_type`] as well.
+    #[must_use]
+    pub fn with_id_value(mut self, id_value: impl Into<String>) -> Self {
+        self.id_value = Some(id_value.into());
+        self
+    }
+
     /// Validate pagination bounds and identifier filters.
     ///
     /// `idType` alone is accepted. Both fields together are accepted. Neither
@@ -151,6 +206,9 @@ impl<S> ListParams<S> {
         Ok(())
     }
 }
+
+#[cfg(doctest)]
+mod non_exhaustive_guards;
 
 #[cfg(test)]
 mod tests {

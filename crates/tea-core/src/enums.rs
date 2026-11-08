@@ -11,6 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// How an enumeration value relates to the pinned TEA 1.0.0 schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EnumKnowledge {
     /// The value is listed in the pinned schema.
     Known,
@@ -21,6 +22,7 @@ pub enum EnumKnowledge {
 macro_rules! wire_enum {
     ($name:ident { $($var:ident => $wire:literal),+ $(,)? }) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        #[non_exhaustive]
         pub enum $name {
             $($var,)+
             /// A value this client does not recognize.
@@ -182,11 +184,27 @@ impl ChecksumAlgorithm {
             Self::Other(_) => None,
         }
     }
+
+    /// Whether this algorithm is too weak for a match to count as
+    /// [`crate::IntegrityOutcome::Verified`] on its own.
+    ///
+    /// `SHA-1` is listed in the pinned `checksum-type` enum but is not
+    /// collision resistant. `MD5` is not in that enum; it is parsed as
+    /// [`Self::Other`], never computed, and also reported as weak.
+    #[must_use]
+    pub fn is_weak(&self) -> bool {
+        match self {
+            Self::Sha1 => true,
+            Self::Other(name) => name.eq_ignore_ascii_case("MD5"),
+            _ => false,
+        }
+    }
 }
 
 /// Sort direction for paginated queries. The default in the specification is `asc`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum SortOrder {
     /// Ascending order.
     Asc,
@@ -207,6 +225,7 @@ impl SortOrder {
 
 /// `sortField` for product queries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ProductSort {
     /// Sort by product name.
     Name,
@@ -214,6 +233,7 @@ pub enum ProductSort {
 
 /// `sortField` for component queries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ComponentSort {
     /// Sort by component name.
     Name,
@@ -221,6 +241,7 @@ pub enum ComponentSort {
 
 /// `sortField` for product-release and component-release queries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ReleaseSort {
     /// Sort by `createdDate`.
     CreatedDate,
@@ -232,6 +253,7 @@ pub enum ReleaseSort {
 
 /// `sortField` for collection queries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CollectionSort {
     /// Sort by collection version.
     Version,

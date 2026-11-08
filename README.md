@@ -15,7 +15,25 @@ These crates are a TEA **consumer** (client). They are not a TEA server, not an 
 | `libtea-conformance` | Offline checks and a JSON report (`publish = false`) |
 | `libtea-cli` | `libtea` binary that calls the libraries (`publish = false`) |
 
-Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. There are no Cargo feature flags. Publish `libtea-core` first, then `libtea-client`. The CLI stays unpublished for now. See [CHANGELOG.md](CHANGELOG.md).
+Version `0.1.0`. Edition 2021. MSRV 1.89. License Apache-2.0. Publish `libtea-core` first, then `libtea-client`. The CLI stays unpublished for now.
+
+**MSRV.** The minimum supported Rust version is 1.89 for 0.1.0. Policy: the latest stable release minus about four releases; it is raised only in minor releases, and every raise is listed in the `CHANGELOG.md`. Dependencies use plain caret ranges and `Cargo.lock` is committed, so MSRV is verified with the committed lock file (`cargo +1.89.0 test --workspace --all-targets --locked`).
+
+**Honesty:** independent implementation; not an official CycloneDX project; no
+conformance certification; checksum `Verified` ≠ publisher authenticity; no
+built-in signature verification that returns Verified.
+
+### Cargo features (`libtea-client`)
+
+| Feature | Default | Status |
+| --- | --- | --- |
+| (none named) | default = today’s behavior (rustls TLS, CLE fetch, `follow_pages`) | Shipped |
+| `native-tls` (proposed) | off | Not implemented — open question in `docs/open-questions.md` |
+| `stream` (proposed) | — | Not gated: `follow_pages` uses existing `futures-util` already required by `reqwest` |
+| `cle` (proposed) | on | Not split: CLE projection stays in the default client |
+
+Default features must stay equivalent to today’s behavior. See
+[docs/roadmap.md](docs/roadmap.md) for deferred weight reductions.
 
 These packages are independent libraries, not CycloneDX-owned packages.
 
@@ -29,9 +47,9 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo package -p libtea-core --locked
 ```
 
-TLS uses rustls. Certificate verification cannot be turned off. The default destination policy allows HTTPS to public addresses and refuses cleartext, loopback, and metadata addresses. A local HTTP server needs an explicit origin exception (`--allow-origin` / `DestinationPolicy::allow_origin`). See [docs/security.md](docs/security.md).
+TLS uses rustls. Certificate verification cannot be turned off. The default destination policy allows HTTPS to public addresses and refuses cleartext, loopback, and metadata addresses. **Proxies:** `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` are honored by default, and through a proxy the DNS-based address checks are not enforced (the proxy resolves the name). Use `ClientBuilder::ignore_env_proxies(true)` where those checks matter. A local HTTP server needs an explicit origin exception (`--allow-origin` / `DestinationPolicy::allow_origin`). See [docs/security.md](docs/security.md).
 
-## Verify (CLI and examples)
+## Try it (CLI and examples)
 
 Offline / local smoke:
 
@@ -83,54 +101,66 @@ cargo run -p libtea-cli --locked -- download \
   --output './vulnetix-sbom.cdx.json'
 ```
 
-A successful download prints `integrity verified`. The output file is a local artifact; do not commit it (it is gitignored). Live results are evidence for that deployment only — see [docs/interoperability.md](docs/interoperability.md).
+A successful download prints that decoded-byte checksums matched (`integrity verified` … `not publisher authenticity`). The output file is a local artifact; do not commit it (it is gitignored). Live results are evidence for that deployment only — see [docs/interoperability.md](docs/interoperability.md).
 
 ## Workflow A — TEI → collection → artifact integrity
 
-```rust
+These Rust snippets are compiled as doctests (from the unpublished `libtea-conformance` crate) and marked `no_run`, because they would contact a network host.
+
+```rust,no_run
 use libtea_client::{ArtifactFetch, Client};
 use libtea_core::{IntegrityOutcome, Tei};
 
-let tei = Tei::parse("tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1")?;
-let client = Client::builder().build()?;
-let releases = client.discover(&tei).await?;
-let selected = &releases[0];
-let service = client.service(&selected.root_url, &selected.api_version)?;
-let collection = service
-    .get_latest_product_release_collection(selected.product_release)
-    .await?;
-let artifact = &collection.artifacts[0];
-let fetched = service
-    .download_format(artifact, &artifact.formats[0].media_type, None)
-    .await?;
-if let ArtifactFetch::Body(body) = fetched {
-    assert_eq!(body.integrity.outcome, IntegrityOutcome::Verified);
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let tei = Tei::parse("tei://example.com/uuid/d4d9f54a-abcf-11ee-ac79-1a52914d44b1")?;
+    let client = Client::builder().build()?;
+    let releases = client.discover(&tei).await?;
+    let selected = &releases[0];
+    let service = client.service(&selected.root_url, &selected.api_version)?;
+    let collection = service
+        .get_latest_product_release_collection(selected.product_release)
+        .await?;
+    let artifact = &collection.artifacts[0];
+    let fetched = service
+        .download_format(artifact, &artifact.formats[0].media_type, None)
+        .await?;
+    if let ArtifactFetch::Body(body) = fetched {
+        assert_eq!(body.integrity.outcome, IntegrityOutcome::Verified);
+    }
+    Ok(())
 }
 ```
 
-`Verified` means every checksum declared for that format matched the **decoded** artifact bytes (after `gzip` / HTTP `deflate`). It is not publisher authenticity and not signature verification. Version `0.1.0` does not implement cryptographic signature verification, publisher authenticity checks, or Sigstore trust-policy evaluation. Detached signature bytes can be downloaded; they are not interpreted.
+`Verified` means every checksum declared for that format matched the **decoded** artifact bytes (after `gzip` / HTTP `deflate`). If every declared checksum is SHA-1 the outcome is `Weak`, not `Verified`; the library returns an integrity error and the CLI exits with status 4 unless `allow_weak_checksums(true)` / `--allow-weak-checksums` is given. `download --output` creates a new file and refuses an existing path (use `--force` to replace a regular file) and a symbolic link as the final path component (parent directories are not checked and may be symlinks, for example `/tmp` on macOS); the file name never comes from server data. It is not publisher authenticity and not signature verification. Version `0.1.0` does not implement cryptographic signature verification, publisher authenticity checks, or Sigstore trust-policy evaluation. Detached signature bytes can be downloaded; they are not interpreted.
 
 ## Workflow B — collection history and pagination
 
-Pagination is caller-managed. Keep the same `ListParams` and replace only `page_token`. The client does not follow `next` URLs and does not auto-loop on a repeated token.
+Pagination is primarily caller-managed. Keep the same `ListParams` and replace only `page_token`. The client does not follow `next` URLs. Opt-in [`follow_pages`](crates/tea-client/src/page_stream.rs) can follow tokens with hard `max_pages` / `max_items` limits and a repeated-token guard.
 
-```rust
-use libtea_core::ListParams;
+```rust,no_run
+use libtea_client::Client;
+use libtea_core::{ListParams, ProductReleaseId};
 
-let mut query = ListParams {
-    page_size: Some(2),
-    ..ListParams::default()
-};
-let first = service
-    .list_product_release_collections(release_id, &query)
-    .await?;
-query.page_token = first.next_page_token.clone();
-let second = service
-    .list_product_release_collections(release_id, &query)
-    .await?;
-let historical = service
-    .get_product_release_collection(release_id, 1)
-    .await?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::builder().build()?;
+    let service = client.service("https://api.example.com", "1.0.0")?;
+    let release_id = ProductReleaseId::parse("d4d9f54a-abcf-11ee-ac79-1a52914d44b1")?;
+    let mut query = ListParams::default().with_page_size(2);
+    let first = service
+        .list_product_release_collections(release_id, &query)
+        .await?;
+    query.page_token = first.next_page_token.clone();
+    let second = service
+        .list_product_release_collections(release_id, &query)
+        .await?;
+    let historical = service
+        .get_product_release_collection(release_id, 1)
+        .await?;
+    println!("{} {} {}", first.results.len(), second.results.len(), historical.version);
+    Ok(())
+}
 ```
 
 ## Workflow C — API key → bearer → authenticated request
@@ -142,16 +172,19 @@ export TEA_API_KEY_ID=your-key-id
 export TEA_API_KEY_SECRET=your-key-secret
 ```
 
-```rust
+```rust,no_run
 use libtea_client::{ApiKey, Client};
 
-let client = Client::builder()
-    .api_key(ApiKey::new("key-id", "key-secret"))
-    .allow_discovered_credentials(true) // only when discovery hosts may receive the key
-    .build()?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _client = Client::builder()
+        .api_key(ApiKey::new("key-id", "key-secret"))
+        .allow_discovered_credentials(true) // only when discovery hosts may receive the key
+        .build()?;
+    Ok(())
+}
 ```
 
-The key is sent to `POST /token` as HTTP Basic after form-encoding, with `grant_type=client_credentials`. Token refresh is serialized with a **client-wide** async mutex: waiters may reuse a bearer another request just cached when that value differs from the one that received `401`. That often yields one exchange for overlapping challenges on the same origin, but failed exchanges, expired or missing cache entries, and challenges for other origins can each require their own `POST /token`. Because the lock is client-wide, refreshes for unrelated origins may wait on each other. Tokens are not logged. `Debug` for `ApiKey` redacts the secret.
+The key is sent to `POST /token` as HTTP Basic after form-encoding, with `grant_type=client_credentials`. Token refresh is serialized with one async lock **per API origin**: waiters may reuse a bearer another request just cached when that value differs from the one that received `401`, and waiters that queued during a failed exchange share that failure. Overlapping challenges on the same origin then cost one exchange; a just-stored token that is already expired, a later call after a failure, and challenges for other origins can each require their own `POST /token`. Refreshes for different origins do not wait on each other. See `docs/auth.md`. Tokens are not logged. `Debug` for `ApiKey` redacts the secret.
 
 ## Compilable examples
 

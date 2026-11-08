@@ -3,7 +3,9 @@
 //! Display text does not include access tokens, API key secrets, or
 //! `Authorization` header values.
 
-use libtea_core::{IntegrityOutcome, IntegrityReport, ModelError, PolicyError};
+use libtea_core::{
+    escape_control_chars, IntegrityOutcome, IntegrityReport, ModelError, PolicyError,
+};
 use thiserror::Error;
 
 /// Failure of a consumer HTTP operation.
@@ -42,6 +44,7 @@ pub enum ClientError {
     Forbidden,
     /// An HTTP status the operation did not accept.
     #[error("TEA API status {status}{}", tea_suffix(tea_error))]
+    #[non_exhaustive]
     Api {
         /// HTTP status code.
         status: u16,
@@ -52,6 +55,7 @@ pub enum ClientError {
     },
     /// `/discovery` returned a TEA 404. This is not evidence that no updates exist.
     #[error("identifier was not resolved ({error})")]
+    #[non_exhaustive]
     Unresolved {
         /// TEA error code, preserved even when this client does not know it.
         error: String,
@@ -60,14 +64,17 @@ pub enum ClientError {
     },
     /// Well-known or API discovery attempts were exhausted.
     #[error("discovery failed during the {stage} stage after {attempts} attempts")]
+    #[non_exhaustive]
     DiscoveryFailed {
         /// `well-known` or `api`.
         stage: &'static str,
         /// Attempts counted toward the bound.
         attempts: u32,
     },
-    /// Declared checksums were not fully verified.
+    /// Declared checksums did not all match the decoded artifact bytes, or at
+    /// least one could not be computed.
     #[error("artifact integrity was not verified ({outcome:?})")]
+    #[non_exhaustive]
     Integrity {
         /// Summary outcome.
         outcome: IntegrityOutcome,
@@ -76,6 +83,7 @@ pub enum ClientError {
     },
     /// The token endpoint rejected the credential exchange.
     #[error("token request failed ({error})")]
+    #[non_exhaustive]
     Token {
         /// OAuth error code or HTTP status.
         error: String,
@@ -91,7 +99,7 @@ fn tea_suffix(error: &Option<String>) -> String {
 
 impl From<serde_json::Error> for ClientError {
     fn from(value: serde_json::Error) -> Self {
-        Self::Json(value.to_string())
+        Self::Json(escape_control_chars(&value.to_string()))
     }
 }
 
@@ -111,6 +119,8 @@ impl ClientError {
         // Residual free-text URLs are rewritten only when the whole
         // whitespace-bounded span can be parsed; otherwise use a generic
         // message rather than risk leaving query-value fragments.
-        Self::Transport(crate::transport::sanitize_transport_text(&message))
+        Self::Transport(escape_control_chars(
+            &crate::transport::sanitize_transport_text(&message),
+        ))
     }
 }

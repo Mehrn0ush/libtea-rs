@@ -1,0 +1,78 @@
+name: Interop probe (manual)
+
+# Manual only. Every target URL comes from the protected `tea-interop`
+# Environment, never from a dispatch input, so whoever dispatches cannot point
+# the API key at a host of their choosing. Required Environment settings:
+# docs/interoperability.md ("Manual interop workflow").
+on:
+  workflow_dispatch:
+    inputs:
+      product_release:
+        description: Product release UUID (optional; validated as a UUID by the CLI)
+        required: false
+        default: ""
+      artifact_uuid:
+        description: Artifact UUID (optional; validated as a UUID by the CLI)
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: interop-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Read-only interop probe
+    runs-on: ubuntu-latest
+    environment: tea-interop
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: "1.89.0"
+      # Build with NO secrets in the environment: cargo runs third-party build
+      # scripts, and any step that can see TEA_API_KEY_* must not run them.
+      - name: Build CLI (no secrets)
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p libtea-cli
+          echo "TEA_CLI_BIN=${GITHUB_WORKSPACE}/target/release/libtea" >> "$GITHUB_ENV"
+      - name: Check Environment configuration
+        env:
+          TEA_BASE_URL: ${{ vars.TEA_BASE_URL }}
+        run: |
+          set -euo pipefail
+          case "${TEA_BASE_URL}" in
+            https://*) ;;
+            "") echo "::error::Environment variable TEA_BASE_URL is not set in tea-interop."; exit 1 ;;
+            *) echo "::error::TEA_BASE_URL must be an https:// URL."; exit 1 ;;
+          esac
+      # The only step that sees the API key. It runs the prebuilt binary
+      # (TEA_CLI_BIN) and never invokes a build tool or package manager.
+      - name: Run probe
+        env:
+          TEA_BASE_URL: ${{ vars.TEA_BASE_URL }}
+          TEA_TEI: ${{ vars.TEA_TEI }}
+          TEA_MEDIA_TYPE: ${{ vars.TEA_MEDIA_TYPE }}
+          TEA_PRODUCT_RELEASE: ${{ inputs.product_release || vars.TEA_PRODUCT_RELEASE }}
+          TEA_ARTIFACT_UUID: ${{ inputs.artifact_uuid || vars.TEA_ARTIFACT_UUID }}
+          TEA_API_KEY_ID: ${{ secrets.TEA_API_KEY_ID }}
+          TEA_API_KEY_SECRET: ${{ secrets.TEA_API_KEY_SECRET }}
+          TEA_OUT_DIR: interop-results
+        run: ./scripts/interop-probe.sh
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interop-results
+          path: interop-results/
+          retention-days: 14

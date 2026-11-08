@@ -19,13 +19,11 @@ const ID: &str = "2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d";
 const ID2: &str = "3aa4bf8d-9fbc-5f1c-ac9c-2b1d5d5d2d3e";
 
 fn limits() -> Limits {
-    Limits {
-        initial_backoff: Duration::ZERO,
-        max_retries: 0,
-        request_timeout: Duration::from_secs(5),
-        connect_timeout: Duration::from_secs(2),
-        ..Limits::default()
-    }
+    Limits::default()
+        .with_initial_backoff(Duration::ZERO)
+        .with_max_retries(0)
+        .with_request_timeout(Duration::from_secs(5))
+        .with_connect_timeout(Duration::from_secs(2))
 }
 
 fn client(server: &MockServer) -> Client {
@@ -176,12 +174,10 @@ async fn list_and_query_product_releases_paths_and_params() {
     let listed = service
         .list_product_releases(
             ProductId::parse(ID).unwrap(),
-            &ListParams {
-                page_size: Some(2),
-                sort_field: Some(ReleaseSort::Version),
-                sort_order: Some(SortOrder::Asc),
-                ..ListParams::default()
-            },
+            &ListParams::default()
+                .with_page_size(2)
+                .with_sort_field(ReleaseSort::Version)
+                .with_sort_order(SortOrder::Asc),
         )
         .await
         .unwrap();
@@ -189,11 +185,11 @@ async fn list_and_query_product_releases_paths_and_params() {
     assert!(!listed.has_next);
 
     let queried = service
-        .query_product_releases(&ListParams {
-            id_type: Some(IdentifierType::Purl),
-            id_value: Some("pkg:generic/widget@1".into()),
-            ..ListParams::default()
-        })
+        .query_product_releases(
+            &ListParams::default()
+                .with_id_type(IdentifierType::Purl)
+                .with_id_value("pkg:generic/widget@1"),
+        )
         .await
         .unwrap();
     assert_eq!(queried.results[0].version, "1.0.0");
@@ -259,10 +255,7 @@ async fn list_and_query_component_releases_paths() {
         .unwrap();
     assert_eq!(listed.results.len(), 1);
 
-    let mut query = ListParams {
-        page_size: Some(1),
-        ..ListParams::default()
-    };
+    let mut query = ListParams::default().with_page_size(1);
     let first = service.query_component_releases(&query).await.unwrap();
     assert!(first.has_next);
     assert_eq!(first.next_page_token.as_deref(), Some("tok/with spaces"));
@@ -317,10 +310,7 @@ async fn component_release_collections_and_versioned_gets() {
 
     let service = client(&server).service(&server.uri(), "1.0.0").unwrap();
     let id = ComponentReleaseId::parse(ID).unwrap();
-    let mut query = ListParams {
-        page_size: Some(1),
-        ..ListParams::default()
-    };
+    let mut query = ListParams::default().with_page_size(1);
     let first = service
         .list_component_release_collections(id, &query)
         .await
@@ -540,11 +530,9 @@ async fn pagination_anomalies_are_visible_to_callers() {
 
     let service = client(&server).service(&server.uri(), "1.0.0").unwrap();
     let rid = ProductReleaseId::parse(ID).unwrap();
-    let mut query = ListParams {
-        page_size: Some(2),
-        sort_field: Some(CollectionSort::Version),
-        ..ListParams::default()
-    };
+    let mut query = ListParams::default()
+        .with_page_size(2)
+        .with_sort_field(CollectionSort::Version);
     let empty_mid = service
         .list_product_release_collections(rid, &query)
         .await
@@ -558,20 +546,14 @@ async fn pagination_anomalies_are_visible_to_callers() {
         .unwrap();
     assert_eq!(filled.results.len(), 2);
 
-    let stuck = ListParams {
-        page_token: Some("stuck".into()),
-        ..ListParams::default()
-    };
+    let stuck = ListParams::default().with_page_token("stuck");
     let a = service.query_products(&stuck).await.unwrap();
     let b = service.query_products(&stuck).await.unwrap();
     assert_eq!(a.next_page_token, b.next_page_token);
     assert!(a.has_next);
 
     let bad = service
-        .query_products(&ListParams {
-            page_token: Some("bad-token".into()),
-            ..ListParams::default()
-        })
+        .query_products(&ListParams::default().with_page_token("bad-token"))
         .await
         .unwrap_err();
     assert!(matches!(
@@ -584,10 +566,7 @@ async fn pagination_anomalies_are_visible_to_callers() {
     ));
 
     let boom = service
-        .query_components(&ListParams {
-            page_token: Some("boom".into()),
-            ..ListParams::<libtea_core::enums::ComponentSort>::default()
-        })
+        .query_components(&ListParams::default().with_page_token("boom"))
         .await
         .unwrap_err();
     assert!(matches!(boom, ClientError::Api { status: 500, .. }));
