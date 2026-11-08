@@ -79,7 +79,7 @@ Checksum verification means the decoded bytes match digests the server declared 
 
 ## Independent public evidence — Vulnetix TEA 1.0.0
 
-**Reported by the maintainer; not reproducible from this repository.** No sanitized result file is committed, so the tables below record what was reported, not output a reader can re-derive here. They are evidence for that one deployment only.
+A committed result file, [`docs/interop/vulnetix-2026-11-08.json`](interop/vulnetix-2026-11-08.json), records one run of `scripts/interop-probe.sh` against this deployment (anonymous, read-only GETs; see below). The two operation tables under it come from earlier manual probes and **have no committed result file**: they are reported, not reproducible from this repository. All of it is evidence for that one deployment only.
 
 | Field | Value |
 | --- | --- |
@@ -118,20 +118,18 @@ Checksum verification means the decoded bytes match digests the server declared 
 
 Downloading a `provenance.sigstore.json` (or similar) and verifying its checksum proves **content integrity**, not Sigstore cryptographic verification of the signed subject.
 
-## Command-line run on the public deployment (2026-11-08)
+## Probe run on the public deployment (2026-11-08)
 
-Reported by the maintainer; not reproducible from this repository. The maintainer ran the CLI against the public Vulnetix TEA 1.0.0 deployment on 2026-11-08.
+`scripts/interop-probe.sh` was run once against the public deployment on 2026-11-08 (client 0.1.0, spec commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`). The output is committed as [`docs/interop/vulnetix-2026-11-08.json`](interop/vulnetix-2026-11-08.json).
 
 | Field | Value |
 | --- | --- |
-| Operations | `discover`, then `download` |
-| Artifact | `fbe825ce-1fe6-58b2-bf8d-25fdd47b5f13`, revision `1` |
-| Bytes | 5728 |
-| Integrity | reported as verified (declared checksums matched the decoded bytes; that is not publisher authenticity) |
-| ETag | strong |
-| Sanitized probe result file | not committed; produce one with `scripts/interop-probe.sh` |
+| Operations | `discover`, `product-release`, `download`: 3 passed, 0 failed |
+| Artifact | `fbe825ce-1fe6-58b2-bf8d-25fdd47b5f13`, media type `application/vnd.cyclonedx+json` |
+| Auth | Anonymous |
+| Checksum result | `checksum_match_decoded_bytes`: every declared checksum matched the decoded bytes (not publisher authenticity) |
 
-No response timings, header dumps or other endpoints are recorded, so none are claimed.
+The file records no response timings, headers, byte counts or other endpoints, so none are claimed from it.
 
 ## Implementations named by the specification
 
