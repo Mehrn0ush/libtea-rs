@@ -5,6 +5,36 @@
 
 use thiserror::Error;
 
+/// Escape control characters so server-supplied text is safe to print.
+///
+/// C0 controls (including ESC, BEL, and CR), DEL, C1 controls (including the
+/// single-character CSI `U+009B` and OSC `U+009D`), and the bidirectional
+/// override/isolate characters (`U+202A..=U+202E`, `U+2066..=U+2069`) become
+/// `\uXXXX`. Tab and newline are kept. Other text is returned unchanged. A
+/// backslash sequence that the server itself sent cannot be told apart from an
+/// escape.
+///
+/// `libtea-client` applies this to server text it puts into
+/// [`ModelError`] and its own error type, and `libtea-cli` applies it to
+/// everything it prints.
+#[must_use]
+pub fn escape_control_chars(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        let escape = match c {
+            '\t' | '\n' => false,
+            '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' => true,
+            c => c.is_control(),
+        };
+        if escape {
+            out.push_str(&format!("\\u{:04x}", u32::from(c)));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Failure while parsing or validating a Transparency Exchange Identifier.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -12,6 +42,11 @@ pub enum TeiError {
     /// The input was empty.
     #[error("TEI is empty")]
     Empty,
+    /// The input used the legacy `urn:tei:` form, which this crate does not parse.
+    #[error(
+        "the legacy `urn:tei:` form is not supported; use `tei://<domain-name>/<type>/<unique-identifier>`"
+    )]
+    LegacyUrn,
     /// The scheme was not the exact lowercase string `tei`.
     #[error("TEI scheme must be the lowercase string `tei`")]
     Scheme,
@@ -32,6 +67,7 @@ pub enum TeiError {
     PercentEncoding,
     /// The identifier failed the registered type's syntax.
     #[error("TEI identifier is not valid for type `{tei_type}`: {reason}")]
+    #[non_exhaustive]
     Registry {
         /// Registered TEI type that rejected the identifier.
         tei_type: String,
@@ -45,10 +81,13 @@ pub enum TeiError {
 #[non_exhaustive]
 pub enum ModelError {
     /// JSON was not valid.
-    #[error("JSON parse error: {0}")]
+    #[error("JSON parse error: {}", escape_control_chars(.0))]
     Json(String),
     /// A field violated a normative constraint.
-    #[error("{0}")]
+    ///
+    /// The message can quote server text; `Display` escapes control characters
+    /// ([`escape_control_chars`]).
+    #[error("{}", escape_control_chars(.0))]
     Invalid(String),
 }
 
