@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 /// One specification-derived check.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CaseResult {
     /// Stable identifier used in the requirements matrix.
     pub id: String,
@@ -23,15 +24,124 @@ pub struct CaseResult {
     pub detail: String,
 }
 
-/// A machine-readable conformance report.
+/// A non-failing finding from a strict-schema lint.
+///
+/// The pinned schemas declare `additionalProperties: false` for the
+/// well-known and discovery documents. `libtea-client` accepts extra fields so
+/// that additive server changes do not break discovery; this lint reports
+/// them. A warning never makes [`Report::passed`] false.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct LintWarning {
+    /// JSON path of the offending object, for example `$.endpoints[0]`.
+    pub path: String,
+    /// The field the pinned schema does not define.
+    pub field: String,
+    /// Short explanation.
+    pub detail: String,
+}
+
+impl LintWarning {
+    fn unknown(path: &str, field: &str) -> Self {
+        Self {
+            path: path.to_owned(),
+            field: field.to_owned(),
+            detail: "field is not defined by the pinned schema (additionalProperties: false)"
+                .into(),
+        }
+    }
+}
+
+const WELL_KNOWN_KEYS: &[&str] = &["schemaVersion", "endpoints"];
+const ENDPOINT_KEYS: &[&str] = &["url", "versions", "priority"];
+const DISCOVERY_KEYS: &[&str] = &["productReleaseUuid", "servers"];
+const SERVER_KEYS: &[&str] = &["rootUrl", "versions", "priority"];
+
+fn lint_object(
+    value: &serde_json::Value,
+    path: &str,
+    allowed: &[&str],
+    out: &mut Vec<LintWarning>,
+) {
+    if let Some(object) = value.as_object() {
+        for key in object.keys() {
+            if !allowed.contains(&key.as_str()) {
+                out.push(LintWarning::unknown(path, key));
+            }
+        }
+    }
+}
+
+/// Warn about fields in a `.well-known/tea` document that the pinned schema
+/// does not define. Invalid JSON yields no warnings (parsing reports that).
+#[must_use]
+pub fn lint_well_known_strict(bytes: &[u8]) -> Vec<LintWarning> {
+    let mut out = Vec::new();
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return out;
+    };
+    lint_object(&document, "$", WELL_KNOWN_KEYS, &mut out);
+    if let Some(endpoints) = document.get("endpoints").and_then(|v| v.as_array()) {
+        for (index, endpoint) in endpoints.iter().enumerate() {
+            lint_object(
+                endpoint,
+                &format!("$.endpoints[{index}]"),
+                ENDPOINT_KEYS,
+                &mut out,
+            );
+        }
+    }
+    out
+}
+
+/// Warn about fields in a `/discovery` response that the pinned schema does
+/// not define. Invalid JSON yields no warnings.
+#[must_use]
+pub fn lint_discovery_strict(bytes: &[u8]) -> Vec<LintWarning> {
+    let mut out = Vec::new();
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return out;
+    };
+    let Some(items) = document.as_array() else {
+        return out;
+    };
+    for (index, item) in items.iter().enumerate() {
+        let path = format!("$[{index}]");
+        lint_object(item, &path, DISCOVERY_KEYS, &mut out);
+        if let Some(servers) = item.get("servers").and_then(|v| v.as_array()) {
+            for (server_index, server) in servers.iter().enumerate() {
+                lint_object(
+                    server,
+                    &format!("{path}.servers[{server_index}]"),
+                    SERVER_KEYS,
+                    &mut out,
+                );
+            }
+        }
+    }
+    out
+}
+
+/// A machine-readable offline smoke report.
+///
+/// Embeds the pinned OpenAPI commit. **Not** a CycloneDX / ECMA certification
+/// and **not** evidence that any server is conformant.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Report {
-    /// Pinned specification commit.
+    /// Pinned specification commit (`libtea_core::spec::COMMIT`).
     pub spec_commit: String,
     /// OpenAPI `info.version`.
     pub spec_version: String,
+    /// Always `false` for this crate: these checks are smoke, not certification.
+    pub is_certification: bool,
     /// Individual checks.
     pub cases: Vec<CaseResult>,
+    /// Lint findings. Never affects [`Report::passed`]. Empty for
+    /// [`static_report`]; fill it with [`lint_well_known_strict`] and
+    /// [`lint_discovery_strict`] output for a document under test.
+    #[serde(default)]
+    pub warnings: Vec<LintWarning>,
 }
 
 impl Report {
@@ -61,11 +171,14 @@ pub fn static_report() -> Report {
         empty_discovery(),
         unknown_error_is_still_a_tea_error(),
         checksum_does_not_claim_success_when_wrong(),
+        weak_checksum_alone_is_not_verified(),
     ];
     Report {
         spec_commit: libtea_core::spec::COMMIT.to_owned(),
         spec_version: libtea_core::spec::SPEC_VERSION.to_owned(),
+        is_certification: false,
         cases,
+        warnings: Vec::new(),
     }
 }
 
@@ -166,6 +279,40 @@ fn checksum_does_not_claim_success_when_wrong() -> CaseResult {
     }
 }
 
+fn weak_checksum_alone_is_not_verified() -> CaseResult {
+    // SHA-1("tea")
+    let checksum = Checksum::new(
+        ChecksumAlgorithm::Sha1,
+        "75490f32c06a50051804339453d3fe2f0cd5564b",
+    );
+    let passed = checksum.is_ok_and(|checksum| {
+        let outcome = verify_checksums(b"tea", std::slice::from_ref(&checksum)).outcome;
+        outcome == libtea_core::IntegrityOutcome::Weak
+            && libtea_core::verify_checksums_with_policy(
+                b"tea",
+                &[checksum],
+                libtea_core::ChecksumPolicy::new().with_allow_weak(true),
+            )
+            .outcome
+                == libtea_core::IntegrityOutcome::Verified
+    });
+    CaseResult {
+        id: "TEA-ART-002".into(),
+        passed,
+        detail: "a SHA-1-only match is Weak, not Verified, unless the caller opts in".into(),
+    }
+}
+
+#[cfg(doctest)]
+mod non_exhaustive_guards;
+
+/// The workspace `README.md`, compiled as doctests so its Rust snippets cannot
+/// drift from the API. This crate is unpublished, so the path outside the crate
+/// directory does not affect packaging.
+#[cfg(doctest)]
+#[doc = include_str!("../../../README.md")]
+pub struct RootReadmeDoctests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +321,63 @@ mod tests {
     fn static_suite_passes() {
         let report = static_report();
         assert!(report.passed(), "{}", report.to_json().unwrap());
+    }
+
+    #[test]
+    fn strict_lint_warns_about_unknown_fields_and_never_fails_the_report() {
+        let well_known = br#"{"schemaVersion":1,"extra":1,
+            "endpoints":[{"url":"https://a.example","versions":["1.0.0"],"region":"eu"}]}"#;
+        let warnings = lint_well_known_strict(well_known);
+        let found: Vec<_> = warnings
+            .iter()
+            .map(|w| (w.path.as_str(), w.field.as_str()))
+            .collect();
+        assert_eq!(found, [("$", "extra"), ("$.endpoints[0]", "region")]);
+        // The client accepts the same bytes.
+        assert!(libtea_core::WellKnownDocument::parse(well_known).is_ok());
+
+        let discovery = br#"[{"productReleaseUuid":"d4d9f54a-abcf-11ee-ac79-1a52914d44b1",
+            "note":"x","servers":[{"rootUrl":"https://a.example","versions":["1.0.0"],"zone":"z"}]}]"#;
+        let found: Vec<_> = lint_discovery_strict(discovery)
+            .into_iter()
+            .map(|w| (w.path, w.field))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("$[0]".to_owned(), "note".to_owned()),
+                ("$[0].servers[0]".to_owned(), "zone".to_owned())
+            ]
+        );
+        assert!(libtea_core::DiscoveryInfo::parse_list(discovery).is_ok());
+
+        let mut report = static_report();
+        report.warnings = warnings;
+        assert!(report.passed(), "warnings must not fail the report");
+        let json = report.to_json().unwrap();
+        assert!(json.contains("\"warnings\""));
+    }
+
+    #[test]
+    fn strict_lint_is_quiet_for_valid_documents_and_bad_json() {
+        let valid = br#"{"schemaVersion":1,"endpoints":[{"url":"https://a.example","versions":["1.0.0"],"priority":1}]}"#;
+        assert!(lint_well_known_strict(valid).is_empty());
+        assert!(lint_well_known_strict(b"not json").is_empty());
+        assert!(lint_discovery_strict(b"{}").is_empty());
+        assert!(lint_discovery_strict(b"[]").is_empty());
+    }
+
+    #[test]
+    fn report_is_not_a_certification_and_names_the_pinned_commit() {
+        let report = static_report();
+        assert!(!report.is_certification);
+        assert_eq!(
+            report.spec_commit,
+            "962a0228af1bfcc1232ac3f79239317ff33fdb04"
+        );
+        assert_eq!(report.spec_commit, libtea_core::spec::COMMIT);
+        let json: serde_json::Value = serde_json::from_str(&report.to_json().unwrap()).unwrap();
+        assert_eq!(json["is_certification"], serde_json::Value::Bool(false));
+        assert_eq!(json["spec_commit"], libtea_core::spec::COMMIT);
     }
 }
