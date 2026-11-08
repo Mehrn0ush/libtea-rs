@@ -7,9 +7,9 @@ certification. No cryptographic signature verification. Checksum
 `IntegrityOutcome::Verified` is **not** publisher authenticity.
 
 Implemented against Transparency Exchange API commit
-`962a0228af1bfcc1232ac3f79239317ff33fdb04`.
+`962a0228af1bfcc1232ac3f79239317ff33fdb04`. The TEA specification is still beta.
 
-Publish `libtea-core` 0.1.0 before this crate. This crate depends on that version and does not depend on the unpublished CLI or conformance crates.
+This crate depends on `libtea-core` 0.1.0. It does not depend on the CLI or the conformance crate.
 
 ```toml
 libtea-client = "0.1.0"

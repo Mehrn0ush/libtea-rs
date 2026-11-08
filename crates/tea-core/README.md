@@ -8,7 +8,7 @@ means declared digests matched decoded bytes only — **not** publisher authenti
 No signature verification lives in this crate.
 
 Implemented against Transparency Exchange API commit
-`962a0228af1bfcc1232ac3f79239317ff33fdb04`.
+`962a0228af1bfcc1232ac3f79239317ff33fdb04`. The TEA specification is still beta.
 
 ```toml
 libtea-core = "0.1.0"
