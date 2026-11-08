@@ -1,0 +1,38 @@
+{
+  "upstream": "https://github.com/CycloneDX/transparency-exchange-api",
+  "commit": "962a0228af1bfcc1232ac3f79239317ff33fdb04",
+  "commit_date": "2026-10-08T06:28:26Z",
+  "spec_version": "1.0.0",
+  "files": [
+    {
+      "path": "spec/vendor/openapi.yaml",
+      "upstream_path": "spec/openapi.yaml",
+      "sha256": "fc55bb5dacddfe63824a83e81b20e6dab31302553f3ff2d088689ff68b686812"
+    },
+    {
+      "path": "spec/vendor/discovery/readme.md",
+      "upstream_path": "discovery/readme.md",
+      "sha256": "902905fd20bd789a3a5cd72dc8ec4216ace42e4685b44354731fc33b77226bc4"
+    },
+    {
+      "path": "spec/vendor/discovery/tea-well-known.schema.json",
+      "upstream_path": "discovery/tea-well-known.schema.json",
+      "sha256": "403a4172f6bb3646c21bfda32468d3e93c6f0db5d563ea607bc4ad9ab7c866cb"
+    },
+    {
+      "path": "spec/vendor/auth/readme.md",
+      "upstream_path": "auth/readme.md",
+      "sha256": "5b79fe9ddeddad1c74554a6181a7430a3b773e06bb76a0a4bf7616e781a23484"
+    },
+    {
+      "path": "spec/vendor/tea-collection/tea-collection.md",
+      "upstream_path": "tea-collection/tea-collection.md",
+      "sha256": "6a511779eb00fb3a74ba5bd7649b1a31c143ce4005294c3f76e4b372ab62327d"
+    },
+    {
+      "path": "spec/vendor/tei-types/README.md",
+      "upstream_path": "tei-types/README.md",
+      "sha256": "ea2c76cab3c610e6fd32d7425a8dee78f8b539778f28677c89ba2c63ab271bab"
+    }
+  ]
+}

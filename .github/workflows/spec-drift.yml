@@ -1,0 +1,40 @@
+name: Spec drift
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diff-openapi:
+    name: Diff upstream OpenAPI vs pin
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Fetch upstream tip and diff
+        id: drift
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            "https://raw.githubusercontent.com/CycloneDX/transparency-exchange-api/main/spec/openapi.yaml" \
+            -o /tmp/upstream-openapi.yaml
+          if diff -u spec/vendor/openapi.yaml /tmp/upstream-openapi.yaml > /tmp/openapi.diff; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            echo "No OpenAPI drift against upstream main tip."
+          else
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+            echo "OpenAPI differs from pinned vendor copy (informational; not a merge gate)."
+            wc -l /tmp/openapi.diff
+          fi
+      - name: Upload diff artifact
+        if: steps.drift.outputs.drift == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-drift
+          path: /tmp/openapi.diff
