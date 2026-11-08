@@ -1100,3 +1100,274 @@ pub(crate) struct ControlTeiErrorRegistry;
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlReexports;
+
+/// `LockedIntegrity` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::LockedIntegrity) -> u8 {
+///     match x {
+///         libtea_core::LockedIntegrity::Verified => 0,
+///         libtea_core::LockedIntegrity::VerifiedWeakOnly => 0,
+///         libtea_core::LockedIntegrity::NotDeclared => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardLockedIntegrity;
+
+/// Control for `GuardLockedIntegrity`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::LockedIntegrity) -> u8 {
+///     match x {
+///         libtea_core::LockedIntegrity::Verified => 0,
+///         libtea_core::LockedIntegrity::VerifiedWeakOnly => 0,
+///         libtea_core::LockedIntegrity::NotDeclared => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlLockedIntegrity;
+
+/// `LockFile` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::LockFile) {
+///     let _ = libtea_core::LockFile { tei: base.tei.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardLockFile;
+
+/// Control for `GuardLockFile`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::LockFile) {
+///     let kept = base.tei.clone();
+///     let libtea_core::LockFile { tei, .. } = base;
+///     let _ = (kept, tei);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlLockFile;
+
+/// `LockedArtifact` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::LockedArtifact) {
+///     let _ = libtea_core::LockedArtifact { uuid: base.uuid.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardLockedArtifact;
+
+/// Control for `GuardLockedArtifact`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::LockedArtifact) {
+///     let kept = base.uuid.clone();
+///     let libtea_core::LockedArtifact { uuid, .. } = base;
+///     let _ = (kept, uuid);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlLockedArtifact;
+
+/// `LockedChecksum` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::LockedChecksum) {
+///     let _ = libtea_core::LockedChecksum { algorithm: base.algorithm.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardLockedChecksum;
+
+/// Control for `GuardLockedChecksum`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::LockedChecksum) {
+///     let kept = base.algorithm.clone();
+///     let libtea_core::LockedChecksum { algorithm, .. } = base;
+///     let _ = (kept, algorithm);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlLockedChecksum;
+
+/// `FieldChange` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::FieldChange) {
+///     let _ = libtea_core::FieldChange { field: base.field.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardFieldChange;
+
+/// Control for `GuardFieldChange`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::FieldChange) {
+///     let kept = base.field.clone();
+///     let libtea_core::FieldChange { field, .. } = base;
+///     let _ = (kept, field);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlFieldChange;
+
+/// `ChangedArtifact` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::ChangedArtifact) {
+///     let _ = libtea_core::ChangedArtifact { uuid: base.uuid.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardChangedArtifact;
+
+/// Control for `GuardChangedArtifact`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::ChangedArtifact) {
+///     let kept = base.uuid.clone();
+///     let libtea_core::ChangedArtifact { uuid, .. } = base;
+///     let _ = (kept, uuid);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlChangedArtifact;
+
+/// `LockDiff` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::LockDiff) {
+///     let _ = libtea_core::LockDiff { header: base.header.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardLockDiff;
+
+/// Control for `GuardLockDiff`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::LockDiff) {
+///     let kept = base.header.clone();
+///     let libtea_core::LockDiff { header, .. } = base;
+///     let _ = (kept, header);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlLockDiff;
+
+/// `CacheControl` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::http_cache::CacheControl) {
+///     let _ = libtea_core::http_cache::CacheControl { no_store: base.no_store, ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardCacheControl;
+
+/// Control for `GuardCacheControl`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::http_cache::CacheControl) {
+///     let kept = base.no_store.clone();
+///     let libtea_core::http_cache::CacheControl { no_store, .. } = base;
+///     let _ = (kept, no_store);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlCacheControl;
+
+/// `CacheEntryMeta` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::http_cache::CacheEntryMeta) {
+///     let _ = libtea_core::http_cache::CacheEntryMeta { key: base.key.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardCacheEntryMeta;
+
+/// Control for `GuardCacheEntryMeta`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::http_cache::CacheEntryMeta) {
+///     let kept = base.key.clone();
+///     let libtea_core::http_cache::CacheEntryMeta { key, .. } = base;
+///     let _ = (kept, key);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlCacheEntryMeta;
+
+/// `NotStored` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::http_cache::NotStored) -> u8 {
+///     match x {
+///         libtea_core::http_cache::NotStored::Status => 0,
+///         libtea_core::http_cache::NotStored::NoStore => 0,
+///         libtea_core::http_cache::NotStored::Private => 0,
+///         libtea_core::http_cache::NotStored::Authenticated => 0,
+///         libtea_core::http_cache::NotStored::VaryStar => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardNotStored;
+
+/// Control for `GuardNotStored`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::http_cache::NotStored) -> u8 {
+///     match x {
+///         libtea_core::http_cache::NotStored::Status => 0,
+///         libtea_core::http_cache::NotStored::NoStore => 0,
+///         libtea_core::http_cache::NotStored::Private => 0,
+///         libtea_core::http_cache::NotStored::Authenticated => 0,
+///         libtea_core::http_cache::NotStored::VaryStar => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlNotStored;
+
+/// `EntryError` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::http_cache::EntryError) -> u8 {
+///     match x {
+///         libtea_core::http_cache::EntryError::Format => 0,
+///         libtea_core::http_cache::EntryError::Meta => 0,
+///         libtea_core::http_cache::EntryError::KeyMismatch => 0,
+///         libtea_core::http_cache::EntryError::Body => 0,
+///         libtea_core::http_cache::EntryError::TooLarge => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardEntryError;
+
+/// Control for `GuardEntryError`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::http_cache::EntryError) -> u8 {
+///     match x {
+///         libtea_core::http_cache::EntryError::Format => 0,
+///         libtea_core::http_cache::EntryError::Meta => 0,
+///         libtea_core::http_cache::EntryError::KeyMismatch => 0,
+///         libtea_core::http_cache::EntryError::Body => 0,
+///         libtea_core::http_cache::EntryError::TooLarge => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlEntryError;
