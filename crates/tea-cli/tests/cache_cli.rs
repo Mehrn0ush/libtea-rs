@@ -308,6 +308,12 @@ async fn download_and_sync_work_offline_from_a_warm_cache() {
     assert_eq!(std::fs::read(&lock).unwrap(), first);
     let check = libtea(&base(&["--offline", "--check"]), &[]);
     assert_eq!(check.status.code(), Some(0), "{}", text(&check.stderr));
+    // Offline, "up to date" would claim more than was checked: it compared the
+    // lock with the cache, and the server was never asked.
+    let said = text(&check.stdout);
+    assert!(said.contains("cached responses"), "{said}");
+    assert!(said.contains("server was not contacted"), "{said}");
+    assert!(!said.contains("up to date"), "{said}");
     assert!(server.received_requests().await.unwrap().is_empty());
 
     // download --output, offline, from the same cache

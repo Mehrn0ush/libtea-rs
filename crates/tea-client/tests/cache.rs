@@ -1506,3 +1506,39 @@ async fn a_json_304_renews_the_entry_at_once() {
     get_release(&service(&client, &server)).await.unwrap();
     assert!(entry_meta_of(&dir, &key).validated_at >= now() - 5);
 }
+
+#[tokio::test]
+async fn cache_clear_deletes_only_files_that_have_the_caches_temporary_shape() {
+    let server = MockServer::start().await;
+    serve_release(&server, &[("etag", "\"v1\"")]).await;
+    let dir = Dir::new("clear-shape");
+    let client = builder(&server).cache_dir(dir.cache()).build().unwrap();
+    get_release(&service(&client, &server)).await.unwrap();
+    let entries = dir.cache().join("v1");
+    let key = "a".repeat(64);
+    // The cache's own leftover (pid and counter after the key) and look-alikes.
+    let own = format!(".{key}.4242-7.tmp");
+    let keep = [
+        ".mine.tmp".to_owned(),
+        ".notes.libtea.tmp".to_owned(),
+        "build.tmp".to_owned(),
+        format!(".{key}.tmp"),
+        format!(".{key}.x-7.tmp"),
+        format!(".{key}.4242-7.tmp.bak"),
+        "notes.txt".to_owned(),
+    ];
+    std::fs::write(entries.join(&own), b"stale").unwrap();
+    for name in &keep {
+        std::fs::write(entries.join(name), b"mine").unwrap();
+    }
+    let removed = cache_clear(&dir.cache()).unwrap();
+    assert_eq!(removed, 2, "the entry and the cache's own temporary file");
+    assert!(!entries.join(&own).exists());
+    for name in &keep {
+        assert_eq!(
+            std::fs::read(entries.join(name)).unwrap(),
+            b"mine",
+            "{name} is not the cache's file and must survive"
+        );
+    }
+}

@@ -92,6 +92,7 @@ pub(crate) async fn sync(options: SyncOptions) -> anyhow::Result<()> {
         release.product_release.to_string(),
         collection.version,
     );
+    let mut used_names = std::collections::HashSet::new();
     for artifact in &collection.artifacts {
         for format in &artifact.formats {
             lock.artifacts.push(
@@ -100,6 +101,7 @@ pub(crate) async fn sync(options: SyncOptions) -> anyhow::Result<()> {
                     artifact,
                     &format.media_type,
                     options.artifacts_dir.as_deref(),
+                    &mut used_names,
                     &fetched_at,
                 )
                 .await?,
@@ -117,16 +119,29 @@ pub(crate) async fn sync(options: SyncOptions) -> anyhow::Result<()> {
         print_diff(&delta, options.json)?;
         if delta.is_empty() {
             if !options.json {
-                out!(
-                    "lock is up to date ({} artifact formats)",
-                    lock.artifacts.len()
-                );
+                if options.cache.offline {
+                    // Nothing was asked of the server: this says what the
+                    // cache holds, not what the server serves now.
+                    out!(
+                        "the lock matches the cached responses ({} artifact formats); offline, the server was not contacted",
+                        lock.artifacts.len()
+                    );
+                } else {
+                    out!(
+                        "lock is up to date ({} artifact formats)",
+                        lock.artifacts.len()
+                    );
+                }
             }
             return Ok(());
         }
         return Err(coded(
             exit::CHANGES_DETECTED,
-            "the server differs from the lock",
+            if options.cache.offline {
+                "the cached responses differ from the lock (offline; the server was not contacted)"
+            } else {
+                "the server differs from the lock"
+            },
         ));
     }
 
@@ -219,15 +234,19 @@ async fn fetch_one(
     artifact: &Artifact,
     media_type: &str,
     dir: Option<&Path>,
+    used: &mut std::collections::HashSet<String>,
     fetched_at: &str,
 ) -> anyhow::Result<LockedArtifact> {
     let download = match dir {
         Some(dir) => {
-            let dest = dir.join(file_name(
-                &artifact.uuid.to_string(),
-                artifact.version,
-                media_type,
-            ));
+            let name = file_name(&artifact.uuid.to_string(), artifact.version, media_type);
+            if !used.insert(name.clone()) {
+                return Err(coded(
+                    exit::FAILURE,
+                    format!("two artifact formats map to the file name {name}; not writing either"),
+                ));
+            }
+            let dest = dir.join(name);
             let options = FileDownloadOptions::new().with_overwrite(true);
             service
                 .download_format_to_file(artifact, media_type, &dest, &options)
@@ -294,7 +313,21 @@ fn file_name(uuid: &str, revision: u64, media_type: &str) -> String {
             }
         })
         .collect();
-    format!("{uuid}-r{revision}-{slug}")
+    // The slug is lossy (`a/b` and `a_b` look alike), so the exact media type
+    // is also hashed into the name. Names of different media types cannot
+    // collide by construction of the slug alone; the hash removes the rest, and
+    // `sync` still refuses a name it has already used.
+    format!(
+        "{uuid}-r{revision}-{slug}-{:08x}",
+        fnv1a(media_type.as_bytes()) as u32
+    )
+}
+
+/// FNV-1a, 64 bit. Names a file; it is not a security hash.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 fn read_lock(path: &Path) -> anyhow::Result<LockFile> {
@@ -332,23 +365,59 @@ fn write_lock(path: &Path, text: &str) -> anyhow::Result<()> {
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let mut temp_name = std::ffi::OsString::from(".");
-    temp_name.push(name);
-    temp_name.push(format!(".libtea-{}.tmp", std::process::id()));
-    let temp = dir.join(temp_name);
-    let result = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)
-        .and_then(|mut file| {
-            file.write_all(text.as_bytes())
-                .and_then(|()| file.sync_all())
-        })
+    // An unpredictable name, created with `create_new` (O_EXCL, which never
+    // follows a link): nothing planted in the directory, and no leftover from a
+    // killed run, can occupy it or make `sync` fail.
+    let mut last = None;
+    let mut created = None;
+    for _ in 0..16 {
+        let mut temp_name = std::ffi::OsString::from(".");
+        temp_name.push(name);
+        temp_name.push(format!(".{:016x}.tmp", unpredictable()));
+        let temp = dir.join(temp_name);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+        {
+            Ok(file) => {
+                created = Some((temp, file));
+                break;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => last = Some(err),
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("creating a temporary file for {}", path.display()))
+            }
+        }
+    }
+    let Some((temp, mut file)) = created else {
+        let err = last.unwrap_or_else(|| std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+        return Err(err)
+            .with_context(|| format!("creating a temporary file for {}", path.display()));
+    };
+    let result = file
+        .write_all(text.as_bytes())
+        .and_then(|()| file.sync_all())
         .and_then(|()| std::fs::rename(&temp, path));
     if result.is_err() {
         let _ = std::fs::remove_file(&temp);
     }
     result.with_context(|| format!("writing {}", path.display()))
+}
+
+/// A number nobody can predict: the process-random keys of `RandomState`,
+/// mixed with the clock and the process id.
+fn unpredictable() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u32(std::process::id());
+    hasher.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos()),
+    );
+    hasher.finish()
 }
 
 fn print_diff(delta: &LockDiff, json: bool) -> anyhow::Result<()> {
@@ -450,11 +519,46 @@ mod tests {
     fn file_names_never_contain_a_path_separator_or_come_from_the_server() {
         let name = file_name("u", 2, "../../etc/passwd");
         assert!(!name.contains('/') && !name.contains('\\'));
-        assert_eq!(name, "u-r2-.._.._etc_passwd");
+        assert!(name.starts_with("u-r2-.._.._etc_passwd-"), "{name}");
+        let named = file_name("u", 1, "application/vnd.cyclonedx+json");
+        assert!(
+            named.starts_with("u-r1-application_vnd.cyclonedx+json-"),
+            "{named}"
+        );
         assert_eq!(
+            named,
             file_name("u", 1, "application/vnd.cyclonedx+json"),
-            "u-r1-application_vnd.cyclonedx+json"
+            "stable"
         );
         assert!(!file_name("u", 1, "a\nb\u{1b}[0m").contains('\u{1b}'));
+    }
+
+    #[test]
+    fn media_types_that_look_alike_get_different_names() {
+        let pairs = [
+            ("application/x y", "application/x_y"),
+            ("application/x+y", "application/x_y"),
+            ("a/b", "a_b"),
+            ("a b", "a_b"),
+            ("text/plain", "text/plain; charset=utf-8"),
+            ("A/B", "a/b"),
+        ];
+        for (one, two) in pairs {
+            assert_ne!(
+                file_name("u", 1, one),
+                file_name("u", 1, two),
+                "{one} / {two}"
+            );
+        }
+    }
+
+    #[test]
+    fn temporary_names_are_not_predictable() {
+        let first: std::collections::HashSet<u64> = (0..64).map(|_| unpredictable()).collect();
+        assert!(
+            first.len() > 60,
+            "{} distinct values in 64 draws",
+            first.len()
+        );
     }
 }

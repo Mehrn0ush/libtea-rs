@@ -21,6 +21,16 @@
 //!   destination only after the stream ended cleanly and the checksums passed
 //!   the client's policy. On any failure the temporary file is removed and the
 //!   destination is untouched.
+//!   The temporary file is created private (mode 0600 on Unix, with
+//!   `create_new`, so it never follows a link) because it holds unverified
+//!   bytes, and the finished file keeps that mode. A `.part` file left by a
+//!   killed process is removed by the next download to the same destination
+//!   name once it is an hour old.
+//! - Without [`FileDownloadOptions::overwrite`] the file is put in place with a
+//!   hard link, which fails if the destination exists or appears meanwhile. A
+//!   filesystem without hard links therefore needs `overwrite`; this client
+//!   does not fall back to a rename that could replace a file that appeared in
+//!   the window.
 //! - [`Service::download_format_to_writer`] cannot take bytes back from a
 //!   writer it does not own. The writer sees unverified bytes. Treat what it
 //!   received as untrusted unless the call returned `Ok`, and discard it on
@@ -280,6 +290,7 @@ impl Service {
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
 
+        remove_stale_parts(dir, name);
         let (temp_path, file) = create_temp(dir, name).await?;
         // Declared before the writer, so it is dropped (and removes the file)
         // after the writer closed it.
@@ -626,6 +637,41 @@ fn check_destination(dest: &Path, options: &FileDownloadOptions) -> Result<(), C
     }
 }
 
+/// Partial files older than this, left by a killed process, are removed.
+const STALE_PART_AGE: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
+/// Remove `.<name>.libtea-*.part` files in `dir` that have not been written to
+/// for an hour. A download in progress touches its file continuously, so a
+/// concurrent one is left alone; so is every file with another name.
+fn remove_stale_parts(dir: &Path, name: &std::ffi::OsStr) {
+    let mut prefix = std::ffi::OsString::from(".");
+    prefix.push(name);
+    prefix.push(".libtea-");
+    let prefix = prefix.to_string_lossy().into_owned();
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let now = std::time::SystemTime::now();
+    for item in read.flatten() {
+        let file_name = item.file_name().to_string_lossy().into_owned();
+        if !file_name.starts_with(&prefix) || !file_name.ends_with(".part") {
+            continue;
+        }
+        let path = item.path();
+        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        let stale = meta
+            .modified()
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > STALE_PART_AGE);
+        if meta.file_type().is_file() && stale {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 async fn create_temp(
     dir: &Path,
     name: &std::ffi::OsStr,
@@ -641,12 +687,13 @@ async fn create_temp(
         ));
         let path = dir.join(temp_name);
         // `create_new` never follows a symbolic link and fails if the name exists.
-        match tokio::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .await
-        {
+        // The file is private (0600) while its bytes are unverified, and stays
+        // so when it is renamed into place: loosen it deliberately if you want.
+        let mut options = tokio::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        match options.open(&path).await {
             Ok(file) => return Ok((path, file)),
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => last = Some(err),
             Err(err) => return Err(io_error("creating the temporary file", &err)),
@@ -660,21 +707,104 @@ async fn create_temp(
 
 /// Move the finished temporary file to `dest`.
 ///
-/// Without `overwrite` the move is a hard link, which fails if `dest` appeared
-/// in the meantime. Where hard links are unavailable it falls back to a rename
-/// after the existence check, which leaves a small window.
+/// Without `overwrite` the move is a hard link, which fails if `dest` exists or
+/// appears in the meantime. Any failure to link is an error: this does not fall
+/// back to a rename, which would silently replace a file that appeared in the
+/// window. A filesystem without hard links therefore needs `overwrite`.
 fn commit_file(temp: &Path, dest: &Path, options: &FileDownloadOptions) -> Result<(), ClientError> {
-    if !options.overwrite {
-        match std::fs::hard_link(temp, dest) {
-            Ok(()) => {
-                let _ = std::fs::remove_file(temp);
-                return Ok(());
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err(io_error("committing the download", &err));
-            }
-            Err(_) => {}
-        }
+    commit_with(temp, dest, options, |from, to| std::fs::hard_link(from, to))
+}
+
+fn commit_with(
+    temp: &Path,
+    dest: &Path,
+    options: &FileDownloadOptions,
+    link: impl Fn(&Path, &Path) -> std::io::Result<()>,
+) -> Result<(), ClientError> {
+    if options.overwrite {
+        return std::fs::rename(temp, dest)
+            .map_err(|err| io_error("committing the download", &err));
     }
-    std::fs::rename(temp, dest).map_err(|err| io_error("committing the download", &err))
+    match link(temp, dest) {
+        Ok(()) => {
+            let _ = std::fs::remove_file(temp);
+            Ok(())
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(io_error("committing the download (the destination exists)", &err))
+        }
+        Err(err) => Err(ClientError::Io(escape_control_chars(&format!(
+            "committing the download: {} (without `overwrite` this needs a filesystem with hard links)",
+            err.kind()
+        )))),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod commit_tests {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+
+    fn dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("libtea-commit-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_link_failure_other_than_exists_is_an_error_and_never_renames() {
+        let d = dir("nolink");
+        let (temp, dest) = (d.join("t.part"), d.join("out"));
+        for kind in [
+            ErrorKind::Unsupported,
+            ErrorKind::PermissionDenied,
+            ErrorKind::Other,
+        ] {
+            std::fs::write(&temp, b"new").unwrap();
+            let result = commit_with(&temp, &dest, &FileDownloadOptions::new(), |_, _| {
+                Err(Error::from(kind))
+            });
+            assert!(matches!(result, Err(ClientError::Io(_))), "{kind:?}");
+            assert!(
+                !dest.exists(),
+                "{kind:?}: the destination was written anyway"
+            );
+            assert!(temp.exists(), "the caller's guard owns the temporary file");
+        }
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn an_existing_destination_is_refused_and_a_free_one_is_linked() {
+        let d = dir("exists");
+        let (temp, dest) = (d.join("t.part"), d.join("out"));
+        std::fs::write(&temp, b"new").unwrap();
+        std::fs::write(&dest, b"old").unwrap();
+        let refused = commit_file(&temp, &dest, &FileDownloadOptions::new());
+        assert!(matches!(refused, Err(ClientError::Io(_))));
+        assert_eq!(std::fs::read(&dest).unwrap(), b"old");
+        std::fs::remove_file(&dest).unwrap();
+        commit_file(&temp, &dest, &FileDownloadOptions::new()).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
+        assert!(!temp.exists());
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn overwrite_renames_and_never_tries_to_link() {
+        let d = dir("overwrite");
+        let (temp, dest) = (d.join("t.part"), d.join("out"));
+        std::fs::write(&temp, b"new").unwrap();
+        std::fs::write(&dest, b"old").unwrap();
+        commit_with(
+            &temp,
+            &dest,
+            &FileDownloadOptions::new().with_overwrite(true),
+            |_, _| panic!("link must not be used with overwrite"),
+        )
+        .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"new");
+        let _ = std::fs::remove_dir_all(d);
+    }
 }

@@ -80,7 +80,12 @@ if it finds a non-empty one.
 
 1. **SHA-256.** `SHA256SUMS` is fetched from the release on every run. A fresh
    download must match it; a cached archive is used only if it matches too, so
-   a poisoned cache entry is discarded and replaced.
+   a poisoned cache entry is discarded and replaced. **This check is not
+   independent of the archive:** `SHA256SUMS` comes from the same release as the
+   archive, so anyone who can replace one can replace the other. It catches
+   corruption and a poisoned cache, not a compromised release. The attestation
+   below is the independent check; without it (`attestation: skip`, or `auto`
+   on a runner without `gh`) the SHA-256 is all there is.
 2. **Attestation.** With `gh` present (hosted runners have it), the archive's
    build-provenance attestation is verified against this repository and its
    `release.yml` workflow. A failure fails the step. Without `gh`, `auto`
@@ -212,6 +217,9 @@ jobs:
 
 ## Notes and limits
 
+- Tested only on Linux. The scripts are exercised against stubs on a Linux
+  runner in CI (and on macOS by hand); there is no macOS or Windows runner test
+  of the Action, and Windows path handling is untested.
 - Runners: Linux, macOS and Windows (x86_64 and arm64 where the release has a
   build). Windows path handling in the scripts is untested.
 - The cache holds only the archive, keyed by version and target. It is

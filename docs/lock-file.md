@@ -70,7 +70,19 @@ fragment removed, and the library refuses to write or read a lock whose
   `fetchedAt`), so a re-run produces no version-control diff. Pass
   `--fetched-at` for a reproducible timestamp.
 - Writes are atomic: a finished temporary file in the same directory is renamed
-  over the lock. A symbolic link at the lock path is refused.
+  over the lock. The temporary file has an unpredictable name and is created
+  with `create_new`, so a file or link planted there, or left by a killed run,
+  cannot make `sync` fail or redirect the write. A symbolic link at the lock
+  path is refused.
+
+## Text in the lock
+
+`tei`, `apiVersion`, each artifact `type` and `mediaType`, and each checksum
+algorithm name are bounded (2048, 64, 128, 255 and 64 characters), must not be
+empty, and must be one line free of control characters (C0, DEL, C1, bidi
+overrides). `server` supplies most of this text, so a server that sends a
+control character or an absurd length makes `sync` fail (exit 1) without
+writing a lock, and a hand-edited lock that has one is refused on reading.
 
 ## Reading
 
@@ -101,8 +113,11 @@ libtea diff old.lock new.lock                     # offline; exit 7 if they diff
   of the bytes. It never writes. Differences are printed (text or `--json`,
   see `docs/cli-json.md`) and the exit status is 7.
 - `--artifacts-dir` keeps each verified format as
-  `<uuid>-r<revision>-<media type with unsafe characters replaced by _>`. The
-  name is never taken from the server; existing files are replaced.
+  `<uuid>-r<revision>-<media type with unsafe characters replaced by _>-<8 hex>`,
+  where the last part hashes the exact media type, so `application/x+y` and
+  `application/x_y` get different files. The name is never taken from the
+  server; `sync` refuses to write two formats to one name; existing files are
+  replaced. Files are private (mode 0600 on Unix).
 - Artifacts are fetched one after another.
 
 ## What is compared

@@ -89,6 +89,13 @@ The cache is **not a trust boundary**.
 - *Credentials stay out.* Nothing from a request is stored, and responses to
   credentialed requests are not stored unless enabled (then only under that
   key id's hash).
+- *The directory must be yours.* An existing cache directory is refused if its
+  owner is not the user running the process (compared with the owner of a file
+  just created, so no uid lookup is needed). That check needs a second account
+  to fail, so the suite only tests the comparison, not a real foreign directory.
+- *Entries are opened without following links.* A path is inspected, opened,
+  and inspected again; if it is not the same regular file both times (a link
+  swapped in between) the read is refused. Tested with a swap hook.
 - *Damaged entries are absent.* A truncated, garbage, wrong-key, oversized,
   future-dated or hash-mismatched entry is removed and treated as a miss; the
   request goes to the network (or fails `Offline`) and a good entry replaces it.
@@ -101,6 +108,23 @@ The cache is **not a trust boundary**.
 
 Several clients may share a directory; concurrent writers replace entries
 atomically (tested).
+
+## Known limits
+
+- **Pruning rescans the directory.** After every store the cache lists its
+  directory and sums the entry sizes to enforce `max_total_bytes`. That is
+  linear in the number of entries: with a very large number of small entries
+  (a cache near its default 512 MiB of ~1 KB responses) each write gets slow.
+  Use a smaller `max_total_bytes` or `cache clear` if that matters.
+- **Streaming temporary files are not counted.** A body being copied into the
+  cache is a temporary file until the download verifies, and temporary files
+  are not part of the total. Each in-flight download can use up to
+  `max_entry_bytes` (default 64 MiB) extra for as long as it runs; with
+  `max_in_flight` downloads that is `max_in_flight * max_entry_bytes`.
+  Leftovers older than an hour are removed by the next store.
+- **Platforms.** CI runs on Linux only. The suite also passes on macOS when run
+  by hand. Windows is untested; the directory-mode (0700), ownership, and
+  no-follow checks are Unix-only and do not exist there.
 
 ## Streaming downloads
 
@@ -132,6 +156,7 @@ libtea cache clear --cache-dir ~/.cache/libtea [--json]
 ```
 
 `cache clear` removes only files named like cache entries (a 64-hex key plus
-`.entry`) and stray `*.tmp` files; other files and the directories stay.
+`.entry`) and the cache's own temporary files (`.<key>.<pid>-<n>.tmp`); any other
+file, whatever it is named, and the directories stay.
 `cache stat` counts entries and bytes by file, without decoding them.
 Output shapes: `docs/cli-json.md`.

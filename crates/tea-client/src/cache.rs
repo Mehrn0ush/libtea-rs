@@ -126,7 +126,16 @@ fn private_dir(path: &Path, create: bool) -> Result<bool, ClientError> {
         Ok(meta) => {
             #[cfg(unix)]
             {
-                use std::os::unix::fs::PermissionsExt;
+                use std::os::unix::fs::{MetadataExt, PermissionsExt};
+                // A private directory that someone else owns is theirs to
+                // change; refuse it. The reference uid is that of a file this
+                // process has just created, so no uid lookup is needed.
+                if !owner_matches(meta.uid(), current_uid(Some(path))?) {
+                    return Err(refuse(
+                        path,
+                        "is owned by another user; use a directory you own",
+                    ));
+                }
                 let mode = meta.permissions().mode() & 0o777;
                 if mode & 0o077 != 0 {
                     return Err(refuse(
@@ -158,6 +167,46 @@ fn private_dir(path: &Path, create: bool) -> Result<bool, ClientError> {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(err) => Err(io_error("inspecting the cache directory", &err)),
     }
+}
+
+/// Whether a directory owned by `dir_uid` belongs to the user running the
+/// process, whose files get `own_uid`.
+#[cfg(unix)]
+pub(crate) fn owner_matches(dir_uid: u32, own_uid: u32) -> bool {
+    dir_uid == own_uid
+}
+
+/// The uid this process creates files as: the owner of a file created now,
+/// in the temporary directory or, if that is not writable, in `fallback`.
+#[cfg(unix)]
+pub(crate) fn current_uid(fallback: Option<&Path>) -> Result<u32, ClientError> {
+    use std::os::unix::fs::MetadataExt;
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let name = format!(
+        ".libtea-uid-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    let mut last = None;
+    for dir in std::iter::once(std::env::temp_dir()).chain(fallback.map(Path::to_path_buf)) {
+        let probe = dir.join(&name);
+        match open_private(&probe) {
+            Ok(file) => {
+                let uid = file
+                    .metadata()
+                    .map_err(|e| io_error("checking directory ownership", &e))?
+                    .uid();
+                drop(file);
+                let _ = std::fs::remove_file(&probe);
+                return Ok(uid);
+            }
+            Err(err) => last = Some(err),
+        }
+    }
+    Err(match last {
+        Some(err) => io_error("checking directory ownership", &err),
+        None => ClientError::Io("checking directory ownership".into()),
+    })
 }
 
 pub(crate) struct Cache {
@@ -207,7 +256,7 @@ impl Cache {
             remove(&path);
             return None;
         }
-        let bytes = std::fs::read(&path).ok()?;
+        let bytes = read_regular(&path, self.config.max_entry_bytes + FRAMING_SLACK).ok()?;
         let max_body = usize::try_from(self.config.max_entry_bytes).unwrap_or(usize::MAX);
         match decode_entry(&bytes, key, max_body) {
             Ok((entry, body)) => {
@@ -293,7 +342,7 @@ impl Cache {
             };
             let name = item.file_name();
             let name = name.to_string_lossy();
-            if name.ends_with(".tmp") {
+            if is_cache_temp(&name) {
                 let old = meta
                     .modified()
                     .ok()
@@ -348,6 +397,63 @@ impl Cache {
             builder: EntryBuilder::new(),
         })
     }
+}
+
+/// Open `path` only if it is a regular file, and keep that true while opening.
+///
+/// The path is inspected with `lstat`, opened, and inspected again; the opened
+/// file must be the regular file the path names both times (same device and
+/// inode). A symbolic link swapped in between the checks is refused instead of
+/// followed, which `lstat`-then-read alone would not do. `between` runs after
+/// the first inspection and exists so a test can make that swap happen.
+#[cfg(unix)]
+fn open_regular_with(path: &Path, between: impl FnOnce()) -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::MetadataExt;
+    let invalid =
+        |what: &str| std::io::Error::new(std::io::ErrorKind::InvalidInput, what.to_owned());
+    let before = std::fs::symlink_metadata(path)?;
+    if !before.file_type().is_file() {
+        return Err(invalid("not a regular file"));
+    }
+    between();
+    let file = std::fs::File::open(path)?;
+    let opened = file.metadata()?;
+    let after = std::fs::symlink_metadata(path)?;
+    if !after.file_type().is_file()
+        || !opened.is_file()
+        || (opened.dev(), opened.ino()) != (after.dev(), after.ino())
+        || (opened.dev(), opened.ino()) != (before.dev(), before.ino())
+    {
+        return Err(invalid("the path changed while it was opened"));
+    }
+    Ok(file)
+}
+
+/// Read at most `limit` bytes of a regular file (see [`open_regular_with`]);
+/// a longer file is an error.
+fn read_regular(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    #[cfg(unix)]
+    let file = open_regular_with(path, || {})?;
+    #[cfg(not(unix))]
+    let file = {
+        if !std::fs::symlink_metadata(path)?.file_type().is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "not a regular file",
+            ));
+        }
+        std::fs::File::open(path)?
+    };
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "entry is larger than the limit",
+        ));
+    }
+    Ok(bytes)
 }
 
 fn open_private(path: &Path) -> std::io::Result<std::fs::File> {
@@ -521,6 +627,27 @@ pub fn cache_stat(dir: &Path) -> Result<CacheStats, ClientError> {
     Ok(stats)
 }
 
+/// A temporary file the cache itself writes: `.<64 hex key>.<pid>-<n>.tmp`.
+/// Nothing else is a cache temporary file, whatever its name ends in.
+fn is_cache_temp(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix('.') else {
+        return false;
+    };
+    let Some(rest) = rest.strip_suffix(".tmp") else {
+        return false;
+    };
+    let Some((key, tail)) = rest.split_once('.') else {
+        return false;
+    };
+    is_cache_key(key)
+        && tail.split_once('-').is_some_and(|(pid, n)| {
+            !pid.is_empty()
+                && !n.is_empty()
+                && pid.bytes().all(|b| b.is_ascii_digit())
+                && n.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
 /// Remove every cache entry (and stray temporary files) and return how many
 /// files were removed. Only files this cache writes are touched: names that are
 /// a cache key plus `.entry`, and `*.tmp`. Other files, and the directories
@@ -540,7 +667,7 @@ pub fn cache_clear(dir: &Path) -> Result<u64, ClientError> {
         let name = item.file_name();
         let name = name.to_string_lossy().into_owned();
         let is_entry = name.strip_suffix(".entry").is_some_and(is_cache_key);
-        let is_temp = name.starts_with('.') && name.ends_with(".tmp");
+        let is_temp = is_cache_temp(&name);
         if !(is_entry || is_temp) {
             continue;
         }
@@ -555,4 +682,100 @@ pub fn cache_clear(dir: &Path) -> Result<u64, ClientError> {
         }
     }
     Ok(removed)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("libtea-cache-unit-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn ownership_is_compared_with_the_uid_of_a_file_just_created() {
+        let dir = scratch("uid");
+        let mine = current_uid(None).unwrap();
+        let probe = dir.join("probe");
+        std::fs::write(&probe, b"x").unwrap();
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(std::fs::metadata(&probe).unwrap().uid(), mine);
+        assert_eq!(std::fs::metadata(&dir).unwrap().uid(), mine);
+        assert!(owner_matches(mine, mine));
+        assert!(
+            !owner_matches(mine.wrapping_add(1), mine),
+            "another uid must not match"
+        );
+        assert!(!owner_matches(0, 501) && !owner_matches(501, 0));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_regular_file_opens_and_a_symlink_never_does() {
+        let dir = scratch("nofollow");
+        let real = dir.join("real");
+        std::fs::write(&real, b"entry").unwrap();
+        assert_eq!(read_regular(&real, 100).unwrap(), b"entry");
+        let link = dir.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert!(open_regular_with(&link, || {}).is_err());
+        assert!(read_regular(&link, 100).is_err());
+        assert!(
+            read_regular(&dir, 100).is_err(),
+            "a directory is not an entry"
+        );
+        assert!(read_regular(&real, 3).is_err(), "over the limit");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_symlink_swapped_in_after_the_check_is_refused_not_followed() {
+        let dir = scratch("swap");
+        let entry = dir.join("entry");
+        let secret = dir.join("secret");
+        std::fs::write(&entry, b"genuine").unwrap();
+        std::fs::write(&secret, b"must not be read").unwrap();
+        // Between the first lstat and the open, replace the file by a link.
+        let swapped = open_regular_with(&entry, || {
+            std::fs::remove_file(&entry).unwrap();
+            std::os::unix::fs::symlink(&secret, &entry).unwrap();
+        });
+        assert!(swapped.is_err(), "the swapped-in link was followed");
+        // And a plain replacement by another regular file is noticed too.
+        let entry2 = dir.join("entry2");
+        std::fs::write(&entry2, b"first").unwrap();
+        let replaced = open_regular_with(&entry2, || {
+            std::fs::remove_file(&entry2).unwrap();
+            std::fs::write(&entry2, b"second").unwrap();
+        });
+        assert!(
+            replaced.is_err(),
+            "a different file than the one inspected was accepted"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn only_the_caches_own_temporary_files_are_temporary_files() {
+        let key = "a".repeat(64);
+        assert!(is_cache_temp(&format!(".{key}.123-4.tmp")));
+        for other in [
+            ".mine.tmp",
+            ".notes.libtea.tmp",
+            "build.tmp",
+            &format!(".{key}.tmp"),
+            &format!(".{key}.x-4.tmp"),
+            &format!(".{key}.12-.tmp"),
+            &format!(".{key}.12-4.tmp.bak"),
+            &format!(".{}.1-2.tmp", "g".repeat(64)),
+            &format!(".{}.1-2.tmp", "a".repeat(63)),
+            &format!("{key}.1-2.tmp"),
+        ] {
+            assert!(!is_cache_temp(other), "{other}");
+        }
+    }
 }

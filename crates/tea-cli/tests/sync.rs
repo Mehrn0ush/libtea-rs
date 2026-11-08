@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use sha2::{Digest, Sha256};
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const REL: &str = "2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d";
@@ -388,7 +388,16 @@ async fn artifacts_dir_keeps_the_verified_bytes_under_sanitised_names() {
         &["--artifacts-dir", &store.display().to_string()],
     );
     assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
-    let kept = store.join(format!("{A1}-r1-application_json"));
+    let kept = std::fs::read_dir(&store)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with(&format!("{A1}-r1-application_json-"))
+        })
+        .expect("a file named for the artifact, revision and media type");
     assert_eq!(std::fs::read(&kept).unwrap(), b"{\"first\":1}");
     assert_eq!(
         std::fs::read_dir(&store).unwrap().count(),
@@ -605,4 +614,167 @@ fn diff_rejects_bad_locks_with_exit_2() {
         garbage.display().to_string(),
     ]);
     assert_eq!(output.status.code(), Some(2));
+}
+
+/// A mock with one artifact that has several formats, each served for its own
+/// `mediaType` query.
+async fn mount_formats(server: &MockServer, formats: &[(&'static str, &'static [u8])]) {
+    mount(server, 1, &[]).await;
+    let artifact_formats: Vec<_> = formats
+        .iter()
+        .map(|(media, body)| {
+            serde_json::json!({
+                "mediaType": media,
+                "checksums": [{"algType": "SHA-256", "algValue": sha256_hex(body)}]
+            })
+        })
+        .collect();
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/v1.0.0/productRelease/{REL}/collection/latest"
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "uuid": REL, "version": 1, "createdDate": "2024-01-01T00:00:00Z",
+            "belongsTo": "PRODUCT_RELEASE", "updateReason": {"type": "INITIAL_RELEASE"},
+            "artifacts": [{
+                "uuid": A1, "version": 1, "type": "BOM",
+                "createdDate": "2024-01-01T00:00:00Z", "formats": artifact_formats
+            }]
+        })))
+        .with_priority(1)
+        .mount(server)
+        .await;
+    for (media, body) in formats {
+        Mock::given(method("GET"))
+            .and(path(format!("/v1.0.0/artifact/{A1}/1/download")))
+            .and(query_param("mediaType", *media))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(*body, "application/octet-stream"),
+            )
+            .with_priority(1)
+            .mount(server)
+            .await;
+    }
+}
+
+#[tokio::test]
+async fn media_types_that_slug_alike_do_not_overwrite_each_other() {
+    let server = MockServer::start().await;
+    mount_formats(
+        &server,
+        &[
+            ("application/x y", b"space"),
+            ("application/x_y", b"underscore"),
+        ],
+    )
+    .await;
+    let dir = Dir::new("collide");
+    let lock = dir.file("tea.lock");
+    let store = dir.file("store");
+    let output = sync(
+        &server,
+        &lock,
+        &["--artifacts-dir", &store.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    let mut contents: Vec<Vec<u8>> = std::fs::read_dir(&store)
+        .unwrap()
+        .map(|e| std::fs::read(e.unwrap().path()).unwrap())
+        .collect();
+    contents.sort();
+    assert_eq!(
+        contents,
+        vec![b"space".to_vec(), b"underscore".to_vec()],
+        "both formats must be kept, in two files"
+    );
+}
+
+#[tokio::test]
+async fn server_text_with_control_characters_or_absurd_length_is_refused() {
+    let long: &'static str = Box::leak(format!("text/{}", "a".repeat(300)).into_boxed_str());
+    for media in ["text/\u{7}bell", "text/\u{1b}[31mred", "text/a\nb", long] {
+        let server = MockServer::start().await;
+        mount(&server, 1, &[Entry::new(A1, media, b"data")]).await;
+        let dir = Dir::new("ctrl");
+        let lock = dir.file("tea.lock");
+        let output = sync(&server, &lock, &[]);
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{media:?}: {}",
+            text(&output.stderr)
+        );
+        assert!(
+            !lock.exists(),
+            "{media:?}: a lock with hostile text was written"
+        );
+        assert!(
+            text(&output.stderr).contains("lock field mediaType"),
+            "{media:?}: {}",
+            text(&output.stderr)
+        );
+        assert!(dir.names().is_empty());
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_planted_temporary_file_cannot_block_the_lock_write() {
+    let server = MockServer::start().await;
+    mount(&server, 1, &two()).await;
+    let dir = Dir::new("planted");
+    let lock = dir.file("tea.lock");
+    let mut args: Vec<String> = vec![
+        "sync".into(),
+        TEI.into(),
+        "--lock".into(),
+        lock.display().to_string(),
+        "--well-known-url".into(),
+        format!("{}/.well-known/tea", server.uri()),
+        "--allow-origin".into(),
+        server.uri(),
+    ];
+    args.push("--json".into());
+    let child = Command::new(env!("CARGO_BIN_EXE_libtea"))
+        .args(&args)
+        .env("RUST_LOG", "off")
+        .env_remove("TEA_API_KEY_ID")
+        .env_remove("TEA_API_KEY_SECRET")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Plant the name an earlier version derived from the process id, and a
+    // symbolic link under a few other guesses, before the lock is written.
+    let pid = child.id();
+    let planted = dir.file(&format!(".tea.lock.libtea-{pid}.tmp"));
+    std::fs::write(&planted, b"planted").unwrap();
+    let target = dir.file("victim.txt");
+    std::fs::write(&target, b"do not touch").unwrap();
+    for guess in 0..4u32 {
+        let _ =
+            std::os::unix::fs::symlink(&target, dir.file(&format!(".tea.lock.{guess:016x}.tmp")));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
+    assert!(lock.exists());
+    assert_eq!(
+        std::fs::read(&planted).unwrap(),
+        b"planted",
+        "the planted file was touched"
+    );
+    assert_eq!(std::fs::read(&target).unwrap(), b"do not touch");
+}
+
+#[tokio::test]
+async fn a_second_sync_leaves_no_temporary_files() {
+    let server = MockServer::start().await;
+    mount(&server, 1, &two()).await;
+    let dir = Dir::new("notemp");
+    let lock = dir.file("tea.lock");
+    for round in 0..3 {
+        mount(&server, round + 1, &two()).await;
+        assert_eq!(sync(&server, &lock, &[]).status.code(), Some(0));
+    }
+    assert_eq!(dir.names(), ["tea.lock"]);
 }

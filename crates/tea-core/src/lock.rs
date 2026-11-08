@@ -210,6 +210,8 @@ impl LockFile {
             )));
         }
         check_server(&self.server)?;
+        check_text("tei", &self.tei, 1, MAX_TEI_LEN)?;
+        check_text("apiVersion", &self.api_version, 1, MAX_VERSION_LEN)?;
         ProductReleaseId::parse(&self.product_release)?;
         if self.collection_version < 1 {
             return Err(ModelError::Invalid(
@@ -223,7 +225,18 @@ impl LockFile {
             if artifact.revision < 1 {
                 return Err(ModelError::Invalid("artifact revision starts at 1".into()));
             }
+            // These strings come from the server. Bound them and keep control
+            // characters (terminal escapes, bidi overrides) out of a file that
+            // people read and tools print.
+            check_text("type", &artifact.artifact_type, 1, MAX_TYPE_LEN)?;
+            check_text("mediaType", &artifact.media_type, 1, MAX_MEDIA_TYPE_LEN)?;
             for checksum in &artifact.checksums {
+                check_text(
+                    "checksum algorithm",
+                    &checksum.algorithm,
+                    1,
+                    MAX_ALGORITHM_LEN,
+                )?;
                 Checksum::new(
                     crate::enums::ChecksumAlgorithm::from_wire(&checksum.algorithm),
                     &checksum.value,
@@ -293,6 +306,35 @@ impl LockFile {
         lock.normalize();
         Ok(lock)
     }
+}
+
+/// Longest accepted `tei`.
+pub const MAX_TEI_LEN: usize = 2048;
+/// Longest accepted `apiVersion`.
+pub const MAX_VERSION_LEN: usize = 64;
+/// Longest accepted artifact `type`.
+pub const MAX_TYPE_LEN: usize = 128;
+/// Longest accepted `mediaType`.
+pub const MAX_MEDIA_TYPE_LEN: usize = 255;
+/// Longest accepted checksum algorithm name.
+pub const MAX_ALGORITHM_LEN: usize = 64;
+
+/// A text field of the lock: bounded, one line, and free of control characters
+/// (C0, DEL, C1 and bidi overrides, the set `escape_control_chars` rewrites).
+fn check_text(field: &str, value: &str, min: usize, max: usize) -> Result<(), ModelError> {
+    let chars = value.chars().count();
+    if chars < min || chars > max {
+        return Err(ModelError::Invalid(format!(
+            "lock field {field} must be {min} to {max} characters"
+        )));
+    }
+    // `escape_control_chars` keeps tab and newline; these fields are one line.
+    if crate::error::escape_control_chars(value) != value || value.contains(['\n', '\t']) {
+        return Err(ModelError::Invalid(format!(
+            "lock field {field} contains a control character"
+        )));
+    }
+    Ok(())
 }
 
 fn check_server(server: &str) -> Result<(), ModelError> {
@@ -649,6 +691,73 @@ mod tests {
             .collect();
         assert_eq!(fields, ["revision", "size", "checksums"]);
         assert!(!delta.is_empty());
+    }
+
+    #[test]
+    fn server_text_in_the_lock_is_bounded_and_free_of_control_characters() {
+        let bad_values = [
+            "ok\u{7}bell",
+            "esc\u{1b}[31mred",
+            "nul\u{0}",
+            "del\u{7f}",
+            "c1\u{9b}31m",
+            "bidi\u{202e}override",
+            "line\nbreak",
+        ];
+        for value in bad_values {
+            for field in 0..4 {
+                let mut lock = lock(vec![entry(A1, "text/plain")]);
+                match field {
+                    0 => lock.artifacts[0].media_type = value.to_owned(),
+                    1 => lock.artifacts[0].artifact_type = value.to_owned(),
+                    2 => lock.tei = value.to_owned(),
+                    _ => lock.artifacts[0].checksums[0].algorithm = value.to_owned(),
+                }
+                assert!(lock.validate().is_err(), "{value:?} in field {field}");
+                assert!(lock.to_json().is_err());
+            }
+        }
+        // Empty and overlong.
+        let mut lock = lock(vec![entry(A1, "text/plain")]);
+        lock.artifacts[0].media_type = String::new();
+        assert!(lock.validate().is_err());
+        for (set, limit) in [
+            (0usize, MAX_MEDIA_TYPE_LEN),
+            (1, MAX_TYPE_LEN),
+            (2, MAX_TEI_LEN),
+            (3, MAX_VERSION_LEN),
+        ] {
+            let mut lock = lock_with_entry();
+            let long = "a".repeat(limit + 1);
+            let exact = "a".repeat(limit);
+            match set {
+                0 => lock.artifacts[0].media_type = long,
+                1 => lock.artifacts[0].artifact_type = long,
+                2 => lock.tei = long,
+                _ => lock.api_version = long,
+            }
+            assert!(lock.validate().is_err(), "limit {limit}");
+            let mut ok = lock_with_entry();
+            match set {
+                0 => ok.artifacts[0].media_type = exact,
+                1 => ok.artifacts[0].artifact_type = exact,
+                2 => ok.tei = exact,
+                _ => ok.api_version = exact,
+            }
+            assert!(
+                ok.validate().is_ok(),
+                "exactly {limit} characters is allowed"
+            );
+        }
+        // Ordinary text with punctuation and non-ASCII letters is fine.
+        let mut ok = lock_with_entry();
+        ok.artifacts[0].media_type = "application/vnd.cyclonedx+json; version=1.6".into();
+        ok.artifacts[0].artifact_type = "VULNERABILITIES".into();
+        assert!(ok.validate().is_ok());
+    }
+
+    fn lock_with_entry() -> LockFile {
+        lock(vec![entry(A1, "text/plain")])
     }
 
     #[test]

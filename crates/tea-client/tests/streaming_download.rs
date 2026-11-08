@@ -542,3 +542,95 @@ async fn a_cancelled_download_removes_its_temporary_file() {
     assert!(outcome.is_err(), "the download should still be running");
     assert!(dir.names().is_empty(), "left behind: {:?}", dir.names());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn partial_and_final_files_are_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let server = MockServer::start().await;
+    serve(
+        &server,
+        ResponseTemplate::new(200)
+            .set_delay(Duration::from_millis(700))
+            .set_body_raw("tea", "application/octet-stream"),
+    )
+    .await;
+    let dir = Scratch::new("private");
+    let dest = dir.file("out.bin");
+    let svc = service(&server);
+    let task = {
+        let dest = dest.clone();
+        tokio::spawn(async move {
+            to_file(&svc, &[sha256(b"tea")], &dest, &FileDownloadOptions::new()).await
+        })
+    };
+    // While the response is delayed, the partial file exists and holds
+    // unverified bytes: only its owner may read it.
+    let mut seen = None;
+    for _ in 0..40 {
+        if let Some(name) = dir.names().into_iter().find(|n| n.ends_with(".part")) {
+            seen = Some(dir.0.join(name));
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    let part = seen.expect("a partial file while the download runs");
+    let mode = std::fs::metadata(&part).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600, "the partial file is {mode:o}");
+    task.await.unwrap().unwrap();
+    let final_mode = std::fs::metadata(&dest).unwrap().permissions().mode() & 0o777;
+    assert_eq!(final_mode, 0o600, "the finished file is {final_mode:o}");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn stale_partial_files_from_a_killed_run_are_removed_on_the_next_run() {
+    let server = MockServer::start().await;
+    serve(
+        &server,
+        ResponseTemplate::new(200).set_body_raw("tea", "application/octet-stream"),
+    )
+    .await;
+    let dir = Scratch::new("stale");
+    let old = std::time::SystemTime::now() - Duration::from_secs(2 * 3600);
+    let make = |name: &str, age: Option<std::time::SystemTime>| {
+        let path = dir.file(name);
+        std::fs::write(&path, b"partial").unwrap();
+        if let Some(when) = age {
+            std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_modified(when)
+                .unwrap();
+        }
+    };
+    make(".out.bin.libtea-99999-1.part", Some(old)); // a killed run's leftover
+    make(".out.bin.libtea-99999-2.part", None); // a download in progress right now
+    make(".other.bin.libtea-99999-1.part", Some(old)); // another destination's
+    make(".out.bin.libtea-99999-3.keep", Some(old)); // not a partial file
+    to_file(
+        &service(&server),
+        &[sha256(b"tea")],
+        &dir.file("out.bin"),
+        &FileDownloadOptions::new(),
+    )
+    .await
+    .unwrap();
+    let names = dir.names();
+    assert!(
+        !names.contains(&".out.bin.libtea-99999-1.part".to_owned()),
+        "{names:?}"
+    );
+    for kept in [
+        ".out.bin.libtea-99999-2.part",
+        ".other.bin.libtea-99999-1.part",
+        ".out.bin.libtea-99999-3.keep",
+        "out.bin",
+    ] {
+        assert!(
+            names.contains(&kept.to_owned()),
+            "{kept} was removed: {names:?}"
+        );
+    }
+}

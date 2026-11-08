@@ -178,3 +178,16 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | same | `cargo test` fails while a placeholder remains, unless `LIBTEA_ALLOW_PIN_PLACEHOLDERS=1` | `unresolved_pins_block_unless_the_documented_flag_is_set`; only the exact value `1` opens the gate (`the_gate_passes_only_without_placeholders_or_with_the_exact_flag`). |
 | same | CI carries the flag exactly while placeholders exist | `ci_sets_the_flag_exactly_while_placeholders_remain`. |
 | same | The listed commands resolve every placeholder and retire the flag | `the_documented_commands_resolve_every_placeholder` runs the `sh pins-apply` block in a scratch copy with made-up SHAs. The `gh api` and `cargo search` commands above it need the network and were not run. |
+
+### B: hardening
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/cache.md` | `cache clear` removes only the cache's own files | `cache_clear_deletes_only_files_that_have_the_caches_temporary_shape` plus the unit test on the shape. |
+| `docs/cache.md` | Directory ownership is checked | The comparison and the uid probe are unit-tested; a directory actually owned by another user is **not** tested (needs a second account or root). |
+| `docs/cache.md` | Entries are opened without following links | Unit tests, including a swap between the two inspections. Mutation-checked, not a live race. |
+| `crates/tea-client/src/download.rs` docs | Partial and final files are private; stale `.part` files are removed | `partial_and_final_files_are_private`, `stale_partial_files_from_a_killed_run_are_removed_on_the_next_run`. Unix modes only. |
+| same | Without `overwrite` a link failure is an error, never a rename | Unit tests with an injected link function. Real filesystems without hard links were not tried. |
+| `docs/lock-file.md` | The lock temp name is unpredictable; text fields are bounded and clean | `a_planted_temporary_file_cannot_block_the_lock_write`, `server_text_with_control_characters_or_absurd_length_is_refused`, and the core unit test. |
+| `docs/lock-file.md` | Colliding media types get different files | `media_types_that_slug_alike_do_not_overwrite_each_other`. |
+| `docs/github-action.md`, `docs/cache.md` | Four limits are stated, not fixed | Prune cost, uncounted temp files, `SHA256SUMS` not independent, no Windows/macOS test. No test supports these; they are disclosures. |
