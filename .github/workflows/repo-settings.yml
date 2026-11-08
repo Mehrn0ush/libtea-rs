@@ -1,0 +1,33 @@
+name: Repository settings
+
+# Reports when the settings the release process depends on are missing: a ruleset
+# for main (pull request, required CI checks, no force push or deletion) and a
+# tag ruleset for v*. It changes nothing and cannot protect anything itself; the
+# rulesets do. See docs/release-checklist.md.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  settings:
+    name: repository settings
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check the rulesets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: ./scripts/check-repo-settings.sh "$REPO" main
