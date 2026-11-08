@@ -689,6 +689,8 @@ pub(crate) struct RawResponse {
     pub content_decoded: bool,
     /// Set when the response may be stored once its body has been checked.
     pending_cache: Option<Box<PendingCache>>,
+    /// Set when the body came out of the cache, so a failed check can evict it.
+    from_cache: Option<Box<CacheOrigin>>,
     /// Bearer token attached to the request that produced this response.
     presented_bearer: Option<String>,
 }
@@ -699,6 +701,15 @@ pub(crate) struct PendingCache {
     key: String,
     request_url: String,
     headers: Vec<(String, String)>,
+    /// A revalidated entry whose age restarts when the body has been checked.
+    /// `None` for a response that is new to the cache.
+    meta: Option<CacheEntryMeta>,
+}
+
+/// Where a cached body came from.
+pub(crate) struct CacheOrigin {
+    cache: Arc<Cache>,
+    key: String,
 }
 
 impl RawResponse {
@@ -711,18 +722,29 @@ impl RawResponse {
         if self.body.len() as u64 > pending.cache.config.max_entry_bytes {
             return;
         }
-        let meta = CacheEntryMeta::new(
-            &pending.key,
-            &pending.request_url,
-            200,
-            now_secs(),
-            self.content_decoded,
-            &pending.headers,
-        );
+        let meta = match &pending.meta {
+            Some(meta) => meta.clone(),
+            None => CacheEntryMeta::new(
+                &pending.key,
+                &pending.request_url,
+                200,
+                now_secs(),
+                self.content_decoded,
+                &pending.headers,
+            ),
+        };
         pending
             .cache
             .store(&pending.key, meta, self.body.to_vec())
             .await;
+    }
+
+    /// The caller's check of this body failed. If it came from the cache, drop
+    /// the entry so it is neither served again nor renewed by a `304`.
+    pub(crate) async fn evict_cached(&self) {
+        if let Some(origin) = &self.from_cache {
+            origin.cache.remove(&origin.key).await;
+        }
     }
 }
 
@@ -795,10 +817,32 @@ impl ClientInner {
             return self.send_network(call).await;
         };
 
-        let existing = cache.load(&key).await;
+        // A cache hit is subject to the same destination rules as a request:
+        // another client, with a more permissive policy, may have stored it.
+        self.policy.check_url(&call.url)?;
+        let mut existing = cache.load(&key).await;
+        // ...and to the same size limit, as it is today. Limits can be lowered
+        // after an entry was stored, and an entry can be planted.
+        if existing
+            .as_ref()
+            .is_some_and(|(_, body)| body.len() > call.max_body)
+        {
+            cache.remove(&key).await;
+            if cache.offline {
+                return Err(ClientError::TooLarge);
+            }
+            existing = None;
+        }
         if cache.offline {
             return existing
-                .map(|(meta, body)| raw_from_entry(&call.url, &meta, body))
+                .map(|(meta, body)| {
+                    let mut raw = raw_from_entry(&call.url, &meta, body);
+                    raw.from_cache = Some(Box::new(CacheOrigin {
+                        cache: Arc::clone(&cache),
+                        key: key.clone(),
+                    }));
+                    raw
+                })
                 .ok_or(ClientError::Offline);
         }
         if let Some((meta, _)) = &existing {
@@ -814,17 +858,36 @@ impl ClientInner {
                 let Some((meta, body)) = existing else {
                     return Ok(response);
                 };
-                let meta = self
-                    .refresh_entry(
-                        &cache,
-                        &key,
-                        meta,
-                        &body,
-                        &response.headers,
-                        response.presented_bearer.is_some(),
-                    )
-                    .await;
-                Ok(raw_from_entry(&url, &meta, body))
+                let revalidated = self.revalidated_meta(
+                    &cache,
+                    meta.clone(),
+                    &response.headers,
+                    response.presented_bearer.is_some(),
+                );
+                let mut raw = raw_from_entry(&url, revalidated.as_ref().unwrap_or(&meta), body);
+                raw.from_cache = Some(Box::new(CacheOrigin {
+                    cache: Arc::clone(&cache),
+                    key: key.clone(),
+                }));
+                match revalidated {
+                    // The entry's age restarts only after the body has passed the
+                    // caller's checks; a JSON body has none, so renew it now.
+                    Some(meta) => {
+                        raw.pending_cache = Some(Box::new(PendingCache {
+                            cache: Arc::clone(&cache),
+                            key,
+                            request_url: display_url(&url),
+                            headers: Vec::new(),
+                            meta: Some(meta),
+                        }));
+                        if !artifact {
+                            raw.commit_cache().await;
+                        }
+                    }
+                    // The new directives forbid keeping it.
+                    None => cache.remove(&key).await,
+                }
+                Ok(raw)
             }
             200 => {
                 let headers = storable_headers(&response.headers);
@@ -840,6 +903,7 @@ impl ClientInner {
                             key,
                             request_url: display_url(&url),
                             headers,
+                            meta: None,
                         };
                         response.pending_cache = Some(Box::new(pending));
                         // Artifact bytes are stored only after the caller has
@@ -877,34 +941,28 @@ impl ClientInner {
     }
 
     /// A `304` confirmed the stored entry: take the new validators and
-    /// directives, restart its age, and keep it, unless the new directives
-    /// forbid storing (then it is removed). Returns the entry as it now stands.
-    pub(crate) async fn refresh_entry(
+    /// directives and restart its age. Returns the entry as it should now be
+    /// stored, or `None` when the new directives forbid keeping it. Nothing is
+    /// written here: the caller stores it once the body has been checked.
+    pub(crate) fn revalidated_meta(
         &self,
-        cache: &Arc<Cache>,
-        key: &str,
+        cache: &Cache,
         mut meta: CacheEntryMeta,
-        body: &[u8],
         headers: &reqwest::header::HeaderMap,
         authenticated: bool,
-    ) -> CacheEntryMeta {
+    ) -> Option<CacheEntryMeta> {
         merge_validated_headers(&mut meta, headers);
         meta.validated_at = now_secs().max(meta.stored_at);
         let lines: Vec<&str> = meta.header("cache-control").into_iter().collect();
-        let allowed = storage_decision(
+        storage_decision(
             200,
             &CacheControl::parse(&lines),
             meta.header("vary"),
             authenticated,
             cache.config.authenticated,
         )
-        .is_ok();
-        if allowed {
-            cache.store(key, meta.clone(), body.to_vec()).await;
-        } else {
-            cache.remove(key).await;
-        }
-        meta
+        .is_ok()
+        .then_some(meta)
     }
 
     async fn wait_after_throttle(
@@ -1083,6 +1141,7 @@ impl ClientInner {
             final_url: opened.final_url,
             content_decoded: false,
             pending_cache: None,
+            from_cache: None,
             presented_bearer: opened.presented_bearer,
         }))
     }
@@ -1120,6 +1179,7 @@ impl ClientInner {
             final_url,
             content_decoded,
             pending_cache: None,
+            from_cache: None,
             presented_bearer,
         })
     }
@@ -1567,6 +1627,7 @@ fn raw_from_entry(url: &Url, meta: &CacheEntryMeta, body: Vec<u8>) -> RawRespons
         final_url: url.clone(),
         content_decoded: meta.decoded,
         pending_cache: None,
+        from_cache: None,
         presented_bearer: None,
     }
 }

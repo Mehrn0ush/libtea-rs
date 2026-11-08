@@ -153,3 +153,11 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | `docs/github-action.md` Credentials | Only the final step has the credentials | Policy test on `action.yml` (each input used once, in the run step; no other step mentions `TEA_API_KEY`, apart from the guard that only reads names). It lints text; it does not run the action on GitHub. |
 | same | The action refuses ambient credentials | Script test with the stub environment, including that no value is printed. A calling workflow that sets them anyway fails at the first step. |
 | same | Examples pass credentials via `with:` | `example_workflows_are_safe_to_copy` rejects `TEA_API_KEY` anywhere in an example. |
+
+### A3: cache hits
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/cache.md` | A hit obeys the destination policy | `a_cache_hit_obeys_this_clients_destination_policy` (buffered and streaming, with a control that serves the same entry when the origin is allowed). The check is `DestinationPolicy::check_url`, the one applied before a request; it does not repeat the DNS-level checks, which need a connection. |
+| same | A hit obeys the current size limit | `a_cache_hit_obeys_the_current_size_limit_for_json`, `an_oversize_entry_is_ignored_online_and_the_server_is_asked_afresh`, `a_streamed_cache_hit_obeys_the_size_limit_too`. |
+| same | A failed check evicts; age renews only after the check | `bytes_from_the_cache_that_fail_their_checksums_are_evicted`, `a_streamed_304_with_forged_bytes_evicts_instead_of_renewing`, `a_304_renews_the_entry_only_after_the_checksums_passed`, `a_json_304_renews_the_entry_at_once`. |

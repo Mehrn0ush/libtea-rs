@@ -14,6 +14,19 @@ CLI: `--cache-dir DIR` (or `LIBTEA_CACHE_DIR`), `--offline`,
 - Revalidates on every online use with `If-None-Match` (`ETag`) and
   `If-Modified-Since` (`Last-Modified`). A `304` serves the stored body and
   restarts the entry's age. A `200` replaces it. A `404` or `410` removes it.
+- **A hit is treated like a response.** Before an entry is used, offline or
+  after a `304`, the request URL goes through this client's destination policy
+  (an entry stored by a more permissive client for a forbidden origin is not
+  served), and the body must fit this client's current size limit
+  (`max_json_bytes`, `max_artifact_bytes`). An entry over the limit is removed
+  and, online, ignored: the server is asked afresh without a validator;
+  offline the call fails with `ClientError::TooLarge`.
+- **A failed check evicts.** If bytes served from the cache fail their
+  declared checksums (including the weak-only policy), the entry is removed, so
+  it is neither served again nor kept alive by `304` answers.
+- **Age is renewed after the check.** A `304` restarts an entry's age only
+  after the body passed the caller's checks (artifact checksums); JSON
+  metadata, which has no such check, is renewed at once.
 - **Offline** (`--offline`) answers only from the cache and opens no
   connection. A response that is not cached, or is older than the age limit,
   fails with `ClientError::Offline` (exit status 1). Anything that is not a
@@ -69,7 +82,7 @@ The cache is **not a trust boundary**.
 - *Artifact bytes are re-checked on every use.* Whether they come from the
   network or the cache, the declared checksums are verified over the decoded
   bytes, so a forged artifact entry fails with `Integrity` (tested for buffered
-  and streaming downloads, online with a `304` and offline). Note what that
+  and streaming downloads, online with a `304` and offline) and is evicted. Note what that
   does and does not cover: the checksums themselves come from the artifact
   *metadata*, which may also be served from the cache. A cache writer who
   forges both is not detected. That is the limit of "never trusted" here.

@@ -34,6 +34,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use libtea_core::checksum::ContentDecoder;
 use libtea_core::http_cache::{CacheEntryMeta, NotStored};
@@ -44,7 +45,7 @@ use reqwest::header::{CONTENT_ENCODING, CONTENT_TYPE, ETAG};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use url::Url;
 
-use crate::cache::now_secs;
+use crate::cache::{now_secs, Cache};
 use crate::error::ClientError;
 use crate::transport::{
     decide_storage, display_url, header_str, map_api_error, storable_headers, Call, StreamStart,
@@ -345,10 +346,29 @@ impl Service {
                         .await
                 };
             };
+            // A cache hit is subject to the destination rules and the size limit
+            // of this client, whoever stored it and whenever.
+            inner.policy.check_url(&call.url)?;
             existing = cache.load(key).await.filter(|(meta, _)| meta.decoded);
+            if existing.as_ref().is_some_and(|(_, body)| body.len() > max) {
+                cache.remove(key).await;
+                if cache.offline {
+                    return Err(ClientError::TooLarge);
+                }
+                existing = None;
+            }
             if cache.offline {
                 let (meta, body) = existing.ok_or(ClientError::Offline)?;
-                return serve_cached(inner, &call.url, &meta, &body, checksums, writer).await;
+                return serve_cached(
+                    inner,
+                    Some((cache, key)),
+                    &call.url,
+                    &meta,
+                    &body,
+                    checksums,
+                    writer,
+                )
+                .await;
             }
             if let Some((meta, _)) = &existing {
                 call.if_none_match = meta.header("etag").map(str::to_owned);
@@ -381,11 +401,28 @@ impl Service {
                 if let (Some(cache), Some(key)) = (&cache, &key) {
                     if raw.status.as_u16() == 304 {
                         if let Some((meta, data)) = existing {
-                            let meta = inner
-                                .refresh_entry(cache, key, meta, &data, &raw.headers, false)
-                                .await;
-                            return serve_cached(inner, &url, &meta, &data, checksums, writer)
-                                .await;
+                            let revalidated =
+                                inner.revalidated_meta(cache, meta.clone(), &raw.headers, false);
+                            let shown = revalidated.as_ref().unwrap_or(&meta);
+                            let served = serve_cached(
+                                inner,
+                                Some((cache, key)),
+                                &url,
+                                shown,
+                                &data,
+                                checksums,
+                                writer,
+                            )
+                            .await;
+                            // The entry's age restarts only after its bytes passed
+                            // the checksum check; a failure has already evicted it.
+                            if served.is_ok() {
+                                match revalidated {
+                                    Some(meta) => cache.store(key, meta, data).await,
+                                    None => cache.remove(key).await,
+                                }
+                            }
+                            return served;
                         }
                     } else if matches!(raw.status.as_u16(), 404 | 410) {
                         cache.remove(key).await;
@@ -487,6 +524,7 @@ fn checked(verifier: ChecksumVerifier) -> Result<IntegrityReport, ClientError> {
 /// a download: the cache is not trusted.
 async fn serve_cached<W>(
     inner: &crate::transport::ClientInner,
+    origin: Option<(&Arc<Cache>, &str)>,
     url: &Url,
     meta: &CacheEntryMeta,
     body: &[u8],
@@ -503,7 +541,16 @@ where
         .flush()
         .await
         .map_err(|err| io_error("flushing the download", &err))?;
-    let integrity = checked(verifier)?;
+    let integrity = match checked(verifier) {
+        Ok(integrity) => integrity,
+        Err(error) => {
+            // Bytes from the cache that fail their checksums are not kept.
+            if let Some((cache, key)) = origin {
+                cache.remove(key).await;
+            }
+            return Err(error);
+        }
+    };
     let etag = meta.header("etag").map(str::to_owned);
     let strong_etag = etag
         .as_ref()

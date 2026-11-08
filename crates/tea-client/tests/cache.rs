@@ -141,10 +141,25 @@ fn key_for(url: &Url, key_id: Option<&str>) -> String {
 }
 
 fn plant(dir: &Dir, key: &str, body: &[u8], etag: Option<&str>, validated_at: u64) {
-    let mut headers = vec![(
-        "content-type".to_owned(),
-        "application/octet-stream".to_owned(),
-    )];
+    plant_typed(
+        dir,
+        key,
+        body,
+        etag,
+        validated_at,
+        "application/octet-stream",
+    );
+}
+
+fn plant_typed(
+    dir: &Dir,
+    key: &str,
+    body: &[u8],
+    etag: Option<&str>,
+    validated_at: u64,
+    content_type: &str,
+) {
+    let mut headers = vec![("content-type".to_owned(), content_type.to_owned())];
     if let Some(etag) = etag {
         headers.push(("etag".to_owned(), etag.to_owned()));
     }
@@ -512,7 +527,16 @@ async fn a_forged_artifact_entry_is_caught_by_the_checksum_check() {
         "{error:?}"
     );
 
-    // Offline, the same forged entry meets the same check, buffered and streaming.
+    // A failed check evicts the entry (see the eviction tests), so plant it
+    // again: offline, the same forged entry meets the same check, buffered
+    // and streaming.
+    plant(
+        &dir,
+        &key_for(&url, None),
+        b"forged bytes",
+        Some("\"v1\""),
+        now(),
+    );
     let offline = builder(&server)
         .cache_dir(dir.cache())
         .offline(true)
@@ -530,6 +554,13 @@ async fn a_forged_artifact_entry_is_caught_by_the_checksum_check() {
         .await
         .unwrap_err();
     assert!(matches!(error, ClientError::Integrity { .. }), "{error:?}");
+    plant(
+        &dir,
+        &key_for(&url, None),
+        b"forged bytes",
+        Some("\"v1\""),
+        now(),
+    );
     let out = dir.0.join("out.bin");
     let error = svc
         .download_artifact_to_file(
@@ -1089,4 +1120,389 @@ async fn stat_and_clear_touch_only_cache_entries() {
     );
     #[cfg(unix)]
     assert_eq!(std::fs::read(dir.0.join("precious.txt")).unwrap(), b"keep");
+}
+
+// ------------------------------------------- A3: hits obey limits and policy
+
+fn entry_meta_of(dir: &Dir, key: &str) -> libtea_core::http_cache::CacheEntryMeta {
+    let bytes = std::fs::read(dir.cache().join("v1").join(format!("{key}.entry"))).unwrap();
+    libtea_core::http_cache::decode_entry(&bytes, key, 1 << 24)
+        .unwrap()
+        .0
+}
+
+#[tokio::test]
+async fn a_cache_hit_obeys_the_current_size_limit_for_json() {
+    let server = MockServer::start().await;
+    let dir = Dir::new("hit-json-size");
+    let url = Url::parse(&format!("{}{}", server.uri(), release_path())).unwrap();
+    // Stored under a larger limit (or planted): 3000 bytes against a 1000-byte limit.
+    plant(
+        &dir,
+        &key_for(&url, None),
+        &vec![b'x'; 3000],
+        Some("\"v1\""),
+        now(),
+    );
+    let limits = Limits::default()
+        .with_initial_backoff(Duration::ZERO)
+        .with_max_retries(0)
+        .with_max_json_bytes(1000);
+    let offline = builder(&server)
+        .limits(limits)
+        .cache_dir(dir.cache())
+        .offline(true)
+        .build()
+        .unwrap();
+    let error = get_release(&service(&offline, &server)).await.unwrap_err();
+    assert!(matches!(error, ClientError::TooLarge), "{error:?}");
+    assert!(
+        dir.entry_files().is_empty(),
+        "an entry over the limit is dropped"
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_oversize_entry_is_ignored_online_and_the_server_is_asked_afresh() {
+    let server = MockServer::start().await;
+    let dir = Dir::new("hit-online-size");
+    let url = artifact_url(&server);
+    plant(
+        &dir,
+        &key_for(&url, None),
+        &vec![b'x'; 5000],
+        Some("\"old\""),
+        now(),
+    );
+    Mock::given(method("GET"))
+        .and(path(url.path()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("etag", "\"new\"")
+                .set_body_raw(vec![b'y'; 500], "application/octet-stream"),
+        )
+        .mount(&server)
+        .await;
+    let limits = Limits::default()
+        .with_initial_backoff(Duration::ZERO)
+        .with_max_retries(0)
+        .with_max_artifact_bytes(1000);
+    let client = builder(&server)
+        .limits(limits)
+        .cache_dir(dir.cache())
+        .build()
+        .unwrap();
+    let fetched = service(&client, &server)
+        .download_artifact(ArtifactId::parse(ART).unwrap(), 1, None, &[], None)
+        .await
+        .unwrap();
+    let ArtifactFetch::Body(body) = fetched else {
+        panic!("expected a body");
+    };
+    assert_eq!(body.bytes.len(), 500);
+    let seen = request_headers(&server).await;
+    assert_eq!(seen.len(), 1);
+    assert!(
+        !seen[0].contains_key("if-none-match"),
+        "an entry over the limit must not supply a validator"
+    );
+}
+
+#[tokio::test]
+async fn a_streamed_cache_hit_obeys_the_size_limit_too() {
+    let server = MockServer::start().await;
+    let dir = Dir::new("hit-stream-size");
+    let url = artifact_url(&server);
+    plant(&dir, &key_for(&url, None), &vec![b'x'; 5000], None, now());
+    let limits = Limits::default()
+        .with_initial_backoff(Duration::ZERO)
+        .with_max_retries(0)
+        .with_max_artifact_bytes(1000);
+    let offline = builder(&server)
+        .limits(limits)
+        .cache_dir(dir.cache())
+        .offline(true)
+        .build()
+        .unwrap();
+    let out = dir.0.join("out.bin");
+    let error = service(&offline, &server)
+        .download_artifact_to_file(
+            ArtifactId::parse(ART).unwrap(),
+            1,
+            None,
+            &[],
+            &out,
+            &FileDownloadOptions::new(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, ClientError::TooLarge), "{error:?}");
+    assert!(!out.exists());
+}
+
+/// An artifact whose only format is fetched from `external` (a different
+/// origin from the API root).
+fn external_artifact(external: &MockServer, checksum: &Checksum) -> libtea_core::Artifact {
+    let body = serde_json::json!({
+        "uuid": ART, "version": 1, "type": "BOM",
+        "createdDate": "2024-01-01T00:00:00Z",
+        "formats": [{
+            "mediaType": "application/octet-stream",
+            "url": format!("{}/v1.0.0/artifact/{ART}/1/download", external.uri()),
+            "checksums": [{"algType": "SHA-256", "algValue": checksum.hex_value()}]
+        }]
+    });
+    libtea_core::parse_artifact(body.to_string().as_bytes()).unwrap()
+}
+
+#[tokio::test]
+async fn a_cache_hit_obeys_this_clients_destination_policy() {
+    let api = MockServer::start().await;
+    let external = MockServer::start().await; // never allowed by the client below
+    let dir = Dir::new("hit-policy");
+    let good = b"genuine bytes";
+    let ext_url = Url::parse(&format!(
+        "{}/v1.0.0/artifact/{ART}/1/download",
+        external.uri()
+    ))
+    .unwrap();
+    // Another client, with a permissive policy, stored it.
+    plant(&dir, &key_for(&ext_url, None), good, Some("\"v1\""), now());
+    let artifact = external_artifact(&external, &sha256(good));
+
+    // This client may talk to `api` only.
+    let strict = builder(&api)
+        .cache_dir(dir.cache())
+        .offline(true)
+        .build()
+        .unwrap();
+    let svc = service(&strict, &api);
+    let buffered = svc
+        .download_format(&artifact, "application/octet-stream", None)
+        .await;
+    assert!(
+        matches!(buffered, Err(ClientError::Policy(_))),
+        "a cached response from a forbidden origin was served: {buffered:?}"
+    );
+    let mut sink: Vec<u8> = Vec::new();
+    let streamed = svc
+        .download_format_to_writer(&artifact, "application/octet-stream", &mut sink)
+        .await;
+    assert!(
+        matches!(streamed, Err(ClientError::Policy(_))),
+        "{streamed:?}"
+    );
+    assert!(sink.is_empty(), "no byte may reach the writer");
+
+    // Control: with the origin allowed, the same entry is served.
+    let permissive = Client::builder()
+        .destination_policy(
+            DestinationPolicy::allow_origin(&Url::parse(&api.uri()).unwrap())
+                .unwrap()
+                .and_allow(&Url::parse(&external.uri()).unwrap())
+                .unwrap(),
+        )
+        .cache_dir(dir.cache())
+        .offline(true)
+        .build()
+        .unwrap();
+    let ok = service(&permissive, &api)
+        .download_format(&artifact, "application/octet-stream", None)
+        .await;
+    assert!(matches!(ok, Ok(ArtifactFetch::Body(_))), "{ok:?}");
+}
+
+// ------------------------- A3: failed checks evict; age renews only after them
+
+#[tokio::test]
+async fn bytes_from_the_cache_that_fail_their_checksums_are_evicted() {
+    let server = MockServer::start().await;
+    let dir = Dir::new("evict");
+    let url = artifact_url(&server);
+    let key = key_for(&url, None);
+    let good = b"genuine bytes";
+    let id = ArtifactId::parse(ART).unwrap();
+    let old = now() - 1000;
+
+    // Online: the server confirms the forged entry with a 304.
+    plant(&dir, &key, b"forged bytes", Some("\"v1\""), old);
+    Mock::given(method("GET"))
+        .and(path(url.path()))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(url.path()))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("etag", "\"v2\"")
+                .set_body_raw(good.to_vec(), "application/octet-stream"),
+        )
+        .with_priority(5)
+        .mount(&server)
+        .await;
+    let client = builder(&server).cache_dir(dir.cache()).build().unwrap();
+    let svc = service(&client, &server);
+    let error = svc
+        .download_artifact(id, 1, None, &[sha256(good)], None)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, ClientError::Integrity { .. }), "{error:?}");
+    assert!(
+        dir.entry_files().is_empty(),
+        "the forged entry must be gone, not renewed by the 304"
+    );
+    // The next try asks without a validator and gets the genuine bytes.
+    let healed = svc
+        .download_artifact(id, 1, None, &[sha256(good)], None)
+        .await
+        .unwrap();
+    assert!(matches!(healed, ArtifactFetch::Body(_)));
+    let seen = request_headers(&server).await;
+    assert!(!seen.last().unwrap().contains_key("if-none-match"));
+    assert_eq!(entry_meta_of(&dir, &key).header("etag"), Some("\"v2\""));
+
+    // Offline, buffered.
+    plant(&dir, &key, b"forged bytes", Some("\"v1\""), old);
+    let offline = builder(&server)
+        .cache_dir(dir.cache())
+        .offline(true)
+        .build()
+        .unwrap();
+    let error = service(&offline, &server)
+        .download_artifact(id, 1, None, &[sha256(good)], None)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, ClientError::Integrity { .. }), "{error:?}");
+    assert!(dir.entry_files().is_empty());
+
+    // Offline, streamed.
+    plant(&dir, &key, b"forged bytes", Some("\"v1\""), old);
+    let out = dir.0.join("out.bin");
+    let error = service(&offline, &server)
+        .download_artifact_to_file(
+            id,
+            1,
+            None,
+            &[sha256(good)],
+            &out,
+            &FileDownloadOptions::new(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, ClientError::Integrity { .. }), "{error:?}");
+    assert!(dir.entry_files().is_empty());
+    assert!(!out.exists());
+}
+
+#[tokio::test]
+async fn a_streamed_304_with_forged_bytes_evicts_instead_of_renewing() {
+    let server = MockServer::start().await;
+    let dir = Dir::new("evict-stream");
+    let url = artifact_url(&server);
+    let good = b"genuine bytes";
+    plant(
+        &dir,
+        &key_for(&url, None),
+        b"forged bytes",
+        Some("\"v1\""),
+        now() - 1000,
+    );
+    Mock::given(method("GET"))
+        .and(path(url.path()))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .mount(&server)
+        .await;
+    let client = builder(&server).cache_dir(dir.cache()).build().unwrap();
+    let out = dir.0.join("out.bin");
+    let error = service(&client, &server)
+        .download_artifact_to_file(
+            ArtifactId::parse(ART).unwrap(),
+            1,
+            None,
+            &[sha256(good)],
+            &out,
+            &FileDownloadOptions::new(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, ClientError::Integrity { .. }), "{error:?}");
+    assert!(dir.entry_files().is_empty());
+    assert!(!out.exists());
+}
+
+#[tokio::test]
+async fn a_304_renews_the_entry_only_after_the_checksums_passed() {
+    let server = MockServer::start().await;
+    let dir = Dir::new("renew");
+    let url = artifact_url(&server);
+    let key = key_for(&url, None);
+    let good = b"genuine bytes";
+    let stale = now() - 3600;
+    plant(&dir, &key, good, Some("\"v1\""), stale);
+    Mock::given(method("GET"))
+        .and(path(url.path()))
+        .and(header("if-none-match", "\"v1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .mount(&server)
+        .await;
+    let client = builder(&server).cache_dir(dir.cache()).build().unwrap();
+    let svc = service(&client, &server);
+    let id = ArtifactId::parse(ART).unwrap();
+    svc.download_artifact(id, 1, None, &[sha256(good)], None)
+        .await
+        .unwrap();
+    let renewed = entry_meta_of(&dir, &key).validated_at;
+    assert!(
+        renewed >= now() - 5,
+        "buffered: validated_at {renewed} was not renewed"
+    );
+
+    // Streamed.
+    plant(&dir, &key, good, Some("\"v1\""), stale);
+    let out = dir.0.join("out.bin");
+    svc.download_artifact_to_file(
+        id,
+        1,
+        None,
+        &[sha256(good)],
+        &out,
+        &FileDownloadOptions::new(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        entry_meta_of(&dir, &key).validated_at >= now() - 5,
+        "streamed: not renewed"
+    );
+}
+
+#[tokio::test]
+async fn a_json_304_renews_the_entry_at_once() {
+    let server = MockServer::start().await;
+    let dir = Dir::new("renew-json");
+    let url = Url::parse(&format!("{}{}", server.uri(), release_path())).unwrap();
+    let key = key_for(&url, None);
+    let body = serde_json::to_vec(&release_body()).unwrap();
+    plant_typed(
+        &dir,
+        &key,
+        &body,
+        Some("\"r1\""),
+        now() - 3600,
+        "application/json",
+    );
+    Mock::given(method("GET"))
+        .and(path(release_path()))
+        .and(header("if-none-match", "\"r1\""))
+        .respond_with(ResponseTemplate::new(304))
+        .mount(&server)
+        .await;
+    let client = builder(&server).cache_dir(dir.cache()).build().unwrap();
+    get_release(&service(&client, &server)).await.unwrap();
+    assert!(entry_meta_of(&dir, &key).validated_at >= now() - 5);
 }

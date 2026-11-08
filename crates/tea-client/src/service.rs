@@ -792,6 +792,9 @@ impl Service {
             integrity.outcome,
             IntegrityOutcome::Verified | IntegrityOutcome::NotDeclared
         ) {
+            // Bytes that came from the cache and failed their checksums must
+            // not stay there to be served (or renewed by a 304) again.
+            response.evict_cached().await;
             return Err(ClientError::Integrity {
                 outcome: integrity.outcome.clone(),
                 report: integrity,
