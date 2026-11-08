@@ -46,3 +46,10 @@ path = "fuzz_targets/origin_policy.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "content_decoding"
+path = "fuzz_targets/content_decoding.rs"
+test = false
+doc = false
+bench = false

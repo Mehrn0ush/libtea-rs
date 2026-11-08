@@ -408,6 +408,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "libtea-core"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "blake2",
+ "blake3",
+ "digest",
+ "flate2",
+ "idna",
+ "idna_adapter",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "sha3",
+ "thiserror",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "litemap"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -636,26 +658,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.7",
-]
-
-[[package]]
-name = "libtea-core"
-version = "0.1.0"
-dependencies = [
- "base64",
- "blake2",
- "blake3",
- "digest",
- "flate2",
- "semver",
- "serde",
- "serde_json",
- "sha1",
- "sha2",
- "sha3",
- "thiserror",
- "url",
- "uuid",
 ]
 
 [[package]]
