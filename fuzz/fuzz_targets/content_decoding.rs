@@ -38,4 +38,31 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(a, b);
     }
     assert_eq!(whole.is_ok(), chunked.is_ok());
+
+    // Draining after every chunk (the streaming download path) must agree with
+    // the buffered result, and the cap must cover everything already taken.
+    let mut drained = match ContentDecoder::new(coding, CAP) {
+        Ok(decoder) => decoder,
+        Err(_) => return,
+    };
+    let mut collected = Vec::new();
+    let mut ok = true;
+    for chunk in rest.chunks(step) {
+        if drained.push(chunk).is_err() {
+            ok = false;
+            break;
+        }
+        collected.extend(drained.take_output());
+        assert!(collected.len() <= CAP);
+    }
+    if ok {
+        match drained.finish() {
+            Ok(tail) => collected.extend(tail),
+            Err(_) => ok = false,
+        }
+    }
+    assert_eq!(ok, whole.is_ok());
+    if let (true, Ok(expected)) = (ok, &whole) {
+        assert_eq!(&collected, expected);
+    }
 });

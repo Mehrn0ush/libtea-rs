@@ -105,6 +105,14 @@ pub enum SignatureFetch {
 }
 
 impl Service {
+    pub(crate) fn client_ref(&self) -> &Client {
+        &self.client
+    }
+
+    pub(crate) fn prefix_ref(&self) -> &Url {
+        &self.prefix
+    }
+
     pub(crate) fn from_parts(
         client: Client,
         root: Url,
@@ -584,6 +592,7 @@ impl Service {
                 content_type: None,
                 basic_auth: false,
                 if_none_match: None,
+                if_modified_since: None,
                 max_body: 0,
             })
             .await?;
@@ -698,6 +707,7 @@ impl Service {
                 content_type: None,
                 basic_auth: false,
                 if_none_match: None,
+                if_modified_since: None,
                 max_body: if artifact {
                     self.client.inner.limits.max_artifact_bytes
                 } else {
@@ -749,6 +759,7 @@ impl Service {
                 content_type: None,
                 basic_auth: false,
                 if_none_match: if_none_match.map(str::to_owned),
+                if_modified_since: None,
                 max_body: self.client.inner.limits.max_artifact_bytes,
             })
             .await?;
@@ -781,11 +792,16 @@ impl Service {
             integrity.outcome,
             IntegrityOutcome::Verified | IntegrityOutcome::NotDeclared
         ) {
+            // Bytes that came from the cache and failed their checksums must
+            // not stay there to be served (or renewed by a 304) again.
+            response.evict_cached().await;
             return Err(ClientError::Integrity {
                 outcome: integrity.outcome.clone(),
                 report: integrity,
             });
         }
+        // The body passed its checks; only now may the cache keep it.
+        response.commit_cache().await;
         let etag = header_string(&response, "etag");
         let strong_etag = etag
             .as_ref()

@@ -18,6 +18,6 @@
 | `spec/vendor/tea-collection/tea-collection.md` | `tea-collection/tea-collection.md` | `6a511779eb00fb3a74ba5bd7649b1a31c143ce4005294c3f76e4b372ab62327d` |
 | `spec/vendor/tei-types/README.md` | `tei-types/README.md` | `ea2c76cab3c610e6fd32d7425a8dee78f8b539778f28677c89ba2c63ab271bab` |
 
-Machine-readable copy: `spec/manifest.json`. Re-pin procedure: `docs/re-pinning.md`.
+Machine-readable copy: `spec/manifest.json`. Re-pin procedure: `spec/RE-PINNING.md`.
 
 Publisher OpenAPI (`spec/publisher/`) is **not** vendored; publisher API is out of scope.

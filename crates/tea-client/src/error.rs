@@ -81,6 +81,29 @@ pub enum ClientError {
         /// Per-algorithm detail.
         report: IntegrityReport,
     },
+    /// A local file operation of a streaming download failed (for example the
+    /// destination exists, is a symbolic link, or could not be written).
+    /// *Experimental.* The text names the operation and the I/O error kind.
+    #[error("file error: {0}")]
+    Io(String),
+    /// The server answered a `GET` with `429` or `503` and the retries (which
+    /// honor `Retry-After` up to [`crate::Limits::max_retry_after`]) ran out, or
+    /// the server asked for a longer wait than that limit allows.
+    #[error(
+        "the server asked the client to slow down (HTTP {status}{})",
+        retry_suffix(retry_after_secs)
+    )]
+    #[non_exhaustive]
+    Throttled {
+        /// `429` or `503`.
+        status: u16,
+        /// The wait the server asked for, in seconds, when it said.
+        retry_after_secs: Option<u64>,
+    },
+    /// Offline mode: the response is not in the cache (or is too old), or the
+    /// request cannot be served from a cache at all.
+    #[error("offline: the response is not in the cache")]
+    Offline,
     /// The token endpoint rejected the credential exchange.
     #[error("token request failed ({error})")]
     #[non_exhaustive]
@@ -88,6 +111,13 @@ pub enum ClientError {
         /// OAuth error code or HTTP status.
         error: String,
     },
+}
+
+fn retry_suffix(seconds: &Option<u64>) -> String {
+    match seconds {
+        Some(seconds) => format!(", retry after {seconds}s"),
+        None => String::new(),
+    }
 }
 
 fn tea_suffix(error: &Option<String>) -> String {

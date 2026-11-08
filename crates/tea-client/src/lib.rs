@@ -38,6 +38,8 @@
 #![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
+mod cache;
+mod download;
 mod error;
 pub mod page_stream;
 mod service;
@@ -47,6 +49,8 @@ mod transport;
 // `url::Url` appears in `ClientBuilder::well_known_fetch_url`; see the semver note in `libtea-core`.
 pub use url;
 
+pub use cache::{cache_clear, cache_stat, CacheConfig, CacheStats};
+pub use download::{FileDownload, FileDownloadOptions, StreamedDownload};
 pub use error::ClientError;
 pub use page_stream::{follow_pages, FollowedPage, PageFollowLimits, PageFollowStop};
 pub use service::{ArtifactFetch, CleFetch, DownloadedArtifact, Service, SignatureFetch};
@@ -167,6 +171,7 @@ impl Client {
                     content_type: None,
                     basic_auth: false,
                     if_none_match: None,
+                    if_modified_since: None,
                     max_body: self.inner.limits.max_json_bytes,
                 })
                 .await;
@@ -262,6 +267,7 @@ impl Client {
                 content_type: None,
                 basic_auth: false,
                 if_none_match: None,
+                if_modified_since: None,
                 max_body: self.inner.limits.max_discovery_bytes,
             })
             .await?;

@@ -1,0 +1,29 @@
+{
+  "timestamp_utc": "20261108T172637Z",
+  "client_version": "0.1.0",
+  "spec_commit": "962a0228af1bfcc1232ac3f79239317ff33fdb04",
+  "server_base_url": "https://www.vulnetix.com/tea",
+  "tei": "tei://vulnetix.com/uuid/71286087-babf-5795-a6ce-4c350bc944b4",
+  "auth_mode": "anonymous",
+  "checksum_result": "checksum_match_decoded_bytes",
+  "allow_weak_checksums": false,
+  "pass": 3,
+  "fail": 0,
+  "operations": [
+    {
+      "operation": "discover",
+      "status": "pass",
+      "detail": "71286087-babf-5795-a6ce-4c350bc944b4\thttps://www.vulnetix.com/tea\t1.0.0"
+    },
+    {
+      "operation": "product-release",
+      "status": "pass",
+      "detail": "ok"
+    },
+    {
+      "operation": "download",
+      "status": "pass",
+      "detail": "declared checksums matched decoded bytes (not publisher authenticity)"
+    }
+  ]
+}

@@ -1,0 +1,154 @@
+# GitHub Action: install a released libtea binary, verify it, run a command.
+#
+# Downloads the release archive for the runner, checks its SHA-256 against the
+# release's SHA256SUMS (fetched fresh on every run, so a poisoned cache entry is
+# rejected), verifies the build-provenance attestation when `gh` is available,
+# caches the archive, and runs `libtea`.
+#
+# Credentials: the `api-key-id` and `api-key-secret` inputs, from your secrets.
+# They are read in exactly one place, the environment of the final "Run libtea"
+# step. Do NOT put TEA_API_KEY_ID / TEA_API_KEY_SECRET in `env:` of the calling
+# step, the job or the workflow: a composite action's steps inherit that
+# environment, so third-party actions inside it (actions/cache) would see the
+# secret. The first step refuses to run if it finds them there. Input values
+# reach the scripts through `env:`, never through the shell text, and are not
+# echoed.
+#
+# No release has been published yet, and the pin of `actions/cache` below is a
+# placeholder (docs/release-pins.md). Documentation: docs/github-action.md.
+
+name: libtea
+description: Install a verified libtea release binary and run a TEA command (sync, diff, discover, download, ...).
+
+inputs:
+  version:
+    description: libtea version to install, for example 0.1.0 (no leading v). Required; there is no "latest".
+    required: true
+  command:
+    description: "One of: sync, diff, discover, download, product-release, collections, parse-tei, spec, conformance."
+    required: true
+  tei:
+    description: TEI (tei://...) for sync, discover and parse-tei.
+    required: false
+    default: ""
+  lock-file:
+    description: Lock file path for sync, and the old lock for diff.
+    required: false
+    default: ""
+  lock-file-new:
+    description: The new lock file for diff.
+    required: false
+    default: ""
+  base-url:
+    description: API base URL for download, product-release and collections (passed as --base).
+    required: false
+    default: ""
+  check:
+    description: "true runs `sync --check` (exit 7 when the server differs from the lock)."
+    required: false
+    default: "false"
+  api-key-id:
+    description: "API key identifier, from a secret. Reaches only the final step that runs libtea (as TEA_API_KEY_ID). Do not set TEA_API_KEY_ID in env: instead; the action refuses to run if it is set."
+    required: false
+    default: ""
+  api-key-secret:
+    description: "API key secret, taken from a repository secret. Reaches only the final step that runs libtea (as TEA_API_KEY_SECRET)."
+    required: false
+    default: ""
+  extra-args:
+    description: Further libtea arguments, one per line, passed verbatim without a shell. Do not put credentials here.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory to run libtea in.
+    required: false
+    default: ""
+  libc:
+    description: "Linux only: gnu (default) or musl."
+    required: false
+    default: gnu
+  repository:
+    description: Repository whose releases are used.
+    required: false
+    default: Mehrn0ush/libtea-rs
+  attestation:
+    description: "auto (verify when gh is installed), required (fail without gh) or skip."
+    required: false
+    default: auto
+  cache:
+    description: Cache the downloaded archive between runs ("true" or "false"). A cached archive is re-hashed against SHA256SUMS on every run.
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: libtea's exit status (docs/cli-exit-codes.md). The step also fails when it is not 0.
+    value: ${{ steps.run.outputs.exit-code }}
+  attestation:
+    description: "verified or not-checked."
+    value: ${{ steps.attest.outputs.attestation }}
+
+runs:
+  using: composite
+  steps:
+    # First, before anything else (and before any third-party action) can see it.
+    - name: Refuse credentials in the ambient environment
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/action/refuse-ambient-credentials.sh"
+    - name: Resolve the release target
+      id: target
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        VERSION: ${{ inputs.version }}
+        LIBC: ${{ inputs.libc }}
+      run: bash "$ACTION_PATH/scripts/action/resolve-target.sh"
+    - name: Restore the cached archive
+      if: inputs.cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/libtea-cache
+        key: libtea-${{ inputs.version }}-${{ steps.target.outputs.target }}
+    - name: Download and verify the release archive
+      id: fetch
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        VERSION: ${{ inputs.version }}
+        TARGET: ${{ steps.target.outputs.target }}
+        ARCHIVE: ${{ steps.target.outputs.archive }}
+        EXE: ${{ steps.target.outputs.exe }}
+        REPO: ${{ inputs.repository }}
+        INSTALL_DIR: ${{ runner.temp }}/libtea-bin
+        CACHE_DIR: ${{ runner.temp }}/libtea-cache
+      run: bash "$ACTION_PATH/scripts/action/fetch-and-verify.sh"
+    - name: Verify the build-provenance attestation
+      id: attest
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ARCHIVE_PATH: ${{ steps.fetch.outputs.archive-path }}
+        VERSION: ${{ inputs.version }}
+        REPO: ${{ inputs.repository }}
+        ATTESTATION: ${{ inputs.attestation }}
+        GH_TOKEN: ${{ github.token }}
+      run: bash "$ACTION_PATH/scripts/action/verify-attestation.sh"
+    - name: Run libtea
+      id: run
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        COMMAND: ${{ inputs.command }}
+        TEI: ${{ inputs.tei }}
+        LOCK_FILE: ${{ inputs.lock-file }}
+        LOCK_FILE_NEW: ${{ inputs.lock-file-new }}
+        BASE_URL: ${{ inputs.base-url }}
+        CHECK: ${{ inputs.check }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+        WORKDIR: ${{ inputs.working-directory }}
+        # The only place the credentials are read.
+        TEA_API_KEY_ID: ${{ inputs.api-key-id }}
+        TEA_API_KEY_SECRET: ${{ inputs.api-key-secret }}
+      run: bash "$ACTION_PATH/scripts/action/run-libtea.sh"

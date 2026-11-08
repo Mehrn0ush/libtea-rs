@@ -9,9 +9,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use clap::{Parser, Subcommand};
-use libtea_client::{ApiKey, ArtifactFetch, Client, ClientBuilder, ClientError};
+use libtea_client::{ApiKey, ArtifactFetch, ClientBuilder, ClientError};
 use libtea_core::{spec, IntegrityOutcome, ListParams, Tei};
 use url::Url;
 
@@ -36,27 +36,111 @@ macro_rules! err {
     };
 }
 
+mod sync;
+
 const ENV_API_KEY_ID: &str = "TEA_API_KEY_ID";
 const ENV_API_KEY_SECRET: &str = "TEA_API_KEY_SECRET";
 
-/// Exit status when every declared checksum matched but all of them use weak
-/// algorithms (SHA-1) and `--allow-weak-checksums` was not given.
-const EXIT_WEAK_CHECKSUMS: u8 = 4;
+/// Process exit statuses. Documented in `docs/cli-exit-codes.md` and in
+/// `--help`; the numbers are part of the CLI contract.
+mod exit {
+    /// Success.
+    pub const OK: u8 = 0;
+    /// Any failure not covered by a more specific status (network, I/O,
+    /// server error, local file refusal).
+    pub const FAILURE: u8 = 1;
+    /// Bad command line or bad input value (clap uses 2 for argument errors).
+    pub const USAGE: u8 = 2;
+    /// Authentication or authorization failed (missing or rejected credential).
+    pub const AUTH: u8 = 3;
+    /// Every declared checksum matched but all use weak algorithms (SHA-1) and
+    /// `--allow-weak-checksums` was not given.
+    pub const WEAK_CHECKSUMS: u8 = 4;
+    /// The identifier or object was not found or not resolved.
+    pub const NOT_FOUND: u8 = 5;
+    /// Integrity was not established: a checksum failed, could not be
+    /// computed, or was required and absent.
+    pub const INTEGRITY: u8 = 6;
+    /// A comparison found changes (`sync --check`, `diff`).
+    pub const CHANGES_DETECTED: u8 = 7;
+}
 
-/// Marker error for [`EXIT_WEAK_CHECKSUMS`].
+/// A failure with a chosen exit status, raised by the CLI itself.
 #[derive(Debug)]
-struct WeakChecksums;
+struct Coded {
+    status: u8,
+    message: String,
+}
 
-impl std::fmt::Display for WeakChecksums {
+impl std::fmt::Display for Coded {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            "only weak checksum algorithms (SHA-1) were declared for this format; \
-             that is not Verified. Pass --allow-weak-checksums to accept it",
-        )
+        f.write_str(&self.message)
     }
 }
 
-impl std::error::Error for WeakChecksums {}
+impl std::error::Error for Coded {}
+
+fn coded(status: u8, message: impl Into<String>) -> anyhow::Error {
+    Coded {
+        status,
+        message: message.into(),
+    }
+    .into()
+}
+
+fn usage(message: impl Into<String>) -> anyhow::Error {
+    coded(exit::USAGE, message)
+}
+
+const WEAK_MESSAGE: &str = "only weak checksum algorithms (SHA-1) were declared for this format; \
+     that is not Verified. Pass --allow-weak-checksums to accept it";
+
+/// Map an error to its exit status and a stable `kind` string for `--json`.
+fn classify(error: &anyhow::Error) -> (u8, &'static str) {
+    if let Some(coded) = error.downcast_ref::<Coded>() {
+        return (coded.status, kind_for(coded.status));
+    }
+    if let Some(client) = error.downcast_ref::<ClientError>() {
+        let status = match client {
+            ClientError::AuthenticationRequired
+            | ClientError::Forbidden
+            | ClientError::Token { .. } => exit::AUTH,
+            ClientError::Api {
+                status: 401 | 403, ..
+            } => exit::AUTH,
+            ClientError::Api { status: 404, .. } | ClientError::Unresolved { .. } => {
+                exit::NOT_FOUND
+            }
+            ClientError::Integrity {
+                outcome: IntegrityOutcome::Weak,
+                ..
+            } => exit::WEAK_CHECKSUMS,
+            ClientError::Integrity { .. } => exit::INTEGRITY,
+            _ => exit::FAILURE,
+        };
+        return (status, kind_for(status));
+    }
+    // A bare model, TEI or policy error comes from a value the user passed.
+    if error.downcast_ref::<libtea_core::TeiError>().is_some()
+        || error.downcast_ref::<libtea_core::ModelError>().is_some()
+        || error.downcast_ref::<libtea_core::PolicyError>().is_some()
+    {
+        return (exit::USAGE, kind_for(exit::USAGE));
+    }
+    (exit::FAILURE, kind_for(exit::FAILURE))
+}
+
+fn kind_for(status: u8) -> &'static str {
+    match status {
+        exit::USAGE => "usage",
+        exit::AUTH => "auth",
+        exit::WEAK_CHECKSUMS => "weak_checksums",
+        exit::NOT_FOUND => "not_found",
+        exit::INTEGRITY => "integrity",
+        exit::CHANGES_DETECTED => "changes_detected",
+        _ => "error",
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -64,7 +148,12 @@ impl std::error::Error for WeakChecksums {}
     about = "Transparency Exchange API consumer (libtea-rs)",
     after_help = "Credentials: prefer TEA_API_KEY_ID and TEA_API_KEY_SECRET. \
 CLI --api-key-secret is supported for compatibility but is insecure (process list / shell history). \
-Do not mix a CLI id with an environment secret (or the reverse). Precedence: complete CLI pair, else complete environment pair, else anonymous."
+Do not mix a CLI id with an environment secret (or the reverse). Precedence: complete CLI pair, else complete environment pair, else anonymous.
+
+Exit status: 0 success; 1 failure; 2 usage or bad input; 3 authentication or authorization; \
+4 only weak (SHA-1) checksums matched; 5 not found or not resolved; 6 integrity not established; \
+7 changes detected (sync --check, diff). With --json a failure is one JSON object on stderr. \
+See docs/cli-exit-codes.md and docs/cli-json.md."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -86,7 +175,11 @@ enum Command {
         json: bool,
     },
     /// Run the offline smoke checks and print a JSON report (not a certification).
-    Conformance,
+    Conformance {
+        /// Accepted for uniformity: the report is always JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Resolve a TEI through `.well-known/tea` and `/discovery`.
     Discover {
         tei: String,
@@ -101,6 +194,8 @@ enum Command {
         /// Allow HTTP and non-public addresses for this origin only.
         #[arg(long)]
         allow_origin: Option<Url>,
+        #[command(flatten)]
+        cache: CacheArgs,
         #[arg(long)]
         json: bool,
     },
@@ -116,6 +211,8 @@ enum Command {
         credentials: CredentialArgs,
         #[arg(long)]
         allow_origin: Option<Url>,
+        #[command(flatten)]
+        cache: CacheArgs,
         #[arg(long)]
         json: bool,
     },
@@ -142,6 +239,8 @@ enum Command {
         credentials: CredentialArgs,
         #[arg(long)]
         allow_origin: Option<Url>,
+        #[command(flatten)]
+        cache: CacheArgs,
         #[arg(long)]
         json: bool,
     },
@@ -179,11 +278,157 @@ enum Command {
         /// every declared checksum matched the decoded bytes.
         #[arg(long)]
         require_checksums: bool,
+        /// Print one JSON object describing the download on stdout. Requires
+        /// --output, so that stdout carries only the JSON.
+        #[arg(long, requires = "output")]
+        json: bool,
         #[command(flatten)]
         credentials: CredentialArgs,
         #[arg(long)]
         allow_origin: Option<Url>,
+        #[command(flatten)]
+        cache: CacheArgs,
     },
+    /// Resolve a TEI, fetch and verify its artifacts, and write a lock file
+    /// (`--check`: compare with the lock instead and exit 7 on differences).
+    Sync {
+        tei: String,
+        /// The lock file to write, or with --check to compare against.
+        #[arg(long)]
+        lock: PathBuf,
+        /// Do not write: exit 7 if the server differs from the lock.
+        #[arg(long)]
+        check: bool,
+        /// Also keep the verified artifact bytes here, one file per format.
+        #[arg(long, conflicts_with = "check")]
+        artifacts_dir: Option<PathBuf>,
+        /// Product release UUID, when the TEI resolves to several.
+        #[arg(long)]
+        product_release: Option<String>,
+        /// Lock this collection version instead of the latest.
+        #[arg(long)]
+        collection_version: Option<u64>,
+        /// Record this time (RFC 3339 UTC, `Z`) as fetchedAt instead of now.
+        #[arg(long)]
+        fetched_at: Option<String>,
+        /// Accept artifacts whose declared checksums are all weak (SHA-1).
+        #[arg(long)]
+        allow_weak_checksums: bool,
+        /// Send the API key to token endpoints learned from discovery.
+        #[arg(long)]
+        allow_discovered_credentials: bool,
+        /// Fetch the well-known document from this URL instead of the TEI domain.
+        #[arg(long)]
+        well_known_url: Option<Url>,
+        /// Allow HTTP and non-public addresses for this origin only.
+        #[arg(long)]
+        allow_origin: Option<Url>,
+        #[command(flatten)]
+        credentials: CredentialArgs,
+        #[command(flatten)]
+        cache: CacheArgs,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Compare two lock files offline; exit 7 if they differ (fetchedAt is ignored).
+    Diff {
+        old: PathBuf,
+        new: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect or empty the persistent response cache.
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum CacheAction {
+    /// Count entries and bytes without changing anything.
+    Stat {
+        /// The cache directory. Defaults to $LIBTEA_CACHE_DIR.
+        #[arg(long)]
+        cache_dir: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove every cache entry. Other files in the directory are left alone.
+    Clear {
+        /// The cache directory. Defaults to $LIBTEA_CACHE_DIR.
+        #[arg(long)]
+        cache_dir: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+impl Command {
+    /// Whether the user asked for JSON output.
+    fn json(&self) -> bool {
+        match self {
+            Command::Spec { json }
+            | Command::ParseTei { json, .. }
+            | Command::Conformance { json }
+            | Command::Discover { json, .. }
+            | Command::ProductRelease { json, .. }
+            | Command::Collections { json, .. }
+            | Command::Download { json, .. }
+            | Command::Sync { json, .. }
+            | Command::Diff { json, .. } => *json,
+            Command::Cache { action } => match action {
+                CacheAction::Stat { json, .. } | CacheAction::Clear { json, .. } => *json,
+            },
+        }
+    }
+}
+
+/// Persistent cache options (`docs/cache.md`). Off unless a directory is given.
+#[derive(Debug, Clone, clap::Args)]
+struct CacheArgs {
+    /// Keep a response cache in this directory (created private, mode 0700).
+    /// Defaults to $LIBTEA_CACHE_DIR when that is set.
+    #[arg(long)]
+    cache_dir: Option<PathBuf>,
+    /// Answer only from the cache and never connect. Needs a cache directory;
+    /// a response that is not cached fails.
+    #[arg(long)]
+    offline: bool,
+    /// Also cache responses to credentialed requests and `private` responses.
+    #[arg(long)]
+    cache_authenticated: bool,
+}
+
+const ENV_CACHE_DIR: &str = "LIBTEA_CACHE_DIR";
+
+impl CacheArgs {
+    fn dir(&self) -> Option<PathBuf> {
+        self.cache_dir.clone().or_else(|| {
+            std::env::var_os(ENV_CACHE_DIR)
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+        })
+    }
+}
+
+/// Apply the cache options to a client builder.
+fn with_cache(builder: ClientBuilder, args: &CacheArgs) -> anyhow::Result<ClientBuilder> {
+    let Some(dir) = args.dir() else {
+        if args.offline {
+            return Err(usage(
+                "--offline needs a cache directory (--cache-dir or LIBTEA_CACHE_DIR)",
+            ));
+        }
+        if args.cache_authenticated {
+            return Err(usage(
+                "--cache-authenticated needs a cache directory (--cache-dir or LIBTEA_CACHE_DIR)",
+            ));
+        }
+        return Ok(builder);
+    };
+    let config = libtea_client::CacheConfig::new(dir).with_authenticated(args.cache_authenticated);
+    Ok(builder.cache(config).offline(args.offline))
 }
 
 #[derive(Debug, clap::Args)]
@@ -198,15 +443,28 @@ struct CredentialArgs {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run(Cli::parse()).await {
-        Ok(()) => ExitCode::SUCCESS,
+    let cli = Cli::parse();
+    let json = cli.command.json();
+    match run(cli).await {
+        Ok(()) => ExitCode::from(exit::OK),
         Err(error) => {
-            err!("Error: {error:?}");
-            if error.downcast_ref::<WeakChecksums>().is_some() {
-                ExitCode::from(EXIT_WEAK_CHECKSUMS)
+            let (status, kind) = classify(&error);
+            if json {
+                eprintln!(
+                    "{}",
+                    serde_json::json!({
+                        "schema_version": 1,
+                        "error": {
+                            "kind": kind,
+                            "exit_code": status,
+                            "message": clean(&format!("{error:#}")),
+                        },
+                    })
+                );
             } else {
-                ExitCode::FAILURE
+                err!("Error: {error:?}");
             }
+            ExitCode::from(status)
         }
     }
 }
@@ -264,11 +522,11 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
             }
         }
-        Command::Conformance => {
+        Command::Conformance { .. } => {
             let report = libtea_conformance::static_report();
             out!("{}", report.to_json()?);
             if !report.passed() {
-                anyhow::bail!("conformance checks failed");
+                return Err(coded(exit::FAILURE, "conformance checks failed"));
             }
         }
         Command::Discover {
@@ -277,11 +535,14 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             allow_discovered_credentials,
             well_known_url,
             allow_origin,
+            cache,
             json,
         } => {
             let parsed = Tei::parse(&tei)?;
-            let mut builder =
-                ClientBuilder::new().allow_discovered_credentials(allow_discovered_credentials);
+            let mut builder = with_cache(
+                ClientBuilder::new().allow_discovered_credentials(allow_discovered_credentials),
+                &cache,
+            )?;
             if let Some((id, secret)) = resolve_api_key(&credentials)? {
                 builder = builder.api_key(ApiKey::new(id, secret));
             }
@@ -322,9 +583,11 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             uuid,
             credentials,
             allow_origin,
+            cache,
             json,
         } => {
-            let client = configured_client(&credentials, allow_origin)?;
+            let client =
+                with_cache(configured_builder(&credentials, allow_origin)?, &cache)?.build()?;
             let service = client.service(&base, &api_version)?;
             let id = libtea_core::ProductReleaseId::parse(&uuid)?;
             let release = service.get_product_release(id).await?;
@@ -344,12 +607,14 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             page_token,
             credentials,
             allow_origin,
+            cache,
             json,
         } => {
             if latest && version.is_some() {
-                anyhow::bail!("pass only one of --latest and --version");
+                return Err(usage("pass only one of --latest and --version"));
             }
-            let client = configured_client(&credentials, allow_origin)?;
+            let client =
+                with_cache(configured_builder(&credentials, allow_origin)?, &cache)?.build()?;
             let service = client.service(&base, &api_version)?;
             let id = libtea_core::ProductReleaseId::parse(&uuid)?;
             if latest {
@@ -392,10 +657,12 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             force,
             allow_weak_checksums,
             require_checksums,
+            json,
             credentials,
             allow_origin,
+            cache,
         } => {
-            let client = configured_builder(&credentials, allow_origin)?
+            let client = with_cache(configured_builder(&credentials, allow_origin)?, &cache)?
                 .allow_weak_checksums(allow_weak_checksums)
                 .build()?;
             let service = client.service(&base, &api_version)?;
@@ -408,57 +675,254 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             let selected = match media_type {
                 Some(media_type) => media_type,
                 None if metadata.formats.len() == 1 => metadata.formats[0].media_type.clone(),
-                None => anyhow::bail!(
-                    "artifact has {} formats; pass --media-type",
-                    metadata.formats.len()
-                ),
+                None => {
+                    return Err(usage(format!(
+                        "artifact has {} formats; pass --media-type",
+                        metadata.formats.len()
+                    )))
+                }
             };
-            let fetched = match service.download_format(&metadata, &selected, None).await {
-                Ok(fetched) => fetched,
-                Err(ClientError::Integrity {
-                    outcome: IntegrityOutcome::Weak,
-                    ..
-                }) => return Err(WeakChecksums.into()),
-                Err(other) => return Err(other.into()),
-            };
-            let ArtifactFetch::Body(body) = fetched else {
-                anyhow::bail!("artifact was not modified");
-            };
-            match body.integrity.outcome {
-                IntegrityOutcome::Verified
-                    if body.integrity.checks.iter().all(|check| check.weak) =>
-                {
-                    err!(
-                        "integrity verified with weak algorithms only, accepted by --allow-weak-checksums (decoded-byte checksums only; not publisher authenticity)\tstrong_etag {}\tbytes {}",
-                        body.strong_etag,
-                        body.bytes.len()
-                    );
-                }
-                IntegrityOutcome::Verified => {
-                    err!(
-                        "integrity verified (decoded-byte checksums only; not publisher authenticity)\tstrong_etag {}\tbytes {}",
-                        body.strong_etag,
-                        body.bytes.len()
-                    );
-                }
-                IntegrityOutcome::NotDeclared if require_checksums => {
-                    anyhow::bail!(
-                        "checksums were not declared for this format and --require-checksums is set"
-                    );
-                }
-                IntegrityOutcome::NotDeclared => {
-                    err!(
-                        "checksums were not declared for this format; decoded-byte checksums were not checked"
-                    );
-                }
-                other => {
-                    anyhow::bail!("decoded-byte checksum integrity was not Verified ({other:?})")
-                }
+            // No declared checksum means the outcome could only be NotDeclared,
+            // so refuse before any bytes are fetched or written.
+            if require_checksums
+                && metadata
+                    .format(&selected)
+                    .is_some_and(|format| format.checksums.as_ref().is_none_or(Vec::is_empty))
+            {
+                return Err(coded(
+                    exit::INTEGRITY,
+                    "checksums were not declared for this format and --require-checksums is set",
+                ));
             }
             if let Some(path) = output {
-                write_output(&path, &body.bytes, force)?;
+                check_output_target(&path, force)?;
+                let options = libtea_client::FileDownloadOptions::new().with_overwrite(force);
+                let result = service
+                    .download_format_to_file(&metadata, &selected, &path, &options)
+                    .await
+                    .map_err(map_download_error)?;
+                let download = &result.download;
+                note_integrity(
+                    &download.integrity,
+                    download.strong_etag,
+                    download.bytes_written,
+                );
+                if json {
+                    out!(
+                        "{}",
+                        download_json(&artifact, revision, &selected, &path, download,)
+                    );
+                }
             } else {
+                // Stdout cannot take bytes back, so this path holds the whole
+                // body in memory and prints it only after the check.
+                let fetched = service
+                    .download_format(&metadata, &selected, None)
+                    .await
+                    .map_err(map_download_error)?;
+                let ArtifactFetch::Body(body) = fetched else {
+                    return Err(coded(exit::FAILURE, "artifact was not modified"));
+                };
+                note_integrity(&body.integrity, body.strong_etag, body.bytes.len() as u64);
                 std::io::stdout().write_all(&body.bytes)?;
+            }
+        }
+        Command::Sync {
+            tei,
+            lock,
+            check,
+            artifacts_dir,
+            product_release,
+            collection_version,
+            fetched_at,
+            allow_weak_checksums,
+            allow_discovered_credentials,
+            well_known_url,
+            allow_origin,
+            credentials,
+            cache,
+            json,
+        } => {
+            sync::sync(sync::SyncOptions {
+                tei,
+                lock,
+                check,
+                artifacts_dir,
+                product_release,
+                collection_version,
+                fetched_at,
+                allow_weak_checksums,
+                allow_discovered_credentials,
+                well_known_url,
+                allow_origin,
+                credentials,
+                cache,
+                json,
+            })
+            .await?;
+        }
+        Command::Diff { old, new, json } => sync::diff(&old, &new, json)?,
+        Command::Cache { action } => cache_command(action)?,
+    }
+    Ok(())
+}
+
+/// A weak-only match gets its own exit status; everything else keeps its type.
+fn map_download_error(error: ClientError) -> anyhow::Error {
+    match error {
+        ClientError::Integrity {
+            outcome: IntegrityOutcome::Weak,
+            ..
+        } => coded(exit::WEAK_CHECKSUMS, WEAK_MESSAGE),
+        other => other.into(),
+    }
+}
+
+/// Say on stderr what the integrity check did and did not establish.
+fn note_integrity(report: &libtea_core::IntegrityReport, strong_etag: bool, bytes: u64) {
+    match report.outcome {
+        IntegrityOutcome::Verified if report.checks.iter().all(|check| check.weak) => {
+            err!(
+                "integrity verified with weak algorithms only, accepted by --allow-weak-checksums (decoded-byte checksums only; not publisher authenticity)\tstrong_etag {strong_etag}\tbytes {bytes}"
+            );
+        }
+        IntegrityOutcome::Verified => {
+            err!(
+                "integrity verified (decoded-byte checksums only; not publisher authenticity)\tstrong_etag {strong_etag}\tbytes {bytes}"
+            );
+        }
+        _ => {
+            err!(
+                "checksums were not declared for this format; decoded-byte checksums were not checked"
+            );
+        }
+    }
+}
+
+/// Name of an outcome for JSON. `Unknown` covers outcomes added later.
+fn outcome_name(outcome: &IntegrityOutcome) -> &'static str {
+    match outcome {
+        IntegrityOutcome::Verified => "Verified",
+        IntegrityOutcome::Failed => "Failed",
+        IntegrityOutcome::Unsupported => "Unsupported",
+        IntegrityOutcome::Incomplete => "Incomplete",
+        IntegrityOutcome::NotDeclared => "NotDeclared",
+        IntegrityOutcome::Weak => "Weak",
+        _ => "Unknown",
+    }
+}
+
+/// Strip userinfo, query and fragment: a final URL may carry a signed query.
+fn redact_url(url: &str) -> String {
+    match Url::parse(url) {
+        Ok(mut parsed) => {
+            let _ = parsed.set_username("");
+            let _ = parsed.set_password(None);
+            parsed.set_query(None);
+            parsed.set_fragment(None);
+            parsed.to_string()
+        }
+        Err(_) => "(unparseable url)".to_owned(),
+    }
+}
+
+/// The `download --json` object. Fields are documented in `docs/cli-json.md`.
+fn download_json(
+    artifact: &str,
+    revision: Option<u64>,
+    media_type: &str,
+    output: &Path,
+    download: &libtea_client::StreamedDownload,
+) -> serde_json::Value {
+    let checks: Vec<_> = download
+        .integrity
+        .checks
+        .iter()
+        .map(|check| {
+            serde_json::json!({
+                "algorithm": check.algorithm,
+                "expected": check.expected,
+                "actual": check.actual,
+                "supported": check.supported,
+                "matched": check.matched,
+                "weak": check.weak,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "schema_version": 1,
+        "artifact": artifact,
+        "revision": revision,
+        "media_type": media_type,
+        "output": output.display().to_string(),
+        "bytes_written": download.bytes_written,
+        "content_type": download.content_type,
+        "content_encoding": download.content_encoding,
+        "etag": download.etag,
+        "strong_etag": download.strong_etag,
+        "final_url": redact_url(&download.final_url),
+        "integrity": {
+            "outcome": outcome_name(&download.integrity.outcome),
+            "scope": "decoded artifact bytes; not publisher authenticity",
+            "checks": checks,
+        },
+    })
+}
+
+/// `libtea cache stat` and `libtea cache clear`.
+fn cache_command(action: CacheAction) -> anyhow::Result<()> {
+    let (dir, json, clear) = match action {
+        CacheAction::Stat { cache_dir, json } => (cache_dir, json, false),
+        CacheAction::Clear { cache_dir, json } => (cache_dir, json, true),
+    };
+    let dir = dir
+        .or_else(|| {
+            std::env::var_os(ENV_CACHE_DIR)
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+        })
+        .ok_or_else(|| usage("pass --cache-dir or set LIBTEA_CACHE_DIR"))?;
+    if clear {
+        let removed = libtea_client::cache_clear(&dir)?;
+        if json {
+            out!(
+                "{}",
+                serde_json::json!({
+                    "schema_version": 1,
+                    "dir": dir.display().to_string(),
+                    "removed": removed,
+                })
+            );
+        } else {
+            out!("removed {removed} files from {}", dir.display());
+        }
+    } else {
+        let stats = libtea_client::cache_stat(&dir)?;
+        if json {
+            out!(
+                "{}",
+                serde_json::json!({
+                    "schema_version": 1,
+                    "dir": stats.dir.display().to_string(),
+                    "exists": stats.exists,
+                    "entries": stats.entries,
+                    "bytes": stats.bytes,
+                    "foreign": stats.foreign,
+                    "oldest_age_secs": stats.oldest_age_secs,
+                    "newest_age_secs": stats.newest_age_secs,
+                })
+            );
+        } else {
+            out!("dir {}", stats.dir.display());
+            out!("exists {}", stats.exists);
+            out!("entries {}", stats.entries);
+            out!("bytes {}", stats.bytes);
+            out!("foreign {}", stats.foreign);
+            if let Some(age) = stats.oldest_age_secs {
+                out!("oldest_age_secs {age}");
+            }
+            if let Some(age) = stats.newest_age_secs {
+                out!("newest_age_secs {age}");
             }
         }
     }
@@ -503,20 +967,20 @@ fn resolve_api_key(args: &CredentialArgs) -> anyhow::Result<Option<(String, Stri
             match (env_id, env_secret) {
                 (Some(id), Some(secret)) => Ok(Some((id, secret))),
                 (None, None) => Ok(None),
-                (Some(_), None) => Err(anyhow!(
+                (Some(_), None) => Err(usage(format!(
                     "{ENV_API_KEY_ID} is set but {ENV_API_KEY_SECRET} is missing or empty"
-                )),
-                (None, Some(_)) => Err(anyhow!(
+                ))),
+                (None, Some(_)) => Err(usage(format!(
                     "{ENV_API_KEY_SECRET} is set but {ENV_API_KEY_ID} is missing or empty"
-                )),
+                ))),
             }
         }
-        (Some(_), None) => Err(anyhow!(
+        (Some(_), None) => Err(usage(format!(
             "--api-key-id requires --api-key-secret (or omit both and use {ENV_API_KEY_ID}/{ENV_API_KEY_SECRET})"
-        )),
-        (None, Some(_)) => Err(anyhow!(
+        ))),
+        (None, Some(_)) => Err(usage(format!(
             "--api-key-secret requires --api-key-id (prefer {ENV_API_KEY_ID}/{ENV_API_KEY_SECRET})"
-        )),
+        ))),
     }
 }
 
@@ -524,74 +988,37 @@ fn nonempty(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.is_empty())
 }
 
-/// Write `bytes` to a caller-chosen path without following symlinks.
+/// Refuse an `--output` path early, with CLI wording. The library checks the
+/// same things again when it commits the file.
 ///
-/// Without `force` the file must not exist (`create_new`, so a path that
-/// appears between the check and the open is refused too). With `force` an
-/// existing regular file is replaced by renaming a temporary file from the
-/// same directory over it; `rename` replaces a link itself, never its target.
-fn write_output(path: &Path, bytes: &[u8], force: bool) -> anyhow::Result<()> {
+/// Without `--force` the path must not exist; with it an existing regular file
+/// is replaced by renaming a finished temporary file from the same directory
+/// over it. A symbolic link at the path is always refused (`rename` would
+/// replace the link itself, never its target).
+fn check_output_target(path: &Path, force: bool) -> anyhow::Result<()> {
     match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            anyhow::bail!(
+        Ok(meta) if meta.file_type().is_symlink() => Err(coded(
+            exit::FAILURE,
+            format!(
                 "refusing to write {}: it is a symbolic link",
                 path.display()
-            )
-        }
-        Ok(_) if !force => anyhow::bail!(
-            "{} already exists; pass --force to replace it",
-            path.display()
-        ),
-        Ok(meta) if !meta.is_file() => {
-            anyhow::bail!("{} exists and is not a regular file", path.display())
-        }
-        Ok(_) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => {
-            return Err(err).with_context(|| format!("inspecting {}", path.display()));
-        }
+            ),
+        )),
+        Ok(_) if !force => Err(coded(
+            exit::FAILURE,
+            format!(
+                "{} already exists; pass --force to replace it",
+                path.display()
+            ),
+        )),
+        Ok(meta) if !meta.is_file() => Err(coded(
+            exit::FAILURE,
+            format!("{} exists and is not a regular file", path.display()),
+        )),
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| format!("inspecting {}", path.display())),
     }
-    if !force {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .with_context(|| format!("creating {}", path.display()))?;
-        if let Err(err) = file.write_all(bytes).and_then(|()| file.sync_all()) {
-            drop(file);
-            let _ = std::fs::remove_file(path);
-            return Err(err).with_context(|| format!("writing {}", path.display()));
-        }
-        return Ok(());
-    }
-    let name = path
-        .file_name()
-        .ok_or_else(|| anyhow!("{} has no file name", path.display()))?;
-    let dir = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let mut temp_name = std::ffi::OsString::from(".");
-    temp_name.push(name);
-    temp_name.push(format!(".libtea-{}.tmp", std::process::id()));
-    let temp = dir.join(temp_name);
-    let result = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)
-        .and_then(|mut file| file.write_all(bytes).and_then(|()| file.sync_all()))
-        .and_then(|()| std::fs::rename(&temp, path));
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temp);
-    }
-    result.with_context(|| format!("replacing {}", path.display()))
-}
-
-fn configured_client(
-    credentials: &CredentialArgs,
-    allow_origin: Option<Url>,
-) -> anyhow::Result<Client> {
-    Ok(configured_builder(credentials, allow_origin)?.build()?)
 }
 
 fn configured_builder(

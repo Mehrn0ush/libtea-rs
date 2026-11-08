@@ -21,7 +21,7 @@ A `401` with `WWW-Authenticate: Bearer`, with no error or with `error=invalid_to
 
 The request body is only `grant_type=client_credentials`. No `scope` or `audience` parameter is sent. A `scope` on the token response is ignored. When `expires_in` is greater than five seconds, the cached token is treated as expired five seconds early. A shorter positive lifetime is kept for its full `expires_in`. `expires_in` of `0` is already expired. If `expires_in` is omitted, the token stays cached until the server rejects it.
 
-**Token-refresh serialization (revised in the 2026-11-07 audit):** refresh uses one async lock **per API origin**, created on first use for an origin the key may be sent to. Behavior:
+**Token-refresh serialization:** refresh uses one async lock **per API origin**, created on first use for an origin the key may be sent to. Behavior:
 
 1. A challenge that should refresh acquires that origin's lock before `POST /token`.
 2. After waiting, if the cache already holds a usable bearer different from the value that received `401` (or any bearer when none was presented), that token is reused and no additional exchange runs.
@@ -44,9 +44,9 @@ An exception from `DestinationPolicy::allow_origin` is one origin: scheme, hostn
 
 DNS answers are filtered for the URL of the request in progress. A non-public answer is kept only when that exact origin is excepted. If the resolver is not running inside a request, only public addresses are kept. IPv4-mapped IPv6, 6to4, and NAT64 (`64:ff9b::/96`) are classified by the embedded IPv4 address. The filtered addresses are what the HTTP client connects to: reqwest does not look the name up again for that connection. A literal IP skips the resolver and is classified by `check_url` before the request is sent. This has been checked from the reqwest and hyper connection code. It has not been exercised with a hostile DNS server that changes its answer between lookups. IPv4-compatible `::a.b.c.d`, site-local `fec0::/10`, and NAT64 local-use `64:ff9b:1::/48` are not public.
 
-**Proxies (decision 2026-11-07):** environment proxies (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, lowercase forms, and `NO_PROXY`) are honored by default, as reqwest does. Through a proxy, the client connects to the proxy and the **proxy resolves the target hostname**, so the DNS-answer filtering above is **not enforced** for hostname URLs: a discovered `https://internal.example` that resolves to `10.0.0.5` is fetched by the proxy. Scheme, userinfo, literal-IP, blocked-hostname, and per-hop redirect checks still run, and bearer tokens stay scoped to the API prefix. The proxy address itself is not checked against the policy. `ClientBuilder::ignore_env_proxies(true)` makes the client connect directly and keeps the DNS checks; use it for clients that follow discovered URLs. Regression: `env_proxy_is_used_by_default_and_skipped_with_ignore_env_proxies` (`crates/tea-client/tests/proxy_env.rs`).
+**Proxies:** environment proxies (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, lowercase forms, and `NO_PROXY`) are honored by default, as reqwest does. Through a proxy, the client connects to the proxy and the **proxy resolves the target hostname**, so the DNS-answer filtering above is **not enforced** for hostname URLs: a discovered `https://internal.example` that resolves to `10.0.0.5` is fetched by the proxy. Scheme, userinfo, literal-IP, blocked-hostname, and per-hop redirect checks still run, and bearer tokens stay scoped to the API prefix. The proxy address itself is not checked against the policy. `ClientBuilder::ignore_env_proxies(true)` makes the client connect directly and keeps the DNS checks; use it for clients that follow discovered URLs. Regression: `env_proxy_is_used_by_default_and_skipped_with_ignore_env_proxies` (`crates/tea-client/tests/proxy_env.rs`).
 
-**Weak checksums (decision 2026-11-07):** when every declared checksum uses a weak algorithm (`SHA-1`; `MD5` is flagged weak but never computed and is shorter than the schema's 40-character minimum), a full match is `IntegrityOutcome::Weak`, not `Verified`, and `Service::download_*` returns `ClientError::Integrity`. `ClientBuilder::allow_weak_checksums(true)` (CLI `--allow-weak-checksums`, core `ChecksumPolicy::with_allow_weak`) reports such a match as `Verified`; `ChecksumCheck::weak` stays `true` so callers can still see it. A weak checksum next to a strong one does not block `Verified`; a weak mismatch is always `Failed`.
+**Weak checksums:** when every declared checksum uses a weak algorithm (`SHA-1`; `MD5` is flagged weak but never computed and is shorter than the schema's 40-character minimum), a full match is `IntegrityOutcome::Weak`, not `Verified`, and `Service::download_*` returns `ClientError::Integrity`. `ClientBuilder::allow_weak_checksums(true)` (CLI `--allow-weak-checksums`, core `ChecksumPolicy::with_allow_weak`) reports such a match as `Verified`; `ChecksumCheck::weak` stays `true` so callers can still see it. A weak checksum next to a strong one does not block `Verified`; a weak mismatch is always `Failed`.
 
 `deflate` is decoded as the zlib wrapper defined for HTTP, not as raw DEFLATE. `gzip` is unchanged. Encoded input and decoded output are both limited by the artifact size cap. `HEAD` and `304` responses are not treated as bodies; `Content-Length` on those responses describes the selected representation.
 
@@ -58,9 +58,9 @@ Checksums are computed on the bytes after one content coding is removed. `gzip` 
 
 ## Limits
 
-Defaults: discovery body 1 MiB, JSON body 8 MiB, artifact body 256 MiB, five redirects, 30 second request timeout, 10 second connect timeout, two transport retries, four discovery attempts, and eight in-flight requests. Callers can lower these. `max_in_flight` must be at least 1.
+Defaults: discovery body 1 MiB, JSON body 8 MiB, artifact body 256 MiB, five redirects, two transport retries, four discovery attempts, and eight in-flight requests. Timeouts (request, download, idle and connect) are in [architecture.md](architecture.md#timeouts). Callers can change these limits. `max_in_flight` must be at least 1.
 
-Retries apply to transport failures, timeouts, and HTTP 503 on `GET`. They do not apply to TEA error bodies. The discovery attempt bound is separate from the per-request retry bound.
+Retries apply to transport failures, timeouts, and HTTP 429 and 503 on `GET`; a `Retry-After` longer than `Limits::max_retry_after` fails at once with `ClientError::Throttled`. They do not apply to TEA error bodies. The discovery attempt bound is separate from the per-request retry bound.
 
 ## Dependency and supply-chain notes
 
@@ -71,3 +71,11 @@ The lockfile is committed. `deny.toml` allows common permissive licenses and den
 ## Out of scope
 
 This SDK does not verify detached signature technology, trust anchors, Sigstore trust policy, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. Callers who need that assurance have to verify signatures themselves. The client can download signature bytes and does not interpret them.
+
+## Persistent cache
+
+The opt-in response cache (`docs/cache.md`) is not a trust boundary: its entries
+are checked for corruption, not authenticity, and anyone who can write the
+directory can feed the client fake metadata. The directory is private by
+construction, artifact bytes are re-checked against declared checksums on every
+use, and credentials and secrets are never stored.

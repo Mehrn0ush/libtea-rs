@@ -21,7 +21,9 @@ pub mod checksum;
 pub mod discovery;
 pub mod enums;
 pub mod error;
+pub mod http_cache;
 pub mod ids;
+pub mod lock;
 pub mod model;
 pub mod policy;
 pub mod tei;
@@ -44,6 +46,10 @@ pub use error::{escape_control_chars, ModelError, PolicyError, TeiError};
 pub use ids::{
     ArtifactId, CollectionId, ComponentId, ComponentReleaseId, DistributionId, ProductId,
     ProductReleaseId, TeaTimestamp, TeaUuid,
+};
+pub use lock::{
+    diff as diff_locks, ChangedArtifact, FieldChange, LockDiff, LockFile, LockedArtifact,
+    LockedChecksum, LockedIntegrity, LOCK_SCHEMA_VERSION,
 };
 pub use model::{
     parse_artifact, parse_collection, parse_component_release, parse_product_release, Artifact,

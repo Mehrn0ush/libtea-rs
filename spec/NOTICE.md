@@ -12,7 +12,7 @@ License: the vendored `spec/vendor/openapi.yaml` declares
 `info.license.identifier: Apache-2.0` and points to the upstream `LICENSE` file.
 The Apache License 2.0 text is in this repository's root `LICENSE`. The
 upstream `LICENSE` and any upstream `NOTICE` file are not vendored. Re-check
-them at the pinned commit when re-pinning (`docs/re-pinning.md`).
+them at the pinned commit when re-pinning (`spec/RE-PINNING.md`).
 
 These files are specification inputs for tests and documentation. They are not
 packaged into the published `libtea-core` or `libtea-client` crates (check
