@@ -1,0 +1,267 @@
+# Release binaries: build, checksum, SBOM, provenance, DRAFT GitHub release.
+#
+# Triggered only by pushing a tag. It never publishes to crates.io and holds no
+# repository secret. Three third-party actions and the cargo-cyclonedx version
+# are not pinned yet: their `PIN_ME_*` placeholders make the workflow fail at
+# job setup until `docs/release-pins.md` is followed. Not run yet.
+#
+# Jobs and their authority:
+#   meta           contents: read     validates the tag, no build
+#   build (x7)     contents: read     builds and packages; no token, no secret
+#   sbom           contents: read     CycloneDX SBOM of the CLI's dependency tree
+#   attest         contents: read, id-token: write, attestations: write
+#                                     checksums + build-provenance attestation;
+#                                     runs no repository code
+#   draft-release  contents: write    creates the draft; has no source checkout
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    name: validate tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      dry_run: ${{ steps.tag.outputs.dry_run }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the tag against the crate version
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: ./scripts/check-release-tag.sh "$TAG" >> "$GITHUB_OUTPUT"
+      - name: A real release comes from main
+        env:
+          DRY_RUN: ${{ steps.tag.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" == "false" ]]; then
+            git fetch --no-tags origin main
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          fi
+
+  build:
+    name: build ${{ matrix.target }}
+    needs: meta
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+            exe: ""
+            musl: false
+            smoke: true
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-24.04
+            exe: ""
+            musl: true
+            smoke: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            exe: ""
+            musl: false
+            smoke: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            exe: ""
+            musl: true
+            smoke: true
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            exe: ""
+            musl: false
+            smoke: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            exe: ""
+            musl: false
+            smoke: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            exe: ".exe"
+            musl: false
+            smoke: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: "1.89.0"
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+      - name: Build libtea
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=/src
+        run: |
+          set -euo pipefail
+          if [[ "$TARGET" == *-musl ]]; then
+            underscored="${TARGET//-/_}"
+            export "CC_${underscored}=musl-gcc"
+            export "CARGO_TARGET_${underscored^^}_LINKER=musl-gcc"
+          fi
+          cargo build --release --locked -p libtea-cli --target "$TARGET"
+      - name: Smoke test
+        if: matrix.smoke
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          EXE: ${{ matrix.exe }}
+        run: |
+          set -euo pipefail
+          bin="target/$TARGET/release/libtea$EXE"
+          "$bin" spec --json | grep -q '962a0228af1bfcc1232ac3f79239317ff33fdb04'
+          "$bin" --help > /dev/null
+      - name: Package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          EXE: ${{ matrix.exe }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          py="$(command -v python3 || command -v python)"
+          "$py" scripts/package-release.py --target "$TARGET" --version "$VERSION" \
+            --binary "target/$TARGET/release/libtea$EXE" --out dist
+      - name: Upload package
+        uses: actions/upload-artifact@PIN_ME_UPLOAD_ARTIFACT
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  sbom:
+    name: CycloneDX SBOM
+    needs: meta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      # Replace with an exact released version (docs/release-pins.md).
+      CARGO_CYCLONEDX_VERSION: PIN_ME_CARGO_CYCLONEDX_VERSION
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: "1.89.0"
+      - name: Install cargo-cyclonedx at a pinned version
+        run: |
+          set -euo pipefail
+          [[ "$CARGO_CYCLONEDX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "CARGO_CYCLONEDX_VERSION is not pinned; see docs/release-pins.md" >&2
+            exit 1
+          }
+          cargo install cargo-cyclonedx --locked --version "$CARGO_CYCLONEDX_VERSION"
+      - name: Generate the SBOM
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: ./scripts/make-sbom.sh "dist/libtea-${VERSION}.cdx.json"
+      - name: Upload SBOM
+        uses: actions/upload-artifact@PIN_ME_UPLOAD_ARTIFACT
+        with:
+          name: dist-sbom
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  attest:
+    name: checksums and provenance
+    needs: [build, sbom]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download packages and SBOM
+        uses: actions/download-artifact@PIN_ME_DOWNLOAD_ARTIFACT
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+      - name: SHA-256 checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          printf '%s\n' ./* | sed 's|^\./||' | LC_ALL=C sort > ../files.txt
+          [[ "$(wc -l < ../files.txt)" -eq 8 ]] || { echo "expected 8 files" >&2; cat ../files.txt >&2; exit 1; }
+          xargs sha256sum < ../files.txt > SHA256SUMS
+          sha256sum --check --strict SHA256SUMS
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@PIN_ME_ATTEST_BUILD_PROVENANCE
+        with:
+          subject-path: dist/*
+      - name: Upload release files
+        uses: actions/upload-artifact@PIN_ME_UPLOAD_ARTIFACT
+        with:
+          name: release-files
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  draft-release:
+    name: draft GitHub release
+    needs: [meta, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Download release files
+        uses: actions/download-artifact@PIN_ME_DOWNLOAD_ARTIFACT
+        with:
+          name: release-files
+          path: dist
+      - name: Re-check the checksums
+        run: cd dist && sha256sum --check --strict SHA256SUMS
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          DRY_RUN: ${{ needs.meta.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          flags=(--draft --verify-tag --generate-notes --title "libtea $TAG")
+          if [[ "$DRY_RUN" == "true" ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" dist/* "${flags[@]}"
