@@ -12,13 +12,11 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 const PRODUCT_ID: &str = "2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d";
 
 fn limits() -> Limits {
-    Limits {
-        initial_backoff: Duration::ZERO,
-        max_retries: 0,
-        request_timeout: Duration::from_secs(5),
-        connect_timeout: Duration::from_secs(2),
-        ..Limits::default()
-    }
+    Limits::default()
+        .with_initial_backoff(Duration::ZERO)
+        .with_max_retries(0)
+        .with_request_timeout(Duration::from_secs(5))
+        .with_connect_timeout(Duration::from_secs(2))
 }
 
 fn client_for(server: &MockServer) -> Client {

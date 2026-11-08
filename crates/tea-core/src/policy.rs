@@ -12,6 +12,7 @@ use crate::error::PolicyError;
 
 /// Classification of an IP address for SSRF policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum IpClass {
     /// A globally routable unicast address.
     Public,
@@ -93,7 +94,15 @@ fn classify_v6(ip: Ipv6Addr) -> IpClass {
     if ip.is_loopback() {
         return IpClass::Loopback;
     }
-    if is_unique_local(ip) {
+    // Deprecated IPv4-compatible form `::a.b.c.d` (RFC 4291 section 2.5.5.1).
+    // `::` and `::1` are handled above.
+    if ip.segments()[..6].iter().all(|s| *s == 0) {
+        let octets = ip.octets();
+        return classify_v4(Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ));
+    }
+    if is_unique_local(ip) || is_site_local(ip) || is_nat64_local_use(ip) {
         return IpClass::Private;
     }
     if is_link_local_v6(ip) {
@@ -131,6 +140,17 @@ fn embedded_transition_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
 
 fn is_unique_local(ip: Ipv6Addr) -> bool {
     (ip.segments()[0] & 0xfe00) == 0xfc00
+}
+
+/// Deprecated site-local `fec0::/10` (RFC 3879). Not globally routable.
+fn is_site_local(ip: Ipv6Addr) -> bool {
+    (ip.segments()[0] & 0xffc0) == 0xfec0
+}
+
+/// NAT64 local-use prefix `64:ff9b:1::/48` (RFC 8215) maps to private IPv4 space.
+fn is_nat64_local_use(ip: Ipv6Addr) -> bool {
+    let [first, second, third, ..] = ip.segments();
+    first == 0x0064 && second == 0xff9b && third == 0x0001
 }
 
 fn is_link_local_v6(ip: Ipv6Addr) -> bool {
@@ -355,6 +375,45 @@ mod tests {
             classify_ip("198.18.0.1".parse().unwrap()),
             IpClass::Documentation
         );
+    }
+
+    #[test]
+    fn deprecated_ipv6_forms_are_not_public() {
+        // IPv4-compatible (::a.b.c.d, RFC 4291 deprecated) carries the IPv4 class.
+        assert_eq!(
+            classify_ip("::127.0.0.1".parse().unwrap()),
+            IpClass::Loopback
+        );
+        assert_eq!(classify_ip("::10.0.0.1".parse().unwrap()), IpClass::Private);
+        assert_eq!(
+            classify_ip("::169.254.169.254".parse().unwrap()),
+            IpClass::LinkLocal
+        );
+        // Site-local fec0::/10 (deprecated) and NAT64 local-use 64:ff9b:1::/48.
+        assert_eq!(classify_ip("fec0::1".parse().unwrap()), IpClass::Private);
+        assert_eq!(
+            classify_ip("64:ff9b:1::1".parse().unwrap()),
+            IpClass::Private
+        );
+        // Unchanged cases.
+        assert_eq!(classify_ip("::1".parse().unwrap()), IpClass::Loopback);
+        assert_eq!(classify_ip("::".parse().unwrap()), IpClass::Reserved);
+        assert_eq!(classify_ip("fe80::1".parse().unwrap()), IpClass::LinkLocal);
+        assert_eq!(
+            classify_ip("2606:4700::1".parse().unwrap()),
+            IpClass::Public
+        );
+        let policy = DestinationPolicy::public_https();
+        for url in [
+            "https://[::127.0.0.1]/",
+            "https://[fec0::1]/",
+            "https://[::ffff:127.0.0.1]/",
+        ] {
+            assert!(
+                policy.check_url(&Url::parse(url).unwrap()).is_err(),
+                "{url}"
+            );
+        }
     }
 
     #[test]

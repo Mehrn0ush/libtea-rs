@@ -27,6 +27,7 @@ pub struct Service {
 
 /// Bytes of an artifact or signature after HTTP content coding is removed.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DownloadedArtifact {
     /// Decoded bytes.
     pub bytes: Vec<u8>,
@@ -48,16 +49,21 @@ pub struct DownloadedArtifact {
     pub repr_digest: Option<String>,
     /// Final URL after redirects.
     pub final_url: String,
-    /// Checksum report. [`IntegrityOutcome::Verified`] means every declared checksum matched.
+    /// Checksum report. [`IntegrityOutcome::Verified`] means every declared
+    /// checksum matched **decoded** artifact bytes — not publisher authenticity.
+    /// A match on weak algorithms only (SHA-1) is an error unless
+    /// [`crate::ClientBuilder::allow_weak_checksums`] is set.
     pub integrity: libtea_core::IntegrityReport,
 }
 
 /// Artifact download result.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ArtifactFetch {
     /// A response body.
     Body(DownloadedArtifact),
     /// Conditional GET found the selected representation unchanged.
+    #[non_exhaustive]
     NotModified {
         /// Validator from the 304 response.
         etag: Option<String>,
@@ -70,10 +76,12 @@ pub enum ArtifactFetch {
 
 /// CLE projection result. `NotImplemented` is not a missing parent object.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CleFetch {
     /// Lifecycle projection.
     Events(Cle),
     /// The server does not implement CLE for this object.
+    #[non_exhaustive]
     NotImplemented {
         /// Optional diagnostic.
         message: Option<String>,
@@ -82,12 +90,14 @@ pub enum CleFetch {
 
 /// Detached signature fetch.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SignatureFetch {
     /// Signature bytes. TEA does not define a checksum for the signature itself.
     Present(Box<DownloadedArtifact>),
     /// The revision exists and this format has no published signature.
     NotPublished,
     /// Conditional GET matched.
+    #[non_exhaustive]
     NotModified {
         /// Validator.
         etag: Option<String>,
@@ -162,14 +172,21 @@ impl Service {
                 let message = libtea_core::TeaErrorBody::parse(&response.body)
                     .ok()
                     .and_then(|body| body.message);
-                return Err(ClientError::Unresolved { error, message });
+                return Err(ClientError::Unresolved {
+                    error: libtea_core::escape_control_chars(&error),
+                    message: message.map(|text| libtea_core::escape_control_chars(&text)),
+                });
             }
         }
         if !response.status.is_success() {
             return Err(map_api_error(&response));
         }
         require_json(&response)?;
-        Ok(DiscoveryInfo::parse_list(&response.body)?)
+        Ok(if self.client.inner.supported.is_lenient() {
+            DiscoveryInfo::parse_list_lenient(&response.body)?
+        } else {
+            DiscoveryInfo::parse_list(&response.body)?
+        })
     }
 
     /// `GET /products`.
@@ -399,8 +416,8 @@ impl Service {
     ///
     /// When the format has `url`, that external URL is fetched and the TEA
     /// access token is not sent. Otherwise the versioned download endpoint is
-    /// used. Declared checksums are verified over the bytes left after HTTP
-    /// content coding is removed.
+    /// used. Declared checksums are checked over the bytes left after HTTP
+    /// content coding is removed (integrity of decoded bytes, not authenticity).
     pub async fn download_format(
         &self,
         artifact: &Artifact,
@@ -755,7 +772,11 @@ impl Service {
                 self.client.inner.limits.max_artifact_bytes,
             )?
         };
-        let integrity = libtea_core::verify_checksums(&decoded, checksums);
+        let integrity = libtea_core::verify_checksums_with_policy(
+            &decoded,
+            checksums,
+            self.client.inner.checksum_policy,
+        );
         if !matches!(
             integrity.outcome,
             IntegrityOutcome::Verified | IntegrityOutcome::NotDeclared

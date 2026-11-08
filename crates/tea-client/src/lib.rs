@@ -1,17 +1,56 @@
 //! Async consumer client for the Transparency Exchange API 1.0.0.
 //!
+//! **Independent implementation.** Not an official CycloneDX project release.
+//! Not a conformance certificate. Checksum
+//! [`libtea_core::IntegrityOutcome::Verified`] means declared digests matched
+//! **decoded** artifact bytes only — it is **not** publisher authenticity and
+//! not cryptographic signature verification. See [`signature`].
+//!
 //! Transport uses rustls. Certificate verification stays enabled. Discovery
 //! and artifact URLs are checked against [`libtea_core::DestinationPolicy`] before each
 //! connection, including addresses returned by DNS.
+//!
+//! **Proxies:** `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` (and lowercase forms)
+//! are honored by default. Through a proxy the DNS-based destination checks
+//! are **not** enforced, because the proxy, not this client, resolves the
+//! hostname; scheme, userinfo, literal-IP, and redirect checks still apply.
+//! [`ClientBuilder::ignore_env_proxies`] connects directly and keeps the DNS
+//! checks.
+//!
+//! **Weak checksums:** a match on SHA-1 checksums only is
+//! [`libtea_core::IntegrityOutcome::Weak`] and the download fails with
+//! [`ClientError::Integrity`], unless [`ClientBuilder::allow_weak_checksums`]
+//! is set.
+//!
+//! Token refresh is single-flight per origin on a [`Client`]: one async lock
+//! per API origin serializes `POST /token` for that origin; other origins do
+//! not wait for it. For a same-origin burst of resource `401`s with no usable
+//! cached bearer, waiters coalesce to **one** `POST /token`: they reuse the
+//! stored bearer after a success, and waiters that queued during a failed
+//! exchange return its failure. A waiter that finds a just-stored token
+//! already expired (very short lifetime) exchanges again. `POST /token` is
+//! bounded by [`Limits::request_timeout`]. This is a per-burst bound, not a
+//! process-wide exactly-once guarantee (see `docs/auth.md`).
 
+//!
+//! The crate README follows; its Rust snippets are compiled as doctests.
+//!
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
 mod error;
+pub mod page_stream;
 mod service;
+pub mod signature;
 mod transport;
 
+// `url::Url` appears in `ClientBuilder::well_known_fetch_url`; see the semver note in `libtea-core`.
+pub use url;
+
 pub use error::ClientError;
+pub use page_stream::{follow_pages, FollowedPage, PageFollowLimits, PageFollowStop};
 pub use service::{ArtifactFetch, CleFetch, DownloadedArtifact, Service, SignatureFetch};
+pub use signature::{SignatureVerifier, SignatureVerifyOutcome};
 pub use transport::{ApiKey, Client, ClientBuilder, Limits};
 
 use libtea_core::{tea_error_code, DiscoveryInfo, ProductReleaseId, Tei, WellKnownDocument};
@@ -19,8 +58,25 @@ use url::Url;
 
 use crate::transport::{header_str, map_api_error, operation_url, Call, CONTENT_TYPE_HEADER};
 
+impl ResolvedRelease {
+    /// Build a resolved release, for example from a cached discovery result.
+    #[must_use]
+    pub fn new(
+        product_release: ProductReleaseId,
+        root_url: impl Into<String>,
+        api_version: impl Into<String>,
+    ) -> Self {
+        Self {
+            product_release,
+            root_url: root_url.into(),
+            api_version: api_version.into(),
+        }
+    }
+}
+
 /// A product release selected from `/discovery`, with the server and version to call next.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ResolvedRelease {
     /// Product release UUID.
     pub product_release: ProductReleaseId,
@@ -138,7 +194,10 @@ impl Client {
                     let message = libtea_core::TeaErrorBody::parse(&response.body)
                         .ok()
                         .and_then(|body| body.message);
-                    return Err(ClientError::Unresolved { error, message });
+                    return Err(ClientError::Unresolved {
+                        error: libtea_core::escape_control_chars(&error),
+                        message: message.map(|text| libtea_core::escape_control_chars(&text)),
+                    });
                 }
                 last_stage_error = map_api_error(&response);
                 self.inner.backoff(attempts).await;
@@ -149,7 +208,12 @@ impl Client {
                 self.inner.backoff(attempts).await;
                 continue;
             }
-            let releases = match DiscoveryInfo::parse_list(&response.body) {
+            let parsed = if self.inner.supported.is_lenient() {
+                DiscoveryInfo::parse_list_lenient(&response.body)
+            } else {
+                DiscoveryInfo::parse_list(&response.body)
+            };
+            let releases = match parsed {
                 Ok(releases) => releases,
                 Err(error) => {
                     last_stage_error = ClientError::Model(error);
@@ -204,6 +268,12 @@ impl Client {
         if !response.status.is_success() {
             return Err(map_api_error(&response));
         }
-        Ok(WellKnownDocument::parse(&response.body)?)
+        Ok(if self.inner.supported.is_lenient() {
+            WellKnownDocument::parse_lenient(&response.body)?
+        } else {
+            WellKnownDocument::parse(&response.body)?
+        })
     }
 }
+#[cfg(doctest)]
+mod non_exhaustive_guards;

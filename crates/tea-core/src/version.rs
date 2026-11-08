@@ -35,6 +35,47 @@ impl ApiVersion {
         })
     }
 
+    /// Parse a SemVer version, or a short `MAJOR` / `MAJOR.MINOR` form.
+    ///
+    /// `1` is read as `1.0.0` and `1.2` as `1.2.0` for comparison. The
+    /// advertised spelling is kept for [`Self::as_str`], so the request path
+    /// stays `/v1/` for a server that advertised `1`. Used only when the
+    /// client is configured with lenient versions; see
+    /// [`SupportedApi::with_lenient`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the text is neither SemVer 2.0.0 nor a short
+    /// numeric form without leading zeros.
+    pub fn parse_lenient(text: &str) -> Result<Self, ModelError> {
+        if let Ok(strict) = Self::parse(text) {
+            return Ok(strict);
+        }
+        let short = |part: &str| -> Option<u64> {
+            let digits = !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+            let canonical = part == "0" || !part.starts_with('0');
+            (digits && canonical).then(|| part.parse().ok()).flatten()
+        };
+        let mut parts = text.split('.');
+        let parsed = match (parts.next(), parts.next(), parts.next()) {
+            (Some(major), None, None) => short(major).map(|m| Version::new(m, 0, 0)),
+            (Some(major), Some(minor), None) => short(major)
+                .zip(short(minor))
+                .map(|(m, n)| Version::new(m, n, 0)),
+            _ => None,
+        };
+        parsed
+            .map(|parsed| Self {
+                raw: text.to_owned(),
+                parsed,
+            })
+            .ok_or_else(|| {
+                ModelError::Invalid(format!(
+                    "API version `{text}` is neither SemVer 2.0.0 nor MAJOR[.MINOR]"
+                ))
+            })
+    }
+
     /// Advertised spelling, used after `/v` in the path.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -58,6 +99,7 @@ impl fmt::Display for ApiVersion {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupportedApi {
     versions: Vec<Version>,
+    lenient: bool,
 }
 
 impl SupportedApi {
@@ -66,6 +108,7 @@ impl SupportedApi {
     pub fn tea_1_0_0() -> Self {
         Self {
             versions: vec![Version::new(1, 0, 0)],
+            lenient: false,
         }
     }
 
@@ -88,18 +131,71 @@ impl SupportedApi {
                 "at least one supported API version is required".into(),
             ));
         }
-        Ok(Self { versions })
+        Ok(Self {
+            versions,
+            lenient: false,
+        })
+    }
+
+    /// Accept any advertised *stable* version with the same major as a
+    /// supported one.
+    ///
+    /// Off by default (exact precedence match). When on, `1.0.1` and `1.1.0`
+    /// are selected for a client that supports `1.0.0` (a pre-release such as
+    /// `1.1.0-rc.1` is not), exact matches sort before same-major ones in
+    /// [`select_endpoints`], and callers should
+    /// parse documents with [`ApiVersion::parse_lenient`] so short forms such
+    /// as `1` are accepted. **Risk:** the models were checked against the
+    /// pinned 1.0.0 schemas only; a compatible-looking server may send
+    /// responses this client cannot read or reads wrongly. Major version `0`
+    /// is never matched by major alone.
+    #[must_use]
+    pub fn with_lenient(mut self, lenient: bool) -> Self {
+        self.lenient = lenient;
+        self
+    }
+
+    /// Whether lenient version matching is on.
+    #[must_use]
+    pub fn is_lenient(&self) -> bool {
+        self.lenient
     }
 
     /// Whether an advertised version is implemented.
     ///
-    /// SemVer build metadata is ignored. Prerelease identifiers are not.
+    /// SemVer build metadata is ignored. Prerelease identifiers are not. In
+    /// lenient mode a *stable* version with the same major as a supported one
+    /// is also accepted; a pre-release is accepted only on an exact match.
     #[must_use]
     pub fn supports(&self, advertised: &Version) -> bool {
-        self.versions
+        self.classify(advertised).is_some()
+    }
+
+    /// How an advertised version matches: exactly, or (lenient mode only) as
+    /// a stable version of a supported major.
+    fn classify(&self, advertised: &Version) -> Option<MatchKind> {
+        if self
+            .versions
             .iter()
             .any(|supported| supported.cmp_precedence(advertised) == Ordering::Equal)
+        {
+            return Some(MatchKind::Exact);
+        }
+        (self.lenient
+            && advertised.pre.is_empty()
+            && self
+                .versions
+                .iter()
+                .any(|supported| supported.major >= 1 && supported.major == advertised.major))
+        .then_some(MatchKind::SameMajor)
     }
+}
+
+/// How an advertised version relates to the supported set. `Exact` sorts first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum MatchKind {
+    Exact,
+    SameMajor,
 }
 
 impl Default for SupportedApi {
@@ -110,6 +206,7 @@ impl Default for SupportedApi {
 
 /// Chosen endpoint after version negotiation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SelectedEndpoint {
     /// Absolute API root without a version prefix and without a trailing slash.
     pub root_url: String,
@@ -155,6 +252,7 @@ impl OrderedPriority {
 
 /// One candidate API base before selection.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct VersionedEndpoint {
     /// API root as advertised.
     pub root_url: String,
@@ -162,6 +260,22 @@ pub struct VersionedEndpoint {
     pub versions: Vec<ApiVersion>,
     /// Effective priority.
     pub priority: OrderedPriority,
+}
+
+impl VersionedEndpoint {
+    /// Build a candidate endpoint.
+    #[must_use]
+    pub fn new(
+        root_url: impl Into<String>,
+        versions: Vec<ApiVersion>,
+        priority: OrderedPriority,
+    ) -> Self {
+        Self {
+            root_url: root_url.into(),
+            versions,
+            priority,
+        }
+    }
 }
 
 /// Select candidate endpoints in the order a client should try them.
@@ -182,44 +296,61 @@ pub fn select_endpoints(
         let Some(best) = highest_supported(&endpoint.versions, supported) else {
             continue;
         };
-        selected.push(SelectedEndpoint {
-            root_url: endpoint.root_url.clone(),
-            version: best.as_str().to_owned(),
-            priority: endpoint.priority,
-            source_index,
-        });
+        selected.push((
+            SelectedEndpoint {
+                root_url: endpoint.root_url.clone(),
+                version: best.0.as_str().to_owned(),
+                priority: endpoint.priority,
+                source_index,
+            },
+            best.1,
+            best.0.semver().clone(),
+        ));
     }
     if selected.is_empty() {
         return Err(ModelError::Invalid(
             "no endpoint advertises an API version this client supports".into(),
         ));
     }
-    selected.sort_by(|left, right| {
-        let left_version = Version::parse(&left.version).unwrap_or(Version::new(0, 0, 0));
-        let right_version = Version::parse(&right.version).unwrap_or(Version::new(0, 0, 0));
-        right_version
-            .cmp_precedence(&left_version)
-            .then_with(|| right.priority.get().total_cmp(&left.priority.get()))
-            .then_with(|| left.source_index.cmp(&right.source_index))
-    });
-    Ok(selected)
+    // Exact matches first, then (lenient mode only) same-major stable versions.
+    // Within a class: highest version, then priority, then document order. In
+    // strict mode every candidate is `Exact`, so the order is unchanged.
+    selected.sort_by(
+        |(left, left_kind, left_version), (right, right_kind, right_version)| {
+            left_kind
+                .cmp(right_kind)
+                .then_with(|| right_version.cmp_precedence(left_version))
+                .then_with(|| right.priority.get().total_cmp(&left.priority.get()))
+                .then_with(|| left.source_index.cmp(&right.source_index))
+        },
+    );
+    Ok(selected
+        .into_iter()
+        .map(|(endpoint, _, _)| endpoint)
+        .collect())
 }
 
+/// The best advertised version of one endpoint: an exact match beats any
+/// same-major version; within a kind the highest precedence wins.
 fn highest_supported<'a>(
     versions: &'a [ApiVersion],
     supported: &SupportedApi,
-) -> Option<&'a ApiVersion> {
-    let mut best: Option<&ApiVersion> = None;
+) -> Option<(&'a ApiVersion, MatchKind)> {
+    let mut best: Option<(&ApiVersion, MatchKind)> = None;
     for version in versions {
-        if !supported.supports(version.semver()) {
+        let Some(kind) = supported.classify(version.semver()) else {
             continue;
-        }
+        };
         let replace = match best {
             None => true,
-            Some(current) => version.semver().cmp_precedence(current.semver()) == Ordering::Greater,
+            Some((current, current_kind)) => {
+                kind < current_kind
+                    || (kind == current_kind
+                        && version.semver().cmp_precedence(current.semver()) == Ordering::Greater)
+            }
         };
         if replace {
-            best = Some(version);
+            best = Some((version, kind));
         }
     }
     best

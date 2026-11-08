@@ -107,8 +107,10 @@ impl<'de> Deserialize<'de> for Checksum {
 
 /// Outcome of checking every declared checksum.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum IntegrityOutcome {
-    /// Every declared checksum was computed and matched.
+    /// Every declared checksum was computed over the decoded artifact bytes
+    /// and matched. This is content integrity only, not publisher authenticity.
     Verified,
     /// At least one computed checksum differed.
     Failed,
@@ -120,10 +122,42 @@ pub enum IntegrityOutcome {
     Incomplete,
     /// The artifact format did not declare checksums.
     NotDeclared,
+    /// Every declared checksum was computed and matched, but every one uses a
+    /// weak algorithm (see [`ChecksumAlgorithm::is_weak`]).
+    ///
+    /// This is not successful verification. [`ChecksumPolicy::allow_weak`]
+    /// turns this case into [`Self::Verified`].
+    Weak,
+}
+
+/// Caller choices for how declared checksums are judged.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ChecksumPolicy {
+    /// Accept a match when every declared algorithm is weak (SHA-1 only).
+    ///
+    /// Off by default: such a match yields [`IntegrityOutcome::Weak`].
+    pub allow_weak: bool,
+}
+
+impl ChecksumPolicy {
+    /// Default policy: weak-only matches are not [`IntegrityOutcome::Verified`].
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Accept or reject weak-only matches.
+    #[must_use]
+    pub fn with_allow_weak(mut self, allow: bool) -> Self {
+        self.allow_weak = allow;
+        self
+    }
 }
 
 /// One checksum comparison.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ChecksumCheck {
     /// Algorithm wire name.
     pub algorithm: String,
@@ -135,11 +169,14 @@ pub struct ChecksumCheck {
     pub supported: bool,
     /// Whether a supported comparison matched.
     pub matched: Option<bool>,
+    /// Whether the algorithm is weak ([`ChecksumAlgorithm::is_weak`]).
+    pub weak: bool,
 }
 
 /// Full integrity report. [`IntegrityOutcome::Verified`] is set only when every
 /// declared checksum was actually checked and matched.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct IntegrityReport {
     /// Summary that callers should branch on.
     pub outcome: IntegrityOutcome,
@@ -150,6 +187,7 @@ pub struct IntegrityReport {
 /// Incremental verifier over decoded artifact bytes.
 pub struct ChecksumVerifier {
     items: Vec<Running>,
+    policy: ChecksumPolicy,
 }
 
 struct Running {
@@ -178,6 +216,12 @@ impl ChecksumVerifier {
     /// report success.
     #[must_use]
     pub fn new(checksums: &[Checksum]) -> Self {
+        Self::with_policy(checksums, ChecksumPolicy::default())
+    }
+
+    /// Start a verifier with an explicit [`ChecksumPolicy`].
+    #[must_use]
+    pub fn with_policy(checksums: &[Checksum], policy: ChecksumPolicy) -> Self {
         let items = checksums
             .iter()
             .map(|checksum| Running {
@@ -185,7 +229,7 @@ impl ChecksumVerifier {
                 checksum: checksum.clone(),
             })
             .collect();
-        Self { items }
+        Self { items, policy }
     }
 
     /// Absorb decoded artifact bytes.
@@ -219,6 +263,7 @@ impl ChecksumVerifier {
                     && actual.is_some(),
                 actual,
                 matched,
+                weak: item.checksum.algorithm().is_weak(),
             });
         }
         let any_failed = checks.iter().any(|check| check.matched == Some(false));
@@ -227,7 +272,11 @@ impl ChecksumVerifier {
         let outcome = if any_failed {
             IntegrityOutcome::Failed
         } else if all_matched {
-            IntegrityOutcome::Verified
+            if !self.policy.allow_weak && checks.iter().all(|check| check.weak) {
+                IntegrityOutcome::Weak
+            } else {
+                IntegrityOutcome::Verified
+            }
         } else if any_unsupported && checks.iter().any(|check| check.matched == Some(true)) {
             IntegrityOutcome::Incomplete
         } else {
@@ -300,10 +349,20 @@ fn hex_encode(bytes: &[u8]) -> String {
     out
 }
 
-/// Verify a complete decoded payload.
+/// Verify a complete decoded payload with the default [`ChecksumPolicy`].
 #[must_use]
 pub fn verify_checksums(bytes: &[u8], checksums: &[Checksum]) -> IntegrityReport {
-    let mut verifier = ChecksumVerifier::new(checksums);
+    verify_checksums_with_policy(bytes, checksums, ChecksumPolicy::default())
+}
+
+/// Verify a complete decoded payload with an explicit [`ChecksumPolicy`].
+#[must_use]
+pub fn verify_checksums_with_policy(
+    bytes: &[u8],
+    checksums: &[Checksum],
+    policy: ChecksumPolicy,
+) -> IntegrityReport {
+    let mut verifier = ChecksumVerifier::with_policy(checksums, policy);
     verifier.update(bytes);
     verifier.finish()
 }
@@ -740,9 +799,21 @@ mod tests {
             ChecksumAlgorithm::Blake3,
         ] {
             let hex = digest_hex(algorithm.clone(), raw);
+            let weak = algorithm.is_weak();
             let checksum = Checksum::new(algorithm, &hex).unwrap();
-            let report = verify_checksums(raw, &[checksum]);
-            assert_eq!(report.outcome, IntegrityOutcome::Verified);
+            let report = verify_checksums(raw, std::slice::from_ref(&checksum));
+            let default_outcome = if weak {
+                IntegrityOutcome::Weak
+            } else {
+                IntegrityOutcome::Verified
+            };
+            assert_eq!(report.outcome, default_outcome);
+            let allowed = verify_checksums_with_policy(
+                raw,
+                &[checksum],
+                ChecksumPolicy::new().with_allow_weak(true),
+            );
+            assert_eq!(allowed.outcome, IntegrityOutcome::Verified);
         }
     }
 
@@ -875,7 +946,13 @@ c66ba83be64b302d7cba6ce15bb556f4",
                 "{algorithm} digest length"
             );
             let checksum = Checksum::new(algorithm.clone(), &expected).unwrap();
-            let report = verify_checksums(MSG, &[checksum]);
+            // Known-answer vectors check the digest itself, so weak algorithms
+            // are allowed here; their default outcome is covered elsewhere.
+            let report = verify_checksums_with_policy(
+                MSG,
+                &[checksum],
+                ChecksumPolicy::new().with_allow_weak(true),
+            );
             assert_eq!(
                 report.outcome,
                 IntegrityOutcome::Verified,

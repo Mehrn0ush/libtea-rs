@@ -23,6 +23,7 @@ pub struct WellKnownDocument {
 
 /// One well-known endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct WellKnownEndpoint {
     /// Advertised API root.
     pub url: String,
@@ -34,6 +35,7 @@ pub struct WellKnownEndpoint {
 
 /// One resolved product release from `/discovery`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DiscoveryInfo {
     /// Product release UUID.
     pub product_release: ProductReleaseId,
@@ -43,6 +45,7 @@ pub struct DiscoveryInfo {
 
 /// One `servers[]` entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DiscoveryServer {
     /// API root.
     pub root_url: String,
@@ -53,14 +56,13 @@ pub struct DiscoveryServer {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct WellKnownWire {
     schema_version: i64,
     endpoints: Vec<EndpointWire>,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct EndpointWire {
     url: String,
     versions: Vec<String>,
@@ -69,14 +71,14 @@ struct EndpointWire {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct DiscoveryWire {
     product_release_uuid: String,
     servers: Vec<ServerWire>,
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct ServerWire {
     root_url: String,
     versions: Vec<String>,
@@ -91,6 +93,20 @@ impl WellKnownDocument {
     ///
     /// Returns an error when the JSON is not a schema version 1 document.
     pub fn parse(bytes: &[u8]) -> Result<Self, ModelError> {
+        Self::parse_with(bytes, false)
+    }
+
+    /// Like [`Self::parse`], but also accepts short API versions such as `1`
+    /// and `1.0` (see [`ApiVersion::parse_lenient`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the JSON is not a schema version 1 document.
+    pub fn parse_lenient(bytes: &[u8]) -> Result<Self, ModelError> {
+        Self::parse_with(bytes, true)
+    }
+
+    fn parse_with(bytes: &[u8], lenient: bool) -> Result<Self, ModelError> {
         let wire: WellKnownWire = serde_json::from_slice(bytes)?;
         if wire.schema_version != 1 {
             return Err(ModelError::Invalid(
@@ -104,7 +120,7 @@ impl WellKnownDocument {
         }
         let mut endpoints = Vec::with_capacity(wire.endpoints.len());
         for endpoint in wire.endpoints {
-            endpoints.push(parse_endpoint(endpoint)?);
+            endpoints.push(parse_endpoint(endpoint, lenient)?);
         }
         Ok(Self { endpoints })
     }
@@ -144,13 +160,29 @@ impl DiscoveryInfo {
     ///
     /// Returns an error when the body is not a non-empty array of discovery objects.
     pub fn parse_list(bytes: &[u8]) -> Result<Vec<Self>, ModelError> {
+        Self::parse_list_with(bytes, false)
+    }
+
+    /// Like [`Self::parse_list`], but also accepts short API versions such as
+    /// `1` and `1.0` (see [`ApiVersion::parse_lenient`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the body is not a non-empty array of discovery objects.
+    pub fn parse_list_lenient(bytes: &[u8]) -> Result<Vec<Self>, ModelError> {
+        Self::parse_list_with(bytes, true)
+    }
+
+    fn parse_list_with(bytes: &[u8], lenient: bool) -> Result<Vec<Self>, ModelError> {
         let wire: Vec<DiscoveryWire> = serde_json::from_slice(bytes)?;
         if wire.is_empty() {
             return Err(ModelError::Invalid(
                 "discovery success body must be a non-empty array".into(),
             ));
         }
-        wire.into_iter().map(parse_discovery).collect()
+        wire.into_iter()
+            .map(|item| parse_discovery(item, lenient))
+            .collect()
     }
 
     /// Order this release's servers for later API calls.
@@ -175,16 +207,16 @@ impl DiscoveryInfo {
     }
 }
 
-fn parse_endpoint(endpoint: EndpointWire) -> Result<WellKnownEndpoint, ModelError> {
+fn parse_endpoint(endpoint: EndpointWire, lenient: bool) -> Result<WellKnownEndpoint, ModelError> {
     validate_base(&endpoint.url)?;
     Ok(WellKnownEndpoint {
         url: endpoint.url,
-        versions: parse_versions(endpoint.versions)?,
+        versions: parse_versions(endpoint.versions, lenient)?,
         priority: parse_priority(endpoint.priority)?,
     })
 }
 
-fn parse_discovery(item: DiscoveryWire) -> Result<DiscoveryInfo, ModelError> {
+fn parse_discovery(item: DiscoveryWire, lenient: bool) -> Result<DiscoveryInfo, ModelError> {
     if item.servers.is_empty() {
         return Err(ModelError::Invalid(
             "discovery servers must not be empty".into(),
@@ -195,7 +227,7 @@ fn parse_discovery(item: DiscoveryWire) -> Result<DiscoveryInfo, ModelError> {
         validate_base(&server.root_url)?;
         servers.push(DiscoveryServer {
             root_url: server.root_url,
-            versions: parse_versions(server.versions)?,
+            versions: parse_versions(server.versions, lenient)?,
             priority: parse_priority(server.priority)?,
         });
     }
@@ -205,13 +237,19 @@ fn parse_discovery(item: DiscoveryWire) -> Result<DiscoveryInfo, ModelError> {
     })
 }
 
-fn parse_versions(values: Vec<String>) -> Result<Vec<ApiVersion>, ModelError> {
+fn parse_versions(values: Vec<String>, lenient: bool) -> Result<Vec<ApiVersion>, ModelError> {
     if values.is_empty() {
         return Err(ModelError::Invalid("versions must not be empty".into()));
     }
     values
         .iter()
-        .map(|value| ApiVersion::parse(value))
+        .map(|value| {
+            if lenient {
+                ApiVersion::parse_lenient(value)
+            } else {
+                ApiVersion::parse(value)
+            }
+        })
         .collect()
 }
 
