@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "crates/tea-core",
     "crates/tea-client",
@@ -21,13 +21,14 @@ libtea-conformance = { version = "0.1.0", path = "crates/tea-conformance" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-# Pin the URL/IDNA stack that builds on rustc 1.85 without resolver fallback.
-# url alone does not constrain transitive idna_adapter/ICU selection.
-url = "=2.5.4"
-idna = "=1.0.3"
-idna_adapter = "=1.2.0"
-# 1.27.0 and newer declare rust-version 1.89.
-uuid = { version = ">=1.26.0, <1.27.0", features = ["serde"] }
+# Caret ranges. MSRV 1.85 is verified with the committed Cargo.lock, resolved by
+# the MSRV-aware resolver (resolver "3"): newer releases that need a newer
+# Rust (uuid 1.27+, idna_adapter 1.2.2, icu_* 2.4) are skipped there. Consumers
+# on older toolchains should use the MSRV-aware resolver too (see README).
+url = "2"
+idna = "1"
+idna_adapter = "1"
+uuid = { version = "1", features = ["serde"] }
 semver = "1"
 sha1 = "0.10"
 sha2 = "0.10"
