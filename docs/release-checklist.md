@@ -10,7 +10,7 @@ feature branch and again on `main` before anything is tagged or published.
 1. **Record the reviewed SHA**: `git rev-parse HEAD` on the feature branch tip
    that was reviewed.
 2. **CI green on the feature branch** at that SHA: `test` (stable and MSRV
-   1.85.0, including the `cargo doc` step with `RUSTDOCFLAGS=-D warnings`),
+   1.89.0, including the `cargo doc` step with `RUSTDOCFLAGS=-D warnings`),
    `package`, and `cargo deny` (which gates on RustSec advisories).
    `cargo audit` runs with `continue-on-error`; read its log, but it does not
    gate. `cargo semver-checks` skips each crate only while crates.io returns
@@ -47,7 +47,7 @@ move or re-point a pushed tag.
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
-cargo +1.85.0 test --workspace --all-targets --locked
+cargo +1.89.0 test --workspace --all-targets --locked
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
 cargo deny check
 cargo audit

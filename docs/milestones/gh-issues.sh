@@ -42,7 +42,7 @@ gh issue create --repo "$REPO" \
 **Acceptance criteria**
 - [ ] `git status --short` is empty after the commits in `HANDOFF-COMMANDS.md`
 - [ ] every commit passes `cargo check --workspace --all-targets --locked` (`git rebase -x` proof)
-- [ ] CI jobs `rust stable`, `rust 1.85.0`, `package`, `cargo deny`, `cargo semver-checks` are green; `cargo semver-checks` logs "not on crates.io yet" for both crates
+- [ ] CI jobs `rust stable`, `rust 1.89.0`, `package`, `cargo deny`, `cargo semver-checks` are green; `cargo semver-checks` logs "not on crates.io yet" for both crates
 - [ ] the `Doctests` step passes
 
 Source: docs/milestones/0.1.md#01-1
@@ -372,7 +372,7 @@ gh issue create --repo "$REPO" \
 
 **Acceptance criteria**
 - [ ] `.github/dependabot.yml` covers `cargo` (root and `fuzz/`) and `github-actions`
-- [ ] MSRV pins in `Cargo.toml` (`url`, `idna`, `uuid`, `wiremock`) are documented as ignore rules
+- [ ] no dependency in `Cargo.toml` is capped or pinned for MSRV reasons (the MSRV is 1.89), so no ignore rules are needed
 
 Source: docs/milestones/0.2.md#02-12
 ISSUE_BODY
@@ -646,7 +646,7 @@ gh issue create --repo "$REPO" \
 **Depends on:** none
 
 **Acceptance criteria**
-- [ ] a maintained purl crate (or a recorded decision to hand-roll) is chosen with `cargo deny` and MSRV 1.85 checked
+- [ ] a maintained purl crate (or a recorded decision to hand-roll) is chosen with `cargo deny` and MSRV 1.89 checked
 - [ ] library function turns a purl into a canonical TEI (`purl` type, Base64URL, no padding) and back
 - [ ] the official purl-spec test suite runs in CI against it; failures are listed, not hidden
 
@@ -891,14 +891,14 @@ gh issue create --repo "$REPO" \
   --milestone 0.6 \
   --label gate:maintenance --label size:S \
   --body-file - <<'ISSUE_BODY'
-**Why:** New crypto dependencies must keep MSRV 1.85 and `cargo deny` green.
+**Why:** New crypto dependencies must keep MSRV 1.89 and `cargo deny` green.
 
 **Size:** S (≤ 2 days)
 **Gate:** maintenance
 **Depends on:** 0.6-2
 
 **Acceptance criteria**
-- [ ] `cargo +1.85.0 test` and `cargo deny check` pass with the feature on
+- [ ] `cargo +1.89.0 test` and `cargo deny check` pass with the feature on
 - [ ] `docs/dependency-weight.md` updated
 
 Source: docs/milestones/0.6.md#06-4

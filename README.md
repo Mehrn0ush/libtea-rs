@@ -15,9 +15,9 @@ These crates are a TEA **consumer** (client). They are not a TEA server, not an 
 | `libtea-conformance` | Offline checks and a JSON report (`publish = false`) |
 | `libtea-cli` | `libtea` binary that calls the libraries (`publish = false`) |
 
-Version `0.1.0`. Edition 2021. MSRV 1.85. License Apache-2.0. Publish `libtea-core` first, then `libtea-client`. The CLI stays unpublished for now.
+Version `0.1.0`. Edition 2021. MSRV 1.89. License Apache-2.0. Publish `libtea-core` first, then `libtea-client`. The CLI stays unpublished for now.
 
-**MSRV and dependency resolution.** MSRV 1.85 is verified with this repository's committed `Cargo.lock`, resolved by the MSRV-aware resolver (`resolver = "3"`). The dependencies use caret ranges, so cargo only keeps to 1.85 when it resolves with MSRV awareness: consumers on older toolchains should use `resolver = "3"` (the default for edition 2024), set `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback`, or commit a lock file. Without that, cargo can select newer releases that need a newer Rust (for example `uuid` 1.29 needs 1.89, `idna_adapter` 1.2.2 needs 1.86, and `icu_*` 2.4 needs 1.88). See [CHANGELOG.md](CHANGELOG.md).
+**MSRV.** The minimum supported Rust version is 1.89 for 0.1.0. Policy: the latest stable release minus about four releases; it is raised only in minor releases, and every raise is listed in the `CHANGELOG.md`. Dependencies use plain caret ranges and `Cargo.lock` is committed, so MSRV is verified with the committed lock file (`cargo +1.89.0 test --workspace --all-targets --locked`).
 
 **Honesty:** independent implementation; not an official CycloneDX project; no
 conformance certification; checksum `Verified` ≠ publisher authenticity; no

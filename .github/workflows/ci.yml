@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: ["stable", "1.85.0"]
+        rust: ["stable", "1.89.0"]
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -71,7 +71,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
         with:
-          toolchain: "1.85.0"
+          toolchain: "1.89.0"
       # Packaging only here. `cargo publish --dry-run` is a maintainer handoff
       # step (see docs/release-checklist.md), not a CI merge gate.
       - name: Verify libtea-core package

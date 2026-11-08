@@ -94,7 +94,7 @@ Status: **Present** (works and is tested), **Partial**, **Missing**, **Unverifie
 1. The trait: add trust policy and expected signer identity as inputs (today only bytes); an outcome that separates *valid-but-untrusted* from *valid-and-trusted* (the design doc proposes `ValidAndTrusted`/`ValidButUntrusted`; current `SignatureVerifyOutcome` has `Verified`/`Invalid`/…, so either extend it — it is `#[non_exhaustive]` — or add a new type).
 2. Digest binding: decide whether the signature covers the artifact bytes, the TEA checksum, or `Repr-Digest` (`docs/open-questions.md` #4).
 3. `DownloadedArtifact`/`ArtifactFetch`: carry an optional verification result so callers get it with the download; today signature and artifact are separate calls with no linkage.
-4. Dependencies and features: a verifier crate or feature (sigstore / OpenPGP / raw-key), `deny.toml` review, MSRV 1.85 compatibility check (`docs/design/signature-verification-deferred-notes.md`).
+4. Dependencies and features: a verifier crate or feature (sigstore / OpenPGP / raw-key), `deny.toml` review, MSRV 1.89 compatibility check (`docs/design/signature-verification-deferred-notes.md`).
 5. Trust-anchor sourcing: caller-supplied only (PEM/keyring trait); no fetch from the TEA host.
 6. The lock file (§5): record signer identity and trust-policy ID next to the hash.
 7. Test vectors listed in the design doc (good/untrusted/modified/wrong-signer/unsupported/missing roots/expired).
@@ -143,7 +143,7 @@ Status: **Present** (works and is tested), **Partial**, **Missing**, **Unverifie
 | --- | --- | --- |
 | `url::Url` | core: `DestinationPolicy::{allow_origin, and_allow, allows_origin, check_url, allows_resolved_ip}`, `origin_key`, `parse_api_base`, `with_query`; client: `ClientBuilder::well_known_fetch_url` | **Mitigated in 0.1.0:** re-exported as `libtea_core::url` / `libtea_client::url`; a major bump is still a breaking change. `url` is pinned `=2.5.4` for MSRV; a `url` major bump is a breaking change for this crate |
 | `semver::Version` | core: `ApiVersion::semver()`, `SupportedApi::supports(&Version)` | `semver` 1.x | (re-exported as `libtea_core::semver`)
-| `uuid::Uuid` | core: `TeaUuid::as_uuid()` | uuid is pinned `>=1.26.0, <1.27.0` for MSRV | (re-exported as `libtea_core::uuid`)
+| `uuid::Uuid` | core: `TeaUuid::as_uuid()` | uuid: plain caret range (the MSRV 1.89 is set by uuid 1.29) | (re-exported as `libtea_core::uuid`)
 | `serde` | every model derives `Serialize`/`Deserialize`; the serialized shape is public | any field rename is breaking |
 | `std::net::IpAddr` | `classify_ip`, `allows_resolved_ip` | std, fine |
 | `reqwest`, `serde_json`, `tokio`, `bytes`, `futures_util` | **not** in public signatures (errors carry `String`; `page_stream` returns `impl Stream`, which exposes the `futures_core::Stream` trait) | `follow_pages` makes `futures-core` Stream part of the surface |
@@ -173,7 +173,7 @@ Probe portability: `scripts/interop-probe.sh` takes `TEA_BASE_URL`/`TEA_TEI`/…
 | `cargo-semver-checks` | Yes, skips per crate on crates.io 404 | `ci.yml` job `semver-checks`; **never exercised on GitHub** |
 | `cargo-deny` | Yes (gating) | `ci.yml` `deny` |
 | `cargo-audit` | Yes, `continue-on-error: true` | `ci.yml` `audit` |
-| MSRV 1.85 | Yes (matrix `1.85.0`; tests, no clippy/fmt) | `ci.yml` `test` |
+| MSRV 1.89 | Yes (matrix `1.89.0`; tests, no clippy/fmt) | `ci.yml` `test` |
 | Docs `-D warnings` | Yes | `ci.yml` "Documentation" step |
 | Doctests | Yes | `ci.yml` "Doctests" step |
 | Reproducible / signed releases | **No** | no release workflow; no `cargo-vet`, attestation, or checksum publication |
@@ -204,7 +204,7 @@ Sizes: S ≤ 2 days, M ≈ 1–2 weeks, L > 2 weeks.
 | **Interop** | 1 local fixture + 1 public server; 4 named servers never run | (a) probes for ReARM, sbomify, Cybeats with recorded dates and result files; (b) a live-mode conformance runner (conformance is offline-only); (c) a CLE-capable server in the evidence set; (d) fix Cybeats `"1"` handling or document the incompatibility | L |
 | **Security** | Checksum integrity only; no authenticity; SSRF checks (not through proxies) | (a) real `SignatureVerifier` with caller-supplied trust (raw-key first); (b) host allowlist option; (c) proxy-address policy decision; (d) external review of `transport.rs`/`policy.rs`; (e) fuzzing in CI (scheduled job); (f) signed/reproducible release artifacts and an SBOM | L |
 | **DevSecOps usability** | Library + CLI; no lock file, JSON schema, Action, binaries, cache | (a) documented, tested JSON output and exit codes; (b) CLI log levels with a subscriber; (c) lock file (hash, server, spec commit, time); (d) `sync`/`diff`; (e) `select VEX/SBOM for component version`; (f) streaming-to-disk download with resume; (g) GitHub Action, release binaries, container image; (h) one pipeline example (grype or Dependency-Track) | L |
-| **Maintenance** | `SECURITY.md`, `cargo deny`, MSRV, dependency pins for 1.85 | (a) Dependabot/Renovate; (b) make `cargo audit` gating or document why not; (c) release workflow with provenance; (d) policy for MSRV and for spec re-pins; (e) run the CI workflows at least once on GitHub | M |
+| **Maintenance** | `SECURITY.md`, `cargo deny`, MSRV, MSRV 1.89, no dependency caps | (a) Dependabot/Renovate; (b) make `cargo audit` gating or document why not; (c) release workflow with provenance; (d) policy for MSRV and for spec re-pins; (e) run the CI workflows at least once on GitHub | M |
 
 Smaller gaps on the way: `Retry-After`/429 handling (S), persistent cache with ETag (M), offline mode (S–M), purl handling (M; use a maintained crate and run the purl-spec suite), CLE evaluation (M), metrics hooks (S).
 

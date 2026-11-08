@@ -165,3 +165,16 @@ is changed only if it contained such characters. Tests:
 `crates/tea-client/tests/error_text.rs`, `crates/tea-core/tests/escape_control_chars.rs`.
 Not covered: `ClientError::Policy` (host and scheme come from a parsed URL, which
 rejects control characters) and any text a caller takes from a model field.
+
+### Superseded on 2026-11-08: MSRV raised to 1.89 before the first publish
+
+The maintainer measured `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=allow cargo
+update`: the highest `rust-version` among resolved packages is 1.89.0 (`uuid`
+1.29.1); `icu_*` 2.4.0 and `proptest` 1.12.0 need 1.88; `idna_adapter` 1.2.2
+needs 1.86. Decision: raise the MSRV from 1.85 to 1.89 and stop capping
+dependencies. This is option 2 of item 13 taken to its end, and it removes the
+residual risk recorded under "Resolution of items 13 and 14" (a Rust 1.85
+consumer on `resolver = "2"` can no longer be served, by design). MSRV policy:
+latest stable minus about four releases, raised only in minor releases, each
+raise listed in the CHANGELOG. Statements above that mention 1.85 describe the
+state at the time of each experiment.

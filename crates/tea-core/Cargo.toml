@@ -19,9 +19,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 url.workspace = true
 uuid.workspace = true
-# Direct pins so published consumers keep an MSRV-compatible IDNA/ICU stack.
-idna.workspace = true
-idna_adapter.workspace = true
 semver.workspace = true
 sha1.workspace = true
 sha2.workspace = true

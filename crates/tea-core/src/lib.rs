@@ -17,11 +17,6 @@
 #![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
-// Direct dependencies so published consumers keep an MSRV-compatible IDNA/ICU stack.
-// url alone does not constrain those transitive crates.
-use idna as _;
-use idna_adapter as _;
-
 pub mod checksum;
 pub mod discovery;
 pub mod enums;

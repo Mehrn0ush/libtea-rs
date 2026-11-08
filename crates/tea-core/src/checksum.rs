@@ -51,7 +51,7 @@ impl Checksum {
                     len * 2
                 )));
             }
-        } else if !(40..=128).contains(&hex_value.len()) || hex_value.len() % 2 != 0 {
+        } else if !(40..=128).contains(&hex_value.len()) || !hex_value.len().is_multiple_of(2) {
             return Err(ModelError::Invalid(
                 "unrecognized checksum must be an even lowercase hex string of 40 to 128 characters"
                     .into(),

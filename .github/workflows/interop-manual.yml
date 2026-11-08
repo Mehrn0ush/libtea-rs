@@ -38,7 +38,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
         with:
-          toolchain: "1.85.0"
+          toolchain: "1.89.0"
       # Build with NO secrets in the environment: cargo runs third-party build
       # scripts, and any step that can see TEA_API_KEY_* must not run them.
       - name: Build CLI (no secrets)

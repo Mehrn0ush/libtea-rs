@@ -1,17 +1,17 @@
 # Documentation reconciliation: cited names vs code
 
-Generated on 2026-11-08 against the working tree on top of `599e513f977da7707a4b3a5839d4e40627577a11` (CHECKPOINT; nothing newer is committed). Method: every backticked token in `docs/*.md`, `docs/milestones/*.md`, `REPORT.md` and `AUDIT.md` that looks like a function/test name (`snake_case`, `name()`), a path (`A::b`), or a CamelCase type was looked up in `crates/**/*.rs`, `fuzz/fuzz_targets/*.rs` and `scripts/*.sh` (as `fn`/type definition, any identifier, or a test/target file name). Protocol words such as `access_token` and `invalid_token` are skipped. A few names are classified by hand (listed in "Not code / historical").
+Generated on 2026-11-08 against the working tree on top of `46927402c65c0f43d6952343f6be0506eade36f2` (CHECKPOINT; nothing newer is committed). Method: every backticked token in `docs/*.md`, `docs/milestones/*.md`, `REPORT.md` and `AUDIT.md` that looks like a function/test name (`snake_case`, `name()`), a path (`A::b`), or a CamelCase type was looked up in `crates/**/*.rs`, `fuzz/fuzz_targets/*.rs` and `scripts/*.sh` (as `fn`/type definition, any identifier, or a test/target file name). Protocol words such as `access_token` and `invalid_token` are skipped. A few names are classified by hand (listed in "Not code / historical").
 
 | Status | Count |
 | --- | --- |
 | absent by design | 1 |
-| exists | 433 |
-| external | 13 |
+| exists | 434 |
+| external | 22 |
 | not code | 6 |
 | planned (not code yet) | 2 |
 | removed (historical) | 6 |
 | serde attribute | 1 |
-| **total** | 462 |
+| **total** | 472 |
 
 **No cited test is missing.** Every test name in the matrix, audit, and auth documents resolves to a `fn` in `crates/` (the earlier mechanical check of `docs/api-operation-matrix.md` and `docs/matrix-audit.md` is repeated here as part of the table).
 
@@ -65,6 +65,7 @@ Historical documents (`docs/audit-report.md`, `docs/security-review.md`, `docs/c
 | `ArtifactType` | exists | milestones/0.3.md, roadmap-gap-analysis.md |
 | `AuthenticationRequired` | exists | conformance-gap-analysis.md |
 | `CappedBuf` | exists | roadmap-gap-analysis.md |
+| `Checksum::new` | exists | AUDIT.md, REPORT.md |
 | `ChecksumAlgorithm` | exists | roadmap-gap-analysis.md |
 | `ChecksumAlgorithm::Other` | exists | architecture.md, roadmap-gap-analysis.md |
 | `ChecksumAlgorithm::is_weak` | exists | AUDIT.md, REPORT.md |
@@ -281,6 +282,7 @@ Historical documents (`docs/audit-report.md`, `docs/security-review.md`, `docs/c
 | `consumer_surface` | exists | candidate-scope-review.md |
 | `content_decoding` | exists | AUDIT.md |
 | `content_length()` | exists | security-review.md |
+| `core_detect` | external | AUDIT.md |
 | `create_new` | exists | AUDIT.md |
 | `credential_origins` | exists | AUDIT.md |
 | `cybeats_shaped_short_version_fails_by_default_and_works_when_lenient` | exists | roadmap-gap-analysis.md |
@@ -343,15 +345,17 @@ Historical documents (`docs/audit-report.md`, `docs/security-review.md`, `docs/c
 | `icu_properties` | external | AUDIT.md, open-questions.md |
 | `id_type_without_id_value_is_accepted` | exists | requirements-matrix.md |
 | `id_value` | exists | roadmap-gap-analysis.md |
-| `idna_adapter` | exists | AUDIT.md, open-questions.md, release-readiness.md |
+| `idna_adapter` | external | AUDIT.md, REPORT.md, open-questions.md, release-readiness.md |
 | `if_none_match` | exists | roadmap-gap-analysis.md |
 | `ignore_env_proxies` | exists | roadmap-gap-analysis.md |
 | `initial_backoff` | exists | roadmap-gap-analysis.md |
 | `into_inner` | exists | AUDIT.md |
 | `is_certification` | exists | AUDIT.md, claims-audit.md |
+| `is_multiple_of` | exists | AUDIT.md, REPORT.md |
 | `is_unspecified` | exists | security-review.md |
 | `json_error_text_is_clean` | exists | AUDIT.md |
 | `keeps_build_metadata_spelling` | exists | conformance-gap-analysis.md, requirements-matrix.md |
+| `lazy_static` | external | AUDIT.md |
 | `legacy_urn_form_has_a_distinct_error` | exists | AUDIT.md, roadmap-gap-analysis.md |
 | `lenient_versions` | exists | AUDIT.md, REPORT.md, milestones/0.2.md, milestones/1.0.md |
 | `libtea_client` | exists | release-readiness.md, requirements-matrix.md |
@@ -376,6 +380,7 @@ Historical documents (`docs/audit-report.md`, `docs/security-review.md`, `docs/c
 | `list_and_query_component_releases_paths` | exists | api-operation-matrix.md, matrix-audit.md |
 | `list_and_query_product_releases_paths_and_params` | exists | api-operation-matrix.md, matrix-audit.md |
 | `list_component_release_collections` | exists | interoperability.md |
+| `manual_is_multiple_of` | external | AUDIT.md |
 | `max_artifact_bytes` | exists | AUDIT.md, security-review.md |
 | `max_discovery_attempts` | exists | AUDIT.md |
 | `max_in_flight` | exists | AUDIT.md, milestones/0.3.md, roadmap-gap-analysis.md, security-review.md, security.md |
@@ -429,6 +434,8 @@ Historical documents (`docs/audit-report.md`, `docs/security-review.md`, `docs/c
 | `query_encoding_matches_openapi_example_shape` | exists | conformance-gap-analysis.md |
 | `query_pairs_mut` | exists | conformance-gap-analysis.md |
 | `query_products` | exists | interoperability.md |
+| `rand_chacha` | external | AUDIT.md |
+| `rand_core` | external | AUDIT.md |
 | `read_decoded` | exists | AUDIT.md, roadmap-gap-analysis.md, security-review.md |
 | `read_limited` | exists | security-review.md |
 | `redact_url_for_log` | exists | roadmap-gap-analysis.md |
@@ -487,6 +494,9 @@ Historical documents (`docs/audit-report.md`, `docs/security-review.md`, `docs/c
 | `token_error_text_omits_the_secret` | exists | AUDIT.md, api-operation-matrix.md, auth.md |
 | `token_refresh` | exists | AUDIT.md, claims-audit.md |
 | `tokio::Mutex` | external | AUDIT.md |
+| `toml_datetime` | external | AUDIT.md |
+| `toml_edit` | external | AUDIT.md |
+| `toml_parser` | external | AUDIT.md |
 | `truncated_gzip_and_zlib_are_rejected` | exists | security-review.md |
 | `type_only_filter_stays_on_the_next_page` | exists | api-operation-matrix.md, conformance-gap-analysis.md, matrix-audit.md |
 | `type_only_identifier_filter_is_serialized` | exists | api-operation-matrix.md, conformance-gap-analysis.md, requirements-matrix.md, roadmap-gap-analysis.md |
