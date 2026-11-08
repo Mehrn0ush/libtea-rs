@@ -47,6 +47,8 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo package -p libtea-core --locked
 ```
 
+Until the release pins are filled in (`docs/release-pins.md`), `cargo test` fails its pin gate unless `LIBTEA_ALLOW_PIN_PLACEHOLDERS=1` is set; CI sets it, locally `export` it.
+
 TLS uses rustls. Certificate verification cannot be turned off. The default destination policy allows HTTPS to public addresses and refuses cleartext, loopback, and metadata addresses. **Proxies:** `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` are honored by default, and through a proxy the DNS-based address checks are not enforced (the proxy resolves the name). Use `ClientBuilder::ignore_env_proxies(true)` where those checks matter. A local HTTP server needs an explicit origin exception (`--allow-origin` / `DestinationPolicy::allow_origin`). See [docs/security.md](docs/security.md).
 
 ## Try it (CLI and examples)

@@ -169,3 +169,12 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | `docs/architecture.md` Timeouts | A progressing download outlives `request_timeout` | `a_download_that_keeps_arriving_outlives_the_request_timeout` and the streamed variant: a raw TCP server paces a ~1 s body against a 400 ms request timeout. Timing-based, with generous margins. |
 | same | A stall is cut off after `idle_timeout`; `download_timeout` caps the whole transfer; metadata keeps the short total | `a_stalled_download_fails_after_the_idle_timeout`, `the_download_timeout_still_caps_the_whole_transfer`, `metadata_requests_keep_the_short_total_timeout`. |
 | same | Defaults and zero rejected | `the_defaults_and_the_zero_check_are_as_documented`. |
+
+### A5: pins fail closed
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/release-pins.md` | A placeholder blocks a release | `scripts/check-pins.sh --release` is the first step after checkout in the `meta` job (`the_release_workflow_runs_the_gate_first_and_never_sets_the_flag`); the script never reads the development flag in that mode (`the_script_blocks_a_release_even_with_the_development_flag`). Running it in the real workflow needs GitHub. |
+| same | `cargo test` fails while a placeholder remains, unless `LIBTEA_ALLOW_PIN_PLACEHOLDERS=1` | `unresolved_pins_block_unless_the_documented_flag_is_set`; only the exact value `1` opens the gate (`the_gate_passes_only_without_placeholders_or_with_the_exact_flag`). |
+| same | CI carries the flag exactly while placeholders exist | `ci_sets_the_flag_exactly_while_placeholders_remain`. |
+| same | The listed commands resolve every placeholder and retire the flag | `the_documented_commands_resolve_every_placeholder` runs the `sh pins-apply` block in a scratch copy with made-up SHAs. The `gh api` and `cargo search` commands above it need the network and were not run. |

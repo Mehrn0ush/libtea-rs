@@ -45,6 +45,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # Fail closed: no tag produces a release while a PIN_ME_* placeholder
+      # remains (docs/release-pins.md). The flag that development uses to
+      # tolerate them is never read in this mode.
+      - name: Refuse unresolved pins
+        run: ./scripts/check-pins.sh --release
       - name: Check the tag against the crate version
         id: tag
         env:

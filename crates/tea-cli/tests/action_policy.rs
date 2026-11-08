@@ -279,14 +279,6 @@ fn the_only_third_party_action_is_cache_and_it_is_pinned_or_a_placeholder() {
     assert_eq!(seen, 1);
 }
 
-/// Run before the first release: fails while the cache pin is a placeholder.
-#[test]
-#[ignore = "fails until docs/release-pins.md is followed; run with --ignored before tagging"]
-fn action_has_no_unresolved_pins() {
-    let text = action();
-    assert!(!code_lines(&text).iter().any(|l| l.contains("PIN_ME_")));
-}
-
 // ---------------------------------------------------------------------------
 // The examples in docs/github-action.md are copied into real workflows.
 // ---------------------------------------------------------------------------

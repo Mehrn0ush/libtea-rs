@@ -253,20 +253,6 @@ fn unpinned_third_party_actions_are_exactly_the_known_debt() {
         ("ci.yml", "taiki-e/install-action@cargo-audit"),
         ("ci.yml", "taiki-e/install-action@cargo-semver-checks"),
         ("interop-manual.yml", "actions/upload-artifact@v4"),
-        // release.yml: unresolved pins. They fail at job setup until
-        // docs/release-pins.md is followed; remove the entries when pinned.
-        (
-            "release.yml",
-            "actions/attest-build-provenance@PIN_ME_ATTEST_BUILD_PROVENANCE",
-        ),
-        (
-            "release.yml",
-            "actions/download-artifact@PIN_ME_DOWNLOAD_ARTIFACT",
-        ),
-        (
-            "release.yml",
-            "actions/upload-artifact@PIN_ME_UPLOAD_ARTIFACT",
-        ),
         ("spec-drift.yml", "actions/upload-artifact@v4"),
     ];
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows");
@@ -280,7 +266,9 @@ fn unpinned_third_party_actions_are_exactly_the_known_debt() {
         for step in steps_of(&std::fs::read_to_string(&path).unwrap()) {
             if let Some(uses) = step.uses {
                 let (action, reference) = uses.split_once('@').expect("uses: owner/repo@ref");
-                if !is_sha(reference) {
+                // PIN_ME_* placeholders are policed by the pin gate
+                // (pin_gate.rs, scripts/check-pins.sh), not listed here.
+                if !is_sha(reference) && !reference.starts_with("PIN_ME_") {
                     unpinned.push((file.clone(), format!("{action}@{reference}")));
                 }
             }
@@ -679,20 +667,6 @@ fn release_actions_are_pinned_or_explicit_placeholders() {
             "{action} is pinned to `{reference}`, not a commit SHA"
         );
     }
-}
-
-/// Run before tagging: fails while any pin or the cargo-cyclonedx version is
-/// still a placeholder. Ignored by default so the tree stays green until
-/// `docs/release-pins.md` is followed; `docs/release-checklist.md` runs it.
-#[test]
-#[ignore = "fails until docs/release-pins.md is followed; run with --ignored before tagging"]
-fn release_workflow_has_no_unresolved_pins() {
-    let text = release();
-    let left: Vec<&str> = text
-        .lines()
-        .filter(|l| l.contains("PIN_ME_") && !l.trim_start().starts_with('#'))
-        .collect();
-    assert!(left.is_empty(), "unresolved pins:\n{}", left.join("\n"));
 }
 
 #[test]

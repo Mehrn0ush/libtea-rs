@@ -99,8 +99,10 @@ GitHub release itself, and holds no secret. It has **not been run**; the first
 run is the dry run below. Read `docs/release-pins.md` first: four values are
 still placeholders.
 
-1. Fill in the pins (`docs/release-pins.md`), then:
-   `cargo test -p libtea-cli --test workflow_policy --test action_policy -- --ignored` must pass.
+1. Fill in the pins (`docs/release-pins.md`). Then `./scripts/check-pins.sh --release`
+   must pass and `cargo test` must pass with `LIBTEA_ALLOW_PIN_PLACEHOLDERS`
+   unset. The workflow runs the same script first and fails the whole run if a
+   placeholder remains.
 2. Dry run. Every tag, dry runs included, must point at a commit on `main`; the
    workflow's first job fails otherwise. A tag with a suffix is a dry run: the
    release is a draft *prerelease* and the files are named with the whole tag
