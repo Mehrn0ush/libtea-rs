@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Mehrn0ush/libtea-rs/docs/schemas/lock-v1.schema.json",
+  "title": "libtea lock file, schemaVersion 1",
+  "description": "Records what a TEI resolved to and the checksum-integrity outcome of each artifact format at fetch time. Not signed; not publisher authenticity. Keys are in this order in files the tool writes; artifacts are sorted by uuid then mediaType.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "tei",
+    "server",
+    "apiVersion",
+    "specCommit",
+    "productRelease",
+    "collectionVersion",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "tei": { "type": "string", "description": "The TEI that was resolved, as given." },
+    "server": {
+      "type": "string",
+      "format": "uri",
+      "description": "API root. Never carries userinfo, a query or a fragment."
+    },
+    "apiVersion": { "type": "string" },
+    "specCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "productRelease": { "type": "string", "format": "uuid" },
+    "collectionVersion": { "type": "integer", "minimum": 1 },
+    "artifacts": {
+      "type": "array",
+      "description": "One entry per artifact format. Unique by (uuid, mediaType).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "uuid",
+          "revision",
+          "type",
+          "mediaType",
+          "size",
+          "checksums",
+          "integrity",
+          "fetchedAt"
+        ],
+        "properties": {
+          "uuid": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "type": { "type": "string", "description": "Artifact type as published, for example BOM." },
+          "mediaType": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0, "description": "Decoded bytes." },
+          "checksums": {
+            "type": "array",
+            "description": "Declared checksums, sorted.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["algorithm", "value"],
+              "properties": {
+                "algorithm": { "type": "string" },
+                "value": { "type": "string", "pattern": "^[0-9a-f]+$" }
+              }
+            }
+          },
+          "integrity": { "enum": ["Verified", "VerifiedWeakOnly", "NotDeclared"] },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 UTC with Z. Ignored when locks are compared."
+          }
+        }
+      }
+    }
+  }
+}
