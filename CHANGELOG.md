@@ -65,6 +65,7 @@ Independent implementation of a consumer for the Transparency Exchange API (TEA)
 
 ### Toolchain and dependencies
 
+- `SKILLS.md`: a short guide for agents and scripts that call the CLI or library; `crates/tea-cli/tests/skills_doc.rs` checks its exit-status table against the code constants and `docs/cli-exit-codes.md`, and that every `libtea` subcommand and flag shown in the READMEs and `SKILLS.md` exists.
 - MSRV 1.89. Policy: the latest stable release minus about four releases; raised only in minor releases, and every raise is listed here. Edition 2021.
 - Dependencies use plain caret ranges and `Cargo.lock` is committed; `resolver = "3"`. `libtea-core` has no network, filesystem or async-runtime dependency; `libtea-client` uses `tokio` with its `fs` feature.
 
