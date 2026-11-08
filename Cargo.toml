@@ -34,7 +34,7 @@ blake3 = "1"
 digest = "0.10"
 base64 = "0.22"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync", "fs"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 tracing = "0.1"
 futures-util = "0.3"

@@ -9,15 +9,23 @@ use std::time::{Duration, Instant};
 use bytes::Bytes;
 use futures_util::StreamExt;
 use libtea_core::checksum::ContentDecoder;
+use libtea_core::http_cache::{
+    cache_key, parse_retry_after, storage_decision, CacheControl, CacheEntryMeta, NotStored,
+    STORED_HEADERS,
+};
 use libtea_core::{
     classify_ip, origin_key, parse_api_base, tea_error_code, ApiVersion, ChecksumPolicy,
     DestinationPolicy, SupportedApi, TeaErrorBody, TokenResponse,
 };
-use reqwest::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE, LOCATION, WWW_AUTHENTICATE};
+use reqwest::header::{
+    AUTHORIZATION, CACHE_CONTROL, CONTENT_ENCODING, CONTENT_TYPE, LOCATION, RETRY_AFTER, VARY,
+    WWW_AUTHENTICATE,
+};
 use reqwest::{Method, StatusCode};
 use tokio::sync::Semaphore;
 use url::Url;
 
+use crate::cache::{now_secs, Cache, CacheConfig};
 use crate::error::ClientError;
 
 /// Bounds for untrusted TEA responses.
@@ -39,8 +47,12 @@ pub struct Limits {
     pub request_timeout: Duration,
     /// TCP connect timeout.
     pub connect_timeout: Duration,
-    /// Extra attempts for idempotent GET transport failures and HTTP 503.
+    /// Extra attempts for idempotent GET transport failures, HTTP 429 and HTTP 503.
     pub max_retries: u32,
+    /// Longest `Retry-After` the client will wait out before retrying a `429`
+    /// or `503`. A longer one fails at once with [`ClientError::Throttled`],
+    /// which carries the server's value.
+    pub max_retry_after: Duration,
     /// Total discovery attempts across the well-known fetch and API candidates.
     pub max_discovery_attempts: u32,
     /// Base delay between discovery attempts. Zero disables the delay.
@@ -59,6 +71,7 @@ impl Default for Limits {
             request_timeout: Duration::from_secs(30),
             connect_timeout: Duration::from_secs(10),
             max_retries: 2,
+            max_retry_after: Duration::from_secs(30),
             max_discovery_attempts: 4,
             initial_backoff: Duration::from_millis(200),
             max_in_flight: 8,
@@ -127,6 +140,13 @@ impl Limits {
     #[must_use]
     pub fn with_initial_backoff(mut self, value: Duration) -> Self {
         self.initial_backoff = value;
+        self
+    }
+
+    /// Set [`Self::max_retry_after`].
+    #[must_use]
+    pub fn with_max_retry_after(mut self, value: Duration) -> Self {
+        self.max_retry_after = value;
         self
     }
 
@@ -304,6 +324,7 @@ pub(crate) struct ClientInner {
     token_refresh: Mutex<std::collections::HashMap<String, Arc<RefreshSlot>>>,
     semaphore: Arc<Semaphore>,
     pub(crate) well_known_override: Option<Url>,
+    pub(crate) cache: Option<Arc<Cache>>,
 }
 
 /// TEA consumer client.
@@ -326,6 +347,8 @@ pub struct ClientBuilder {
     checksum_policy: ChecksumPolicy,
     ignore_env_proxies: bool,
     lenient_versions: bool,
+    cache: Option<CacheConfig>,
+    offline: bool,
 }
 
 impl Default for ClientBuilder {
@@ -341,6 +364,8 @@ impl Default for ClientBuilder {
             checksum_policy: ChecksumPolicy::default(),
             ignore_env_proxies: false,
             lenient_versions: false,
+            cache: None,
+            offline: false,
         }
     }
 }
@@ -350,6 +375,41 @@ impl ClientBuilder {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Keep a persistent response cache in `dir` (*experimental*; off by default).
+    ///
+    /// `GET` responses are stored and revalidated with `ETag` / `Last-Modified`
+    /// conditional requests. The directory is created private (mode 0700, files
+    /// 0600 on Unix); a symbolic link or a directory open to other users makes
+    /// [`ClientBuilder::build`] fail. Responses to requests that carried
+    /// credentials, `Cache-Control: no-store` and (by default) `private`
+    /// responses are not stored. Cache contents are never trusted: artifact
+    /// bytes are checked against their declared checksums on every use.
+    /// See `docs/cache.md` and [`CacheConfig`] for the limits.
+    #[must_use]
+    pub fn cache_dir(mut self, dir: impl Into<std::path::PathBuf>) -> Self {
+        self.cache = Some(CacheConfig::new(dir));
+        self
+    }
+
+    /// Enable the cache with explicit settings (*experimental*).
+    #[must_use]
+    pub fn cache(mut self, config: CacheConfig) -> Self {
+        self.cache = Some(config);
+        self
+    }
+
+    /// Answer only from the cache and never open a connection (*experimental*).
+    ///
+    /// A cacheable `GET` that is not in the cache (or whose entry is older than
+    /// [`CacheConfig::max_age`]) fails with [`ClientError::Offline`]; any other
+    /// request fails the same way. Requires [`ClientBuilder::cache_dir`] or
+    /// [`ClientBuilder::cache`]; [`ClientBuilder::build`] fails without one.
+    #[must_use]
+    pub fn offline(mut self, offline: bool) -> Self {
+        self.offline = offline;
+        self
     }
 
     /// Replace resource limits.
@@ -475,6 +535,15 @@ impl ClientBuilder {
                 "max_in_flight must be at least 1".into(),
             )));
         }
+        let cache = match self.cache {
+            Some(config) => Some(Arc::new(Cache::open(config, self.offline)?)),
+            None if self.offline => {
+                return Err(ClientError::Model(libtea_core::ModelError::Invalid(
+                    "offline mode needs a cache directory".into(),
+                )));
+            }
+            None => None,
+        };
         let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(self.limits.connect_timeout)
@@ -514,6 +583,7 @@ impl ClientBuilder {
                 token_refresh: Mutex::new(std::collections::HashMap::new()),
                 checksum_policy: self.checksum_policy,
                 well_known_override: self.well_known_override,
+                cache,
             }),
         })
     }
@@ -617,8 +687,77 @@ pub(crate) struct RawResponse {
     pub final_url: Url,
     /// Artifact bodies are decoded while they are read. JSON bodies are not.
     pub content_decoded: bool,
+    /// Set when the response may be stored once its body has been checked.
+    pending_cache: Option<Box<PendingCache>>,
     /// Bearer token attached to the request that produced this response.
     presented_bearer: Option<String>,
+}
+
+/// Everything needed to store a response after the caller has checked it.
+pub(crate) struct PendingCache {
+    cache: Arc<Cache>,
+    key: String,
+    request_url: String,
+    headers: Vec<(String, String)>,
+}
+
+impl RawResponse {
+    /// Store this response in the cache. Call only after its body passed the
+    /// checks that matter (artifact checksums); a no-op when nothing is pending.
+    pub(crate) async fn commit_cache(&self) {
+        let Some(pending) = &self.pending_cache else {
+            return;
+        };
+        if self.body.len() as u64 > pending.cache.config.max_entry_bytes {
+            return;
+        }
+        let meta = CacheEntryMeta::new(
+            &pending.key,
+            &pending.request_url,
+            200,
+            now_secs(),
+            self.content_decoded,
+            &pending.headers,
+        );
+        pending
+            .cache
+            .store(&pending.key, meta, self.body.to_vec())
+            .await;
+    }
+}
+
+/// A response whose headers are read and whose body is not.
+struct Opened {
+    status: StatusCode,
+    headers: reqwest::header::HeaderMap,
+    final_url: Url,
+    presented_bearer: Option<String>,
+    response: reqwest::Response,
+}
+
+/// First stage of a streamed artifact download.
+pub(crate) enum StreamStart {
+    /// A success status; the body is unread.
+    Body(OpenBody),
+    /// `304`, or an error status with its bounded body, for `map_api_error`.
+    Other(RawResponse),
+}
+
+/// A success response with an unread body.
+pub(crate) struct OpenBody {
+    pub status: StatusCode,
+    /// Whether the request carried a bearer token.
+    pub authenticated: bool,
+    pub headers: reqwest::header::HeaderMap,
+    pub final_url: Url,
+    response: reqwest::Response,
+}
+
+impl OpenBody {
+    /// The next raw (still content-coded) body chunk.
+    pub(crate) async fn chunk(&mut self) -> Result<Option<Bytes>, ClientError> {
+        self.response.chunk().await.map_err(ClientError::transport)
+    }
 }
 
 pub(crate) struct Call {
@@ -630,49 +769,187 @@ pub(crate) struct Call {
     pub content_type: Option<&'static str>,
     pub basic_auth: bool,
     pub if_none_match: Option<String>,
+    pub if_modified_since: Option<String>,
     pub max_body: usize,
 }
 
 impl ClientInner {
-    pub(crate) async fn send(&self, call: Call) -> Result<RawResponse, ClientError> {
+    /// Send a request, through the cache when one is configured and the call is
+    /// a plain `GET`.
+    pub(crate) async fn send(&self, mut call: Call) -> Result<RawResponse, ClientError> {
+        let Some(cache) = self.cache.clone() else {
+            return self.send_network(call).await;
+        };
+        let eligible = call.method == Method::GET
+            && call.if_none_match.is_none()
+            && call.if_modified_since.is_none();
+        let key = if eligible {
+            self.cache_key_for(&call.url)
+        } else {
+            None
+        };
+        let Some(key) = key else {
+            if cache.offline {
+                return Err(ClientError::Offline);
+            }
+            return self.send_network(call).await;
+        };
+
+        let existing = cache.load(&key).await;
+        if cache.offline {
+            return existing
+                .map(|(meta, body)| raw_from_entry(&call.url, &meta, body))
+                .ok_or(ClientError::Offline);
+        }
+        if let Some((meta, _)) = &existing {
+            call.if_none_match = meta.header("etag").map(str::to_owned);
+            call.if_modified_since = meta.header("last-modified").map(str::to_owned);
+        }
+        let url = call.url.clone();
+        let artifact = call.artifact;
+        let mut response = self.send_network(call).await?;
+
+        match response.status.as_u16() {
+            304 => {
+                let Some((meta, body)) = existing else {
+                    return Ok(response);
+                };
+                let meta = self
+                    .refresh_entry(
+                        &cache,
+                        &key,
+                        meta,
+                        &body,
+                        &response.headers,
+                        response.presented_bearer.is_some(),
+                    )
+                    .await;
+                Ok(raw_from_entry(&url, &meta, body))
+            }
+            200 => {
+                let headers = storable_headers(&response.headers);
+                let decision = decide_storage(
+                    &response.headers,
+                    response.presented_bearer.is_some(),
+                    cache.config.authenticated,
+                );
+                match decision {
+                    Ok(()) => {
+                        let pending = PendingCache {
+                            cache: Arc::clone(&cache),
+                            key,
+                            request_url: display_url(&url),
+                            headers,
+                        };
+                        response.pending_cache = Some(Box::new(pending));
+                        // Artifact bytes are stored only after the caller has
+                        // checked them; everything else is stored now.
+                        if !artifact {
+                            response.commit_cache().await;
+                        }
+                    }
+                    Err(NotStored::NoStore) => cache.remove(&key).await,
+                    Err(_) => {}
+                }
+                Ok(response)
+            }
+            404 | 410 => {
+                cache.remove(&key).await;
+                Ok(response)
+            }
+            _ => Ok(response),
+        }
+    }
+
+    /// Cache key for a `GET` of `url`, or `None` when the origin has no key.
+    pub(crate) fn cache_key_for(&self, url: &Url) -> Option<String> {
+        let mut normalized = url.clone();
+        normalized.set_fragment(None);
+        let _ = normalized.set_username("");
+        let _ = normalized.set_password(None);
+        let origin = origin_key(&normalized).ok()?;
+        Some(cache_key(
+            "GET",
+            normalized.as_str(),
+            &origin,
+            self.credentials.as_ref().map(|key| key.id.as_str()),
+        ))
+    }
+
+    /// A `304` confirmed the stored entry: take the new validators and
+    /// directives, restart its age, and keep it, unless the new directives
+    /// forbid storing (then it is removed). Returns the entry as it now stands.
+    pub(crate) async fn refresh_entry(
+        &self,
+        cache: &Arc<Cache>,
+        key: &str,
+        mut meta: CacheEntryMeta,
+        body: &[u8],
+        headers: &reqwest::header::HeaderMap,
+        authenticated: bool,
+    ) -> CacheEntryMeta {
+        merge_validated_headers(&mut meta, headers);
+        meta.validated_at = now_secs().max(meta.stored_at);
+        let lines: Vec<&str> = meta.header("cache-control").into_iter().collect();
+        let allowed = storage_decision(
+            200,
+            &CacheControl::parse(&lines),
+            meta.header("vary"),
+            authenticated,
+            cache.config.authenticated,
+        )
+        .is_ok();
+        if allowed {
+            cache.store(key, meta.clone(), body.to_vec()).await;
+        } else {
+            cache.remove(key).await;
+        }
+        meta
+    }
+
+    async fn wait_after_throttle(
+        &self,
+        attempt: u32,
+        error: ClientError,
+    ) -> Result<(), ClientError> {
+        let seconds = match &error {
+            ClientError::Throttled {
+                retry_after_secs, ..
+            } => *retry_after_secs,
+            _ => return Err(error),
+        };
+        match seconds {
+            Some(seconds) => {
+                let wait = Duration::from_secs(seconds);
+                if wait > self.limits.max_retry_after {
+                    return Err(error);
+                }
+                if !wait.is_zero() {
+                    tokio::time::sleep(wait).await;
+                }
+            }
+            None => self.backoff(attempt).await,
+        }
+        Ok(())
+    }
+
+    async fn send_network(&self, call: Call) -> Result<RawResponse, ClientError> {
         let mut attempt = 0u32;
         let mut refreshed = false;
         loop {
             match self.send_once(&call).await {
                 Ok(response)
                     if response.status == StatusCode::UNAUTHORIZED
-                        && !call.basic_auth
-                        && !refreshed =>
+                        && self
+                            .retry_after_unauthorized(
+                                &call,
+                                &response.headers,
+                                response.presented_bearer.as_deref(),
+                                &mut refreshed,
+                            )
+                            .await? =>
                 {
-                    let challenge =
-                        header_str(&response.headers, WWW_AUTHENTICATE).map(str::to_owned);
-                    if self.should_refresh_token(challenge.as_deref(), call.api_prefix.as_ref()) {
-                        let prefix = call
-                            .api_prefix
-                            .as_ref()
-                            .ok_or(ClientError::AuthenticationRequired)?;
-                        self.refresh_token_coalesced(prefix, response.presented_bearer.as_deref())
-                            .await?;
-                        refreshed = true;
-                        continue;
-                    }
-                    if challenge.as_deref().is_some_and(is_bearer_challenge) {
-                        return Err(ClientError::AuthenticationRequired);
-                    }
-                    return Ok(response);
-                }
-                Ok(response)
-                    if refreshed
-                        && !call.basic_auth
-                        && response.status == StatusCode::UNAUTHORIZED =>
-                {
-                    // Drop the bearer token this retry presented, and only when
-                    // that value is still the cache entry. A newer token stored
-                    // for this origin while the 401 was in flight stays cached.
-                    if let Some(presented) = response.presented_bearer.as_deref() {
-                        self.discard_token_if_current(call.api_prefix.as_ref(), presented);
-                    }
-                    return Ok(response);
+                    continue;
                 }
                 Ok(response) => return Ok(response),
                 Err(ClientError::Timeout) | Err(ClientError::Transport(_))
@@ -681,12 +958,175 @@ impl ClientInner {
                     attempt += 1;
                     self.backoff(attempt).await;
                 }
+                Err(error @ ClientError::Throttled { .. })
+                    if call.method == Method::GET && attempt < self.limits.max_retries =>
+                {
+                    attempt += 1;
+                    self.wait_after_throttle(attempt, error).await?;
+                }
                 Err(other) => return Err(other),
             }
         }
     }
 
+    /// Decide what a `401` means for `call`. `Ok(true)` asks the caller to send
+    /// the request again with a refreshed token; `Ok(false)` hands the `401`
+    /// response back.
+    async fn retry_after_unauthorized(
+        &self,
+        call: &Call,
+        headers: &reqwest::header::HeaderMap,
+        presented_bearer: Option<&str>,
+        refreshed: &mut bool,
+    ) -> Result<bool, ClientError> {
+        if call.basic_auth {
+            return Ok(false);
+        }
+        if *refreshed {
+            // Drop the bearer token this retry presented, and only when
+            // that value is still the cache entry. A newer token stored
+            // for this origin while the 401 was in flight stays cached.
+            if let Some(presented) = presented_bearer {
+                self.discard_token_if_current(call.api_prefix.as_ref(), presented);
+            }
+            return Ok(false);
+        }
+        let challenge = header_str(headers, WWW_AUTHENTICATE).map(str::to_owned);
+        if self.should_refresh_token(challenge.as_deref(), call.api_prefix.as_ref()) {
+            let prefix = call
+                .api_prefix
+                .as_ref()
+                .ok_or(ClientError::AuthenticationRequired)?;
+            self.refresh_token_coalesced(prefix, presented_bearer)
+                .await?;
+            *refreshed = true;
+            return Ok(true);
+        }
+        if challenge.as_deref().is_some_and(is_bearer_challenge) {
+            return Err(ClientError::AuthenticationRequired);
+        }
+        Ok(false)
+    }
+
+    /// Like [`ClientInner::send`] for an artifact `GET`, but a success body is
+    /// left unread so the caller can stream it.
+    ///
+    /// Redirects, destination policy, token refresh and the `401`/`503`
+    /// handling are shared with `send`. Because a stream cannot be replayed, a
+    /// transport failure while the body is read is not retried; failures
+    /// before the body starts are retried like any other `GET`.
+    pub(crate) async fn send_streaming(&self, call: Call) -> Result<StreamStart, ClientError> {
+        let mut attempt = 0u32;
+        let mut refreshed = false;
+        loop {
+            match self.open_once(&call).await {
+                Ok(opened)
+                    if opened.status == StatusCode::UNAUTHORIZED
+                        && self
+                            .retry_after_unauthorized(
+                                &call,
+                                &opened.headers,
+                                opened.presented_bearer.as_deref(),
+                                &mut refreshed,
+                            )
+                            .await? =>
+                {
+                    continue;
+                }
+                Ok(opened) => return self.start_stream(opened, &call).await,
+                Err(ClientError::Timeout) | Err(ClientError::Transport(_))
+                    if call.method == Method::GET && attempt < self.limits.max_retries =>
+                {
+                    attempt += 1;
+                    self.backoff(attempt).await;
+                }
+                Err(error @ ClientError::Throttled { .. })
+                    if call.method == Method::GET && attempt < self.limits.max_retries =>
+                {
+                    attempt += 1;
+                    self.wait_after_throttle(attempt, error).await?;
+                }
+                Err(other) => return Err(other),
+            }
+        }
+    }
+
+    async fn start_stream(&self, opened: Opened, call: &Call) -> Result<StreamStart, ClientError> {
+        if opened.status.is_success() {
+            if opened
+                .response
+                .content_length()
+                .is_some_and(|len| len > call.max_body as u64)
+            {
+                return Err(ClientError::TooLarge);
+            }
+            return Ok(StreamStart::Body(OpenBody {
+                status: opened.status,
+                authenticated: opened.presented_bearer.is_some(),
+                headers: opened.headers,
+                final_url: opened.final_url,
+                response: opened.response,
+            }));
+        }
+        // 304 and error statuses carry no artifact. Error bodies are read as
+        // ordinary bounded JSON so the same error mapping applies.
+        let metadata_only = opened.status == StatusCode::NOT_MODIFIED;
+        let body = if metadata_only {
+            Bytes::new()
+        } else {
+            read_limited(opened.response, self.limits.max_json_bytes).await?
+        };
+        Ok(StreamStart::Other(RawResponse {
+            status: opened.status,
+            headers: opened.headers,
+            body,
+            final_url: opened.final_url,
+            content_decoded: false,
+            pending_cache: None,
+            presented_bearer: opened.presented_bearer,
+        }))
+    }
+
     async fn send_once(&self, call: &Call) -> Result<RawResponse, ClientError> {
+        let Opened {
+            status,
+            headers,
+            final_url,
+            presented_bearer,
+            response,
+        } = self.open_once(call).await?;
+        let metadata_only = call.method == Method::HEAD || status == StatusCode::NOT_MODIFIED;
+        let (body, content_decoded) = if metadata_only {
+            // Content-Length on HEAD and 304 describes the selected
+            // representation, not a message body.
+            drop(response);
+            (Bytes::new(), false)
+        } else if call.artifact {
+            let coding = header_str(&headers, CONTENT_ENCODING).map(str::to_owned);
+            let decoded = read_decoded(response, call.max_body, coding.as_deref()).await?;
+            (Bytes::from(decoded), true)
+        } else {
+            (read_limited(response, call.max_body).await?, false)
+        };
+        tracing::debug!(
+            url = %redact_url_for_log(&final_url),
+            status = status.as_u16(),
+            "tea response"
+        );
+        Ok(RawResponse {
+            status,
+            headers,
+            body,
+            final_url,
+            content_decoded,
+            pending_cache: None,
+            presented_bearer,
+        })
+    }
+
+    /// Send the request, follow redirects under the destination policy and
+    /// return the final response with its body unread.
+    async fn open_once(&self, call: &Call) -> Result<Opened, ClientError> {
         let mut url = call.url.clone();
         let mut redirects = 0usize;
         loop {
@@ -703,6 +1143,9 @@ impl ClientInner {
             }
             if let Some(etag) = &call.if_none_match {
                 request = request.header("if-none-match", etag);
+            }
+            if let Some(date) = &call.if_modified_since {
+                request = request.header("if-modified-since", date);
             }
             let presented_bearer = if call.basic_auth {
                 let header = self.basic_header(&url)?;
@@ -754,36 +1197,29 @@ impl ClientInner {
                 url = next;
                 continue;
             }
-            if status == StatusCode::SERVICE_UNAVAILABLE && call.method == Method::GET {
+            if matches!(
+                status,
+                StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE
+            ) && call.method == Method::GET
+            {
+                let retry_after_secs = response
+                    .headers()
+                    .get(RETRY_AFTER)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| parse_retry_after(value, now_secs()));
                 drop(response);
-                return Err(ClientError::Transport("HTTP 503".into()));
+                return Err(ClientError::Throttled {
+                    status: status.as_u16(),
+                    retry_after_secs,
+                });
             }
             let headers = response.headers().clone();
-            let metadata_only = call.method == Method::HEAD || status == StatusCode::NOT_MODIFIED;
-            let (body, content_decoded) = if metadata_only {
-                // Content-Length on HEAD and 304 describes the selected
-                // representation, not a message body.
-                drop(response);
-                (Bytes::new(), false)
-            } else if call.artifact {
-                let coding = header_str(&headers, CONTENT_ENCODING).map(str::to_owned);
-                let decoded = read_decoded(response, call.max_body, coding.as_deref()).await?;
-                (Bytes::from(decoded), true)
-            } else {
-                (read_limited(response, call.max_body).await?, false)
-            };
-            tracing::debug!(
-                url = %redact_url_for_log(&url),
-                status = status.as_u16(),
-                "tea response"
-            );
-            return Ok(RawResponse {
+            return Ok(Opened {
                 status,
                 headers,
-                body,
                 final_url: url,
-                content_decoded,
                 presented_bearer,
+                response,
             });
         }
     }
@@ -887,6 +1323,7 @@ impl ClientInner {
             content_type: Some("application/x-www-form-urlencoded"),
             basic_auth: true,
             if_none_match: None,
+            if_modified_since: None,
             max_body: self.limits.max_json_bytes,
         };
         let response = self.send_once(&call).await?;
@@ -1051,6 +1488,87 @@ async fn read_limited(response: reqwest::Response, max: usize) -> Result<Bytes, 
         collected.extend_from_slice(&chunk);
     }
     Ok(Bytes::from(collected))
+}
+
+/// The request URL without query, fragment or userinfo, for display in entries.
+pub(crate) fn display_url(url: &Url) -> String {
+    let mut shown = url.clone();
+    shown.set_query(None);
+    shown.set_fragment(None);
+    let _ = shown.set_username("");
+    let _ = shown.set_password(None);
+    shown.to_string()
+}
+
+/// The allow-listed response headers, several lines of one header joined by `, `.
+pub(crate) fn storable_headers(headers: &reqwest::header::HeaderMap) -> Vec<(String, String)> {
+    STORED_HEADERS
+        .iter()
+        .filter_map(|name| {
+            let values: Vec<&str> = headers
+                .get_all(*name)
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .collect();
+            (!values.is_empty()).then(|| ((*name).to_owned(), values.join(", ")))
+        })
+        .collect()
+}
+
+/// Apply the storage rules to a response's headers.
+pub(crate) fn decide_storage(
+    headers: &reqwest::header::HeaderMap,
+    authenticated: bool,
+    allow_authenticated: bool,
+) -> Result<(), NotStored> {
+    let lines: Vec<&str> = headers
+        .get_all(CACHE_CONTROL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    storage_decision(
+        200,
+        &CacheControl::parse(&lines),
+        header_str(headers, VARY),
+        authenticated,
+        allow_authenticated,
+    )
+}
+
+/// Take validators and cache directives from a `304` into the stored entry.
+fn merge_validated_headers(meta: &mut CacheEntryMeta, headers: &reqwest::header::HeaderMap) {
+    for (name, value) in storable_headers(headers) {
+        if matches!(
+            name.as_str(),
+            "etag" | "last-modified" | "cache-control" | "vary"
+        ) && libtea_core::http_cache::is_storable_header(&name, &value)
+        {
+            meta.headers.retain(|(existing, _)| existing != &name);
+            meta.headers.push((name, value));
+        }
+    }
+}
+
+/// A `200` response rebuilt from a cache entry.
+fn raw_from_entry(url: &Url, meta: &CacheEntryMeta, body: Vec<u8>) -> RawResponse {
+    let mut headers = reqwest::header::HeaderMap::new();
+    for (name, value) in &meta.headers {
+        if let (Ok(name), Ok(value)) = (
+            reqwest::header::HeaderName::from_bytes(name.as_bytes()),
+            reqwest::header::HeaderValue::from_str(value),
+        ) {
+            headers.append(name, value);
+        }
+    }
+    RawResponse {
+        status: StatusCode::OK,
+        headers,
+        body: Bytes::from(body),
+        final_url: url.clone(),
+        content_decoded: meta.decoded,
+        pending_cache: None,
+        presented_bearer: None,
+    }
 }
 
 pub(crate) fn header_str(

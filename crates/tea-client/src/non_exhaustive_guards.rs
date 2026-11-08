@@ -41,6 +41,9 @@
 ///         libtea_client::ClientError::Unresolved { .. } => 0,
 ///         libtea_client::ClientError::DiscoveryFailed { .. } => 0,
 ///         libtea_client::ClientError::Integrity { .. } => 0,
+///         libtea_client::ClientError::Io(_) => 0,
+///         libtea_client::ClientError::Throttled { .. } => 0,
+///         libtea_client::ClientError::Offline => 0,
 ///         libtea_client::ClientError::Token { .. } => 0,
 ///     }
 /// }
@@ -67,6 +70,9 @@ pub(crate) struct GuardClientError;
 ///         libtea_client::ClientError::Unresolved { .. } => 0,
 ///         libtea_client::ClientError::DiscoveryFailed { .. } => 0,
 ///         libtea_client::ClientError::Integrity { .. } => 0,
+///         libtea_client::ClientError::Io(_) => 0,
+///         libtea_client::ClientError::Throttled { .. } => 0,
+///         libtea_client::ClientError::Offline => 0,
 ///         libtea_client::ClientError::Token { .. } => 0,
 ///         _ => 1,
 ///     }
@@ -354,6 +360,28 @@ pub(crate) struct GuardClientErrorApi;
 #[allow(dead_code)]
 pub(crate) struct ControlClientErrorApi;
 
+/// `libtea_client::ClientError::Throttled` is a `#[non_exhaustive]` variant: a literal with every field must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(status: u16, retry_after_secs: Option<u64>) {
+///     let _ = libtea_client::ClientError::Throttled { status, retry_after_secs };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardClientErrorThrottled;
+
+/// Control for `GuardClientErrorThrottled`: a pattern with `..` compiles.
+///
+/// ```
+/// fn f(x: libtea_client::ClientError) {
+///     if let libtea_client::ClientError::Throttled { status, retry_after_secs, .. } = x {
+///         let _ = (status, retry_after_secs,);
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlClientErrorThrottled;
+
 /// `libtea_client::ClientError::Unresolved` is a `#[non_exhaustive]` variant: a literal with every field must not compile.
 ///
 /// ```compile_fail,E0639
@@ -507,3 +535,113 @@ pub(crate) struct GuardSignatureFetchNotModified;
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlSignatureFetchNotModified;
+
+/// `StreamedDownload` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::StreamedDownload) {
+///     let _ = libtea_client::StreamedDownload { bytes_written: base.bytes_written, ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardStreamedDownload;
+
+/// Control for `GuardStreamedDownload`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::StreamedDownload) {
+///     let kept = base.bytes_written.clone();
+///     let libtea_client::StreamedDownload { bytes_written, .. } = base;
+///     let _ = (kept, bytes_written);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlStreamedDownload;
+
+/// `FileDownload` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::FileDownload) {
+///     let _ = libtea_client::FileDownload { path: base.path.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardFileDownload;
+
+/// Control for `GuardFileDownload`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::FileDownload) {
+///     let kept = base.path.clone();
+///     let libtea_client::FileDownload { path, .. } = base;
+///     let _ = (kept, path);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlFileDownload;
+
+/// `FileDownloadOptions` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::FileDownloadOptions) {
+///     let _ = libtea_client::FileDownloadOptions { overwrite: base.overwrite, ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardFileDownloadOptions;
+
+/// Control for `GuardFileDownloadOptions`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::FileDownloadOptions) {
+///     let kept = base.overwrite.clone();
+///     let libtea_client::FileDownloadOptions { overwrite, .. } = base;
+///     let _ = (kept, overwrite);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlFileDownloadOptions;
+
+/// `CacheConfig` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::CacheConfig) {
+///     let _ = libtea_client::CacheConfig { dir: base.dir.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardCacheConfig;
+
+/// Control for `GuardCacheConfig`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::CacheConfig) {
+///     let kept = base.dir.clone();
+///     let libtea_client::CacheConfig { dir, .. } = base;
+///     let _ = (kept, dir);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlCacheConfig;
+
+/// `CacheStats` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::CacheStats) {
+///     let _ = libtea_client::CacheStats { dir: base.dir.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardCacheStats;
+
+/// Control for `GuardCacheStats`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::CacheStats) {
+///     let kept = base.dir.clone();
+///     let libtea_client::CacheStats { dir, .. } = base;
+///     let _ = (kept, dir);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlCacheStats;
