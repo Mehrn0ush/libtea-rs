@@ -142,7 +142,7 @@ IMF-fixdate), the client waits that long when it is at most
 `Limits::max_retry_after` (default 30 s); a longer request fails at once with
 `ClientError::Throttled { status, retry_after_secs }` so the caller can decide.
 Without the header the client backs off as before. After the retries run out the
-error is `Throttled` too (it used to be `Transport("HTTP 503")` for a `503`).
+error is `Throttled` too.
 The token `POST` is not retried.
 
 ## Commands

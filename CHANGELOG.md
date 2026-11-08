@@ -72,7 +72,7 @@ Independent implementation of a consumer for the Transparency Exchange API (TEA)
 ### Known limitations
 
 - No cryptographic signature verification, publisher authenticity verification, or Sigstore trust-policy evaluation (`docs/design/signature-verification.md`).
-- Live interoperability evidence is limited to a local server (Oolong) and one public read-only server (Vulnetix); not universal compatibility, not certification.
+- Live interoperability evidence is limited to a local server (Oolong) and one public read-only server (Vulnetix; reported by the maintainer, no result file committed); not universal compatibility, not certification.
 - No HTTPS SVCB lookup, OAuth beyond API-key `client_credentials`, full ECMA-428 CLE evaluation, `no_std`, or `Range` resume.
 - Not yet run on GitHub: the release workflow, the Action, and the CI jobs. Their pins are placeholders that block a release until filled in (`docs/release-pins.md`).
 - CI runs on Linux only; macOS and Windows are not tested in CI, and the Unix-only directory checks of the cache do not exist on Windows.

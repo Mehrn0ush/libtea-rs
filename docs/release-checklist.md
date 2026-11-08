@@ -34,7 +34,7 @@ feature branch and again on `main` before anything is tagged or published.
    `draft-release`), download the **draft** release, and verify it with
    `docs/installing.md`: checksums, `gh attestation verify` with
    `--source-ref refs/tags/v$VERSION`, run the binary, open the SBOM. Do not go
-   on until this passes. Nothing has been published to crates.io yet.
+   on until the checks succeed. Nothing has been published to crates.io yet.
 8. `cargo publish -p libtea-core --locked`.
 9. **Wait** until the index serves `libtea-core 0.1.0`, for example until
    `cargo info libtea-core@0.1.0` (or `cargo search libtea-core`) shows it.

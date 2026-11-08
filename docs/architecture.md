@@ -13,7 +13,7 @@ libtea-cli
 
 `libtea-conformance` runs checks that do not contact a network and writes a JSON report. A passing report means the local checks passed. It does not certify a server.
 
-`libtea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, and `download`. Identifier filters are `ListParams` on `libtea-client` list methods. The CLI does not expose them.
+`libtea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, `collections`, `download`, `sync`, `diff` and `cache`. Identifier filters are `ListParams` on `libtea-client` list methods; the CLI does not expose them.
 
 ## Request path
 
@@ -71,9 +71,11 @@ This SDK implements the consumer side of the Transparency Exchange API from one 
 | OpenAPI version | `3.1.1` |
 | ECMA context repository | https://github.com/Ecma-TC54/ECMA-xxx-TEA |
 
-The OpenAPI document at that commit is `spec/openapi.yaml`. Its `info.version` is `1.0.0`. The repository README still says "Beta 2". This SDK treats the OpenAPI document and the normative discovery, authentication, collection, and TEI registry files at this commit as the contract, and records the README status line as stale. See the section "Where the specification is ambiguous" below.
+The OpenAPI document at that commit is vendored as `spec/vendor/openapi.yaml` (upstream path `spec/openapi.yaml`). Its `info.version` is `1.0.0`. The repository README still says "Beta 2". This SDK treats the OpenAPI document and the normative discovery, authentication, collection, and TEI registry files at this commit as the contract, and records the README status line as stale. See the section "Where the specification is ambiguous" below.
 
 ### Normative source files
+
+Paths are relative to the upstream repository at the pinned commit. Vendored under `spec/vendor/`: `openapi.yaml`, `discovery/readme.md`, `discovery/tea-well-known.schema.json`, `auth/readme.md`, `tea-collection/tea-collection.md` and `tei-types/README.md`. The other files are read at the pinned commit but not copied here.
 
 - `spec/openapi.yaml` — consumer operations, schemas, and HTTP response metadata
 - `discovery/readme.md` and `ecma-doc/discovery.md` — TEI syntax, well-known retrieval, version negotiation, failover, and authentication interaction (these two files match at this commit)
@@ -102,11 +104,7 @@ The OpenAPI document at that commit is `spec/openapi.yaml`. Its `info.version` i
 - CLE is retrieved as the TEA projection. This client does not fetch or validate a full ECMA-428 document.
 - The SDK is not `no_std` and is not a TEA server.
 - List filters accept `idType` alone and both `idType` and `idValue`. `idValue` without `idType` is rejected before the request with `idValue requires idType`. The pinned text does not define that value-only case.
-- The CLI covers spec identity, TEI parse, offline conformance, discovery, one product-release read, and artifact download. It does not offer list or identifier-filter commands.
-
-### Unresolved specification ambiguities
-
-See "Where the specification is ambiguous" below.
+- The CLI has no identifier-filter options; those are library calls (`ListParams`).
 
 ## Where the specification is ambiguous
 
@@ -114,7 +112,7 @@ Pinned revision: `962a0228af1bfcc1232ac3f79239317ff33fdb04` (retrieved 2026-10-1
 
 ### README status versus OpenAPI version
 
-The repository README says the standard is "Beta 2". `spec/openapi.yaml` `info.version` is `1.0.0`, and the discovery examples advertise `"1.0.0"`.
+The repository README says the standard is "Beta 2". The upstream `spec/openapi.yaml` has `info.version` `1.0.0`, and the discovery examples advertise `"1.0.0"`.
 
 This SDK implements OpenAPI `1.0.0` from the pinned commit. The README status line is treated as documentation drift, not as an instruction to implement an older beta.
 
@@ -172,67 +170,28 @@ The error text is `idValue requires idType`. The check rejects only a value with
 
 ### Signatures document
 
-`signatures/signature.md` says it is work in progress and not part of the TEA standard. It mentions `/trust-anchors/`, which is absent from `spec/openapi.yaml`.
+`signatures/signature.md` says it is work in progress and not part of the TEA standard. It mentions `/trust-anchors/`, which is absent from `spec/vendor/openapi.yaml`.
 
 Interpretation used: signature download endpoints from the OpenAPI document are implemented. Trust-anchor distribution is not.
 
 ## Dependencies
 
-### cargo tree (libtea-client, depth 1)
-libtea-client v0.1.0 (crates/tea-client)
-├── base64 v0.22.1
-├── bytes v1.12.1
-├── flate2 v1.1.10
-├── futures-util v0.3.34
-├── libtea-core v0.1.0 (crates/tea-core)
-├── reqwest v0.12.28
-├── serde v1.0.229
-├── serde_json v1.0.151
-├── thiserror v2.0.21
-├── tokio v1.54.1
-├── tracing v0.1.44
-└── url v2.5.4
+The lock file (`Cargo.lock`) is committed. TLS is rustls only. Direct dependencies and why each is there:
 
-### Unique crates in tree (approx)
-     162
+| Crate | Used by | Why |
+| --- | --- | --- |
+| `serde`, `serde_json` | core, client, conformance | Models, lock file, cache entries, JSON output. |
+| `thiserror` | core, client | Error types. |
+| `url` | core, client, cli | URL parsing and destination checks. |
+| `uuid`, `semver` | core | Typed identifiers and API version precedence. |
+| `sha1`, `sha2`, `sha3`, `blake2`, `blake3`, `digest` | core | The checksum algorithms a server may declare, behind one interface. |
+| `base64` | core, client | TEI/purl encoding and the HTTP Basic credential. |
+| `flate2` | core, client | Removing `gzip` and `deflate` before hashing. |
+| `tokio` | client, cli | Async runtime; its `fs` feature is used for streaming downloads to a temporary file. |
+| `reqwest` | client | HTTP with rustls; certificate verification stays on. |
+| `futures-util`, `bytes` | client | Streaming response bodies. |
+| `tracing` | client | Log events with URLs and credentials redacted. |
+| `clap`, `anyhow` | cli | Command-line parsing and error reporting. |
+| `proptest`, `wiremock` | tests only | Property tests and local mock servers. |
 
-### Build timing (release, quiet)
-real 73.62
-user 172.27
-sys 22.01
-
-### Example binary size (`paginate_components`, release)
-- On-disk: ~5.4 MiB (`5379792` bytes) for a release example linking the client.
-- Not a minimal CLI strip; indicative of client + rustls footprint only.
-
-### Notes
-- TLS backend today: reqwest + rustls only.
-- futures-util already required by reqwest stream feature; follow_pages adds no new dep.
-- Proposed optional features documented in README; not implemented for 0.1.0 defaults.
-
-### F1 streaming download (no new crate)
-
-- `tokio` gains the `fs` feature (`tokio::fs::File` for the temporary file). It
-  pulls in no new package: `Cargo.lock` is unchanged by it. `io-util` was
-  already enabled.
-- `libtea-core`, `libtea-client` and `libtea-cli` add no dependency. `flate2`
-  and `sha2` were already dependencies; the tests use them as before.
-
-### F3 release workflow (no new crate dependency)
-
-- `cargo-cyclonedx` is installed in the release workflow's `sbom` job only
-  (`cargo install --locked --version`, version pinned in `release.yml`). It is
-  not a dependency of any workspace crate and does not touch `Cargo.lock`.
-- The scripts use Python 3 (standard library only) and Bash.
-
-### F4 GitHub Action (no new crate dependency)
-
-- The action adds no Rust dependency. Its scripts use Bash, `curl`, and the
-  Python 3 standard library (`tarfile`, `zipfile`); the one third-party action is
-  `actions/cache` (placeholder pin).
-
-### F6 cache (no new crate dependency)
-
-- `libtea-core` already depended on `sha2`; the cache entry format and keys use it.
-  `libtea-client` adds no dependency (file work uses `std::fs` and the existing
-  `tokio` `fs` feature). `Cargo.lock` is unchanged.
+`cargo-cyclonedx` is installed only in the release workflow's SBOM job. It is not a dependency of any crate. The release and Action scripts use Bash, `curl` and the Python 3 standard library. The fuzz crate under `fuzz/` has its own lock file.

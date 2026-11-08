@@ -79,6 +79,8 @@ Checksum verification means the decoded bytes match digests the server declared 
 
 ## Independent public evidence — Vulnetix TEA 1.0.0
 
+**Reported by the maintainer; not reproducible from this repository.** No sanitized result file is committed, so the tables below record what was reported, not output a reader can re-derive here. They are evidence for that one deployment only.
+
 | Field | Value |
 | --- | --- |
 | API root | `https://www.vulnetix.com/tea` |
@@ -89,7 +91,7 @@ Checksum verification means the decoded bytes match digests the server declared 
 | Expected SHA-256 | `fa0b6b174d3c3f55dcd0e0fa917fbbe86d1799cf2f423bc0765bd4997a4e370a` |
 | Auth | Anonymous (no API key exercised against Vulnetix) |
 
-### Previously reported (accepted as prior evidence)
+### Operations reported
 
 | Operation | Result |
 | --- | --- |
@@ -102,7 +104,7 @@ Checksum verification means the decoded bytes match digests the server declared 
 | CycloneDX SBOM download + SHA-256 | PASS (5728 bytes) |
 | Strong ETag observed | PASS |
 
-### Newly exercised on 2026-11-05 (targeted read-only SDK probes)
+### Further read-only SDK probes
 
 | Operation | Result | Classification |
 | --- | --- | --- |
@@ -116,12 +118,9 @@ Checksum verification means the decoded bytes match digests the server declared 
 
 Downloading a `provenance.sigstore.json` (or similar) and verifying its checksum proves **content integrity**, not Sigstore cryptographic verification of the signed subject.
 
-## Live Vulnetix run, 2026-11-08 (maintainer-reported)
+## Command-line run on the public deployment (2026-11-08)
 
-The maintainer ran the CLI against the public Vulnetix TEA 1.0.0 deployment on
-2026-11-08 and reported the following. The agent that wrote this section did
-not run it and has not seen the raw output; the sanitized result file below is
-**not yet in the repository**.
+Reported by the maintainer; not reproducible from this repository. The maintainer ran the CLI against the public Vulnetix TEA 1.0.0 deployment on 2026-11-08.
 
 | Field | Value |
 | --- | --- |
@@ -132,8 +131,7 @@ not run it and has not seen the raw output; the sanitized result file below is
 | ETag | strong |
 | Sanitized probe result file | not committed; produce one with `scripts/interop-probe.sh` |
 
-Nothing else about this run is recorded. In particular no response timings,
-header dumps, or other endpoints were reported, so none are claimed.
+No response timings, header dumps or other endpoints are recorded, so none are claimed.
 
 ## Implementations named by the specification
 
@@ -142,11 +140,11 @@ header dumps, or other endpoints were reported, so none are claimed.
 | py-libtea | Python library | Not executed |
 | pypi-tea | Service in front of PyPI | Not executed |
 | ReARM CLI / server | Client / server | Not executed |
-| Vulnetix | Client note in older docs; public API root above | Public Consumer probes as above (TEA 1.0.0 paths) |
+| Vulnetix | Client named in the specification's implementations list; public API root above | Public Consumer probes as above (TEA 1.0.0 paths) |
 | Oolong | Server | Local fixture profile |
 | sbomify | Server | Not executed |
 
-The pinned implementations note also links `https://us.sbom.cybeats.com/.well-known/tea`. A fetch on 2026-10-10 returned `versions: ["1"]`. This client parses API versions as SemVer and would reject `1` before calling `/discovery`.
+Some servers advertise API versions that are not SemVer, such as `1` or `1.0`. By default this client requires an advertised version equal to a supported one and rejects such strings before calling `/discovery`. `ClientBuilder::lenient_versions(true)` also accepts `1` and `1.0`, and any stable version with the same major (see the `libtea-client` README). No server is judged by this; it describes the client's choice.
 
 ## Behavior that can affect other implementations
 
@@ -227,7 +225,7 @@ The report includes the specification commit and version and one result per case
 
 The default `libtea-client` tests use a local mock server. They cover production destination refusal, JSON size limits, a product read, TEA `404` recognition, failover from a non-TEA `404`, one API-key exchange after a bearer challenge, redirect stripping of `Authorization`, checksum verification of decoded bytes, and identifier query serialization (type only, both parameters, neither parameter, and value-only rejection before a request).
 
-An ignored test, `oolong_idtype_live`, talks to a local Oolong process. It is not part of `cargo test`. See [interoperability.md](interoperability.md).
+Two ignored live tests, `oolong_idtype_live` and `oolong_surface_live`, talk to a local Oolong process. They are not part of `cargo test`; see "How to run the live Oolong suite" above.
 
 ### What is not claimed
 
