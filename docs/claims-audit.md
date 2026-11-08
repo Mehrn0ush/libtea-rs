@@ -69,3 +69,66 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | `SECURITY.md` / README "certificate verification cannot be disabled" | True: no `danger_accept_invalid_certs` call exists; `add_root_pem` only adds anchors |
 | "always `false`" for `is_certification` | Literal; asserted by `report_is_not_a_certification_and_names_the_pinned_commit` |
 | `SignatureVerifyOutcome::Verified` | Exists for caller-supplied verifiers; no built-in code path returns it (grep: only the enum definition and a negative test) |
+
+## Streaming download, CLI JSON and exit codes (F1)
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `crates/tea-client/src/download.rs` module docs | "Nothing is released as verified before the check completes" | Stated for the **file** methods only (temporary file, rename after the checksum policy passed; removed on failure and cancellation; tests in `tests/streaming_download.rs`). The **writer** method is documented as handing out unverified bytes. |
+| same | "Verified means checksum integrity" | Repeats that it is not publisher authenticity; no signature check exists. |
+| same | "Resume is not supported" | Negative claim; there is no `Range` code. Reasons recorded in `docs/open-questions.md`. |
+| `docs/cli-json.md` `integrity.scope` | "decoded artifact bytes; not publisher authenticity" | Fixed string in every `download --json` object. |
+| `docs/cli-exit-codes.md` code 0 / 6 | "exit 0 means checksum integrity of decoded bytes" | Unchanged from the existing `--require-checksums` wording; `NotDeclared` is reported on stderr. |
+| `docs/cli-exit-codes.md` code 7 | "Reserved" | No command returns it; a test checks only that `--help` lists it. |
+| `libtea --help` | Exit status list | Asserted by `help_documents_every_exit_status`. |
+| memory bound | Not claimed | The file path does not buffer the body, but no test measures peak memory, so no bound is stated. |
+
+## Lock file, sync and diff (F2)
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/lock-file.md` "What it is, and what it is not" | A lock is unsigned and not authenticity | States it; `integrity: Verified` is defined as declared digests matching decoded bytes. |
+| `docs/lock-file.md` | "It holds no secrets" | `LockFile::validate` rejects a `server` with userinfo, query or fragment (unit test); `no_credential_reaches_the_lock_or_the_output` runs with credentials set. The content URL is not recorded. |
+| `docs/lock-file.md` | "Deterministic" | Unit test (input order), proptest (order and duplicates), and a CLI test (a second lock from the same server is byte-identical). |
+| `docs/lock-file.md` | "Atomic", "symlink refused" | Temporary file plus rename; `a_symlinked_lock_is_never_written_through`. A power-loss guarantee is not claimed (the lock is `sync_all`ed before the rename, nothing more is tested). |
+| `docs/lock-file.md` | "Fails closed" | `tampered_bytes_fail_closed_and_leave_the_lock_alone` (no lock created; an existing one unchanged; exit 6 under `--check`). |
+| `docs/lock-file.md` `integrity` values | `NotDeclared` means nothing was checked | Tested; open question 23. |
+| `docs/cli-exit-codes.md` code 7 | Emitted by `sync --check` and `diff` | Tested in `sync.rs`. |
+| `docs/schemas/lock-v1.schema.json` | Matches the writer | `lock_schema.rs` checks key names, requiredness, closed objects, the version constant and the integrity names. It is **not** run through a JSON Schema validator (none in the workspace), so type and pattern keywords are unchecked. |
+
+## Release workflow and installing docs (F3)
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `release.yml` header | "never publishes to crates.io", "holds no repository secret" | `release_never_publishes_to_a_registry` and `release_holds_no_secret_and_scopes_the_token` check the workflow text. They show the text, not the behaviour of a run (none has happened). |
+| `release.yml` header | Per-job authority table | `release_permissions_are_least_privilege` asserts the exact permission map of every job. |
+| `release.yml` header | "Not run yet" | True; stated in the file, `docs/release-pins.md`, `docs/installing.md` and the checklist. |
+| `docs/installing.md` | `SHA256SUMS` is "not an independent proof of origin" | It travels with the archives; the page says so. |
+| `docs/installing.md` | What the attestation proves | Worded as "GitHub Actions ran this workflow at a recorded commit and produced a file with that digest"; explicitly not source review, not toolchain trust. The `gh attestation verify` flags were written from memory of the CLI and are untested. |
+| `docs/installing.md` | "not code-signed or notarized", "not claimed reproducible" | Negative claims. Archives are deterministic given the binary (`archives_are_deterministic_and_carry_no_host_identity`); the compiled binary is not claimed to be. |
+| `docs/installing.md` | SBOM "is an inventory, not a vulnerability assessment" | Scope statement. The SBOM tool invocation is unverified (`docs/release-pins.md` step 3). |
+
+## GitHub Action (F4)
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `action.yml` header | "poisoned cache entry is rejected" | `a_cached_archive_is_reused_only_when_it_matches_the_fresh_sums` (stubbed network). |
+| `action.yml` header | "Credentials: never inputs" | `no_input_can_carry_a_credential`; `extra-args` refusal tested; the final step is the only one that sees the variables (`a_matching_release_is_installed_cached_and_fetched_without_credentials`). Echoing is limited to the command name (tested). |
+| `action.yml` header | "Input values reach the scripts through env, never the shell text" | `inputs_reach_scripts_through_env_only` (no `${{` in a run line; the run lines are fixed). |
+| `docs/github-action.md` status | "not run on GitHub", "tested against stubs" | True. Stubs replace curl, gh and libtea; the real flags of `gh attestation verify` and the Windows path handling are untested. |
+| `docs/github-action.md` "What the action checks" | SHA-256 and attestation | Tested with stubs. The wording of what a pass proves repeats `docs/installing.md` (integrity of the download, build by this repository's workflow; not source safety). |
+| `docs/github-action.md` examples | "safe to copy" | `example_workflows_are_safe_to_copy` lints the examples (no `pull_request_target`, read-only permissions, secrets only as the two env vars in a step, SHA-style pins, `persist-credentials: false`). It lints text; it does not run them. |
+
+## Cache, offline mode and Retry-After (F6)
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/cache.md` "Threat model" | The cache is not a trust boundary | Stated first; the format's hash is described as protection against corruption, not authentication. |
+| `docs/cache.md` | Forged artifact entries fail the checksum check | `a_forged_artifact_entry_is_caught_by_the_checksum_check` (online `304`, offline buffered, offline streaming). The limit (forged metadata plus artifact) is stated next to it. |
+| `docs/cache.md` | Directory `0700`, files `0600`; symlink / open directory refused | `the_cache_is_created_private`, `unsafe_cache_directories_are_refused`. Unix only; Windows is said to have no check. |
+| `docs/cache.md` | "Nothing from a request is stored" | `vary_star_and_unlisted_headers_are_not_kept`, `responses_to_credentialed_requests_are_not_stored_unless_enabled` (no secret, token or key id in an entry file). Response headers are an allow-list. |
+| `docs/cache.md` | Offline opens no connection | The mock server's request count is asserted unchanged (`cache.rs`, `cache_cli.rs`). |
+| `docs/cache.md` | Damaged entries are treated as absent | Truncated, garbage, flipped, wrong-key, empty, oversized, symlink and directory cases; plus the core entry codec's truncation and flip tests, proptests and the `http_cache_entry` fuzz target. |
+| `docs/cache.md` | "Atomic, not durable" | Temporary file plus rename; the concurrent-writer test; no `fsync` is said outright. |
+| `docs/cache.md` `Retry-After` | Waits up to the cap, fails fast above it | `throttle.rs`. The wait test measures elapsed time with a 900 ms floor on a 1 s wait; it is timing-based. |
+| key derivation | Different key ids and origins never share an entry | Unit test on `cache_key`; `different_keys_never_share_entries`. |

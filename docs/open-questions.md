@@ -178,3 +178,195 @@ consumer on `resolver = "2"` can no longer be served, by design). MSRV policy:
 latest stable minus about four releases, raised only in minor releases, each
 raise listed in the CHANGELOG. Statements above that mention 1.85 describe the
 state at the time of each experiment.
+
+## F1: streaming download, JSON output, exit codes (2026-11-08)
+
+**15 — Range resume: not supported.** Options: (a) do not support it; (b)
+`Range` plus `If-Range` on identity-coded bodies only. Recommendation and
+current state: (a). A `Range` applies to the encoded representation but the
+checksums cover decoded bytes; a partial file would have to be re-read to
+rebuild the hash state; TEA 1.0.0 defines no range semantics for artifact
+downloads; and a resumed body from a changed object would be hashed as one
+file. Revisit if a server publishes `Accept-Ranges` for artifacts and a user
+needs it. The milestone item 0.3-6 stays open.
+
+**16 — `download --json` goes to stdout and needs `--output`.** The milestone
+text proposed stderr or `--status-file` with stdout staying the bytes. With
+`--output` stdout is free, so the JSON object goes there; without `--output`
+`--json` is a usage error. Options: keep this, or add `--status-file` later.
+Recommendation: keep this.
+
+**17 — error objects go to stderr.** Keeping stdout empty on failure means a
+consumer piping stdout to a JSON parser never sees a half document. The cost is
+that a consumer must read stderr for the reason. Recommendation: keep.
+
+**18 — exit code 7 is reserved, not emitted.** F1 asks for a "changes detected"
+code, but no F1 command compares anything. It is defined now so the number is
+fixed before `sync --check` and `diff` exist. Network failure and policy refusal
+are not separated from code 1 yet (the milestone lists them); recommendation:
+split them only when a pipeline needs it.
+
+**19 — stdout mode buffers.** `download` without `--output` keeps the body in
+memory (up to `max_artifact_bytes`) and prints it after the check, because
+stdout cannot take bytes back. Recommendation: keep; use `--output` for large
+artifacts.
+
+## F2: lock file, sync, diff (2026-11-08)
+
+**20 — `sync --check` downloads everything.** Size and integrity are properties
+of the bytes, so a check that only compared metadata would miss a changed body
+behind unchanged metadata. Cost: a full download per check. Option: a
+`--metadata-only` mode that compares declared checksums and revisions without
+fetching. Recommendation: add it only when a pipeline complains about time;
+keep the full check as the default.
+
+**21 — no ETag or conditional requests in the lock.** The plan listed ETags;
+the lock leaves them out because a validator is not an integrity statement and
+adding it would make every ETag rotation a lock diff. Conditional requests
+would need it. Recommendation: not now; revisit with `--metadata-only`.
+
+**22 — an unchanged lock is left alone, including its old `fetchedAt`.** This
+keeps re-runs out of version control. Cost: `fetchedAt` is the time of the last
+change, not of the last successful check. Recommendation: keep; `--check`
+exit 0 is the evidence of a recent check.
+
+**23 — `NotDeclared` is allowed into a lock.** The format has no checksum, so
+nothing was verified; the lock says so (`integrity: NotDeclared`). Option: a
+`--require-checksums` for `sync`, as `download` has. Recommendation: add it
+before the GitHub Action (F4) relies on `sync`; one product release in a
+pipeline will usually want it.
+
+**24 — unknown fields in a lock are an error.** The lock is our file and is
+version-gated; ignoring a field a newer writer added would lose it on the next
+write. Cost: an older `libtea` cannot read a newer lock even for `diff`.
+Recommendation: keep; bump `schemaVersion` for any addition.
+
+**25 — a lock is unsigned.** Anyone who can edit it can change it. F8 will add
+signer identity and trust-policy ID once signature verification exists.
+Nothing in the format claims authenticity today.
+
+**26 — one product release per lock.** A TEI that resolves to several needs
+`--product-release`. Recommendation: one lock per release; a multi-release
+manifest is a later schema.
+
+## F3: release workflow (2026-11-08)
+
+**27 — placeholders for pins.** No network was available, so the SHAs of
+`actions/upload-artifact`, `actions/download-artifact`,
+`actions/attest-build-provenance` and the `cargo-cyclonedx` version are
+placeholders that fail at job setup (`docs/release-pins.md`). Options: ship with
+tag pins and list them as debt (rejected: F3 requires SHA pins), or placeholders
+(chosen). A gated test fails until they are filled in.
+
+**28 — artifact hand-off between jobs.** Build jobs run on different
+operating systems, so artifacts must pass through the Actions artifact store;
+the attestation then covers the files as the `attest` job downloaded them, not
+as each build job produced them. A tampered artifact between the jobs would be
+attested. Mitigations: short retention, no write tokens in build jobs. Option:
+attest inside each build job (needs `id-token: write` and `attestations: write`
+on every build job, widening their authority). Recommendation: keep the
+single `attest` job; revisit if build-job isolation matters more than token
+scope.
+
+**29 — macOS x86_64 is cross-compiled** on an arm64 runner and its smoke test is
+skipped (`smoke: false`). Option: add an Intel runner when one is available.
+Recommendation: keep; say so in `docs/installing.md` (done).
+
+**30 — musl builds unverified.** Linking `ring` against musl with `musl-gcc`
+(`CC_<target>` and the target linker set in the build step) is the standard
+recipe but was not run. The musl smoke test is the first check. Fallback if it
+fails: build musl with `cargo zigbuild`, which adds a pinned tool.
+
+**31 — no code signing or notarization.** The release has provenance and
+checksums, not Apple notarization or Authenticode. Recommendation: not in 0.3;
+the docs say so.
+
+**32 — runner labels.** `ubuntu-24.04-arm` and `macos-latest` are GitHub-hosted
+labels as documented at the time of writing and were not checked. A label that
+does not exist leaves the job queued, which a dry run shows at once.
+
+## F4: GitHub Action (2026-11-08)
+
+**33 — the action installs from a release that does not exist yet.** It can
+only be exercised end to end after the first release (F3). Until then the
+scripts are tested against stubs. Recommendation: make the F3 dry run the first
+real test of the action, by pointing `repository` at the dry-run tag's release
+(`version: 0.1.0-dryrun.1` works because the release is a draft prerelease only
+if you publish it; a draft is not downloadable anonymously, so publish the
+dry-run release as a prerelease, test, then delete it).
+
+**34 — `actions/cache` is the action's one third-party dependency**, a
+placeholder pin (`docs/release-pins.md`). Option: drop caching and always
+download (one archive plus a one-line SHA256SUMS). Recommendation: keep the
+cache, it is switchable with `cache: "false"`, and the archive is re-verified
+on every run.
+
+**35 — attestation `auto` mode warns and continues without `gh`.** On a
+hosted runner `gh` is always present, so this only affects self-hosted runners.
+Option: make `required` the default. Recommendation: keep `auto` until the
+first release proves `gh attestation verify` works with the flags used (they
+are unverified); then make `required` the default.
+
+**36 — no `latest` version.** Pinning is mandatory so a compromised or buggy
+newer release cannot silently reach a pipeline. Cost: a manual bump.
+Recommendation: keep.
+
+**37 — `extra-args` is a power input.** It can pass any `libtea` flag,
+including `--output` to a path of the caller's choosing and `--allow-origin`.
+That is the caller's workflow, in the caller's repository, so it is not a
+privilege boundary, but a workflow that builds `extra-args` from untrusted text
+(a pull-request title, a branch name) would let that text choose flags. The
+docs say to keep it static; the action cannot tell the difference.
+
+**38 — the `sync --check` default is not `--frozen`-style for artifacts.** It
+re-downloads every artifact (open question 20). Recommendation: unchanged.
+
+## F6: persistent cache, offline mode, Retry-After (2026-11-08)
+
+**39 — always revalidate; `max-age` is not used.** Skipping the request while an
+entry is "fresh" would save calls but could serve a stale `collection/latest`.
+Recommendation: keep; offline mode is the explicit way to use the cache without
+asking.
+
+**40 — `private` is stored only with `--cache-authenticated`.** A per-user cache
+may keep `private` responses; the conservative reading of F6 is chosen. Option:
+store `private` for anonymous requests. Recommendation: keep until a server's
+behavior shows the cost.
+
+**41 — the cache cannot detect forged metadata.** Artifact bytes are re-checked
+against declared checksums, but the checksums come from metadata that may itself
+be cached. Defence is the private directory, not the format. Option: a keyed MAC
+on entries (needs a secret to store, which the cache must not hold) or signature
+verification (F8). Recommendation: keep, and say so (done in `docs/cache.md`).
+
+**42 — age counts from the last revalidation.** An entry that keeps getting
+`304`s never expires. Option: count from first store to force a periodic full
+refetch. Recommendation: keep; `cache clear` exists.
+
+**43 — no `fsync`.** A crash can lose entries. Recommendation: keep; it is a cache.
+
+**44 — Windows has no mode checks.** The `0700`/`0600` rules are Unix-only. A
+Windows directory check would need ACL inspection. Recommendation: document
+(done); revisit if Windows users report shared profiles.
+
+**45 — discovery documents are cached too**, because they go through the same
+transport. That makes `sync --offline` possible and also means a stale
+`.well-known/tea` is served offline. Recommendation: keep.
+
+**46 — a streamed artifact is copied into the cache while it downloads**, which
+needs space for two copies of a large artifact. Option: hard-link or rename the
+destination into the cache. Recommendation: keep the copy; a link would tie the
+cache entry to a file the caller may edit.
+
+**47 — a final `503` is now `ClientError::Throttled`**, not
+`Transport("HTTP 503")`. This is a visible change for callers that matched the
+old text; the milestone asked for a typed error. Recommendation: keep, noted in
+the CHANGELOG.
+
+**48 — an offline miss exits 1**, not a dedicated code. Recommendation: keep
+unless a pipeline needs to tell "not cached" from other failures.
+
+**49 — the cache is not shared between `Client`s on the same directory for
+`prune`.** Each client prunes on its own writes; two clients can briefly exceed
+the total. Recommendation: keep; the limit is a ceiling on a quiet directory,
+not a quota.

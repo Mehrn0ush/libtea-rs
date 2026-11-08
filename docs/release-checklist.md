@@ -59,3 +59,40 @@ cargo package -p libtea-client --locked --no-verify --list
 
 State only what tests prove. Do not claim official conformance, universal
 compatibility, or publisher-authenticity verification.
+
+## Binary release (GitHub, never crates.io)
+
+`.github/workflows/release.yml` builds the CLI for seven targets, writes
+`SHA256SUMS` and a CycloneDX SBOM, attests build provenance, and creates a
+**draft** GitHub release. It publishes nothing to crates.io and holds no
+secret. It has **not been run**; the first run is the dry run below. Read
+`docs/release-pins.md` first: four values are still placeholders.
+
+1. Fill in the pins (`docs/release-pins.md`), then:
+   `cargo test -p libtea-cli --test workflow_policy --test action_policy -- --ignored` must pass.
+2. Dry run on a throwaway tag (a pre-release suffix makes it a draft
+   prerelease and skips the "tag is on main" check):
+
+   ```sh
+   VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/tea-cli/Cargo.toml | head -n 1)
+   git tag -a "v$VERSION-dryrun.1" -m "release workflow dry run"
+   git push origin "v$VERSION-dryrun.1"
+   gh run list --workflow release.yml --limit 3
+   gh run watch                      # pick the run for the tag
+   gh release view "v$VERSION-dryrun.1"
+   gh release download "v$VERSION-dryrun.1" --dir /tmp/libtea-dryrun
+   ```
+
+   Then follow `docs/installing.md` on the downloaded files (checksums,
+   `gh attestation verify`, run the binary on at least one platform you have,
+   open the SBOM). Clean up:
+
+   ```sh
+   gh release delete "v$VERSION-dryrun.1" --yes --cleanup-tag
+   git tag -d "v$VERSION-dryrun.1"
+   ```
+
+3. Real release: after step 10 of the crate release above, tag
+   `RELEASE_SHA` (`v$VERSION`, annotated, on `main`); the workflow validates the
+   tag against `crates/tea-cli/Cargo.toml`. Review the draft, check the files
+   against `docs/installing.md`, then publish the release by hand.

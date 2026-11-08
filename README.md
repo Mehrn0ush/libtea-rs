@@ -211,8 +211,17 @@ cargo run -p libtea-cli --locked -- discover 'tei://example.com/uuid/…'
 cargo run -p libtea-cli --locked -- product-release --base https://api.example.com --uuid …
 cargo run -p libtea-cli --locked -- collections --base https://api.example.com --uuid … --page-size 2 --json
 cargo run -p libtea-cli --locked -- collections --base https://api.example.com --uuid … --latest --json
-cargo run -p libtea-cli --locked -- download --base https://api.example.com --artifact … --revision 1 --output artifact.bin
+cargo run -p libtea-cli --locked -- download --base https://api.example.com --artifact … --revision 1 --output artifact.bin --json
+cargo run -p libtea-cli --locked -- sync 'tei://example.com/uuid/…' --lock tea.lock
+cargo run -p libtea-cli --locked -- sync 'tei://example.com/uuid/…' --lock tea.lock --check
+cargo run -p libtea-cli --locked -- diff old.lock new.lock
 ```
+
+A composite GitHub Action (`action.yml`, `docs/github-action.md`) installs a verified release binary and runs `sync --check` and other commands; it has not been run on GitHub yet. Prebuilt binaries are built by `.github/workflows/release.yml` (draft releases with checksums, an SBOM and a provenance attestation); no release has been published yet, see `docs/installing.md`.
+
+`sync` fetches and checks every artifact format of the latest collection and writes a deterministic lock (`docs/lock-file.md`); `sync --check` and `diff` exit 7 when something differs. A lock records checksum integrity at fetch time; it is not signed and not publisher authenticity.
+
+`download --output` streams: the bytes go to a temporary file next to the destination and are renamed into place only after the checksums passed (checksum integrity of the decoded bytes, not publisher authenticity). Exit status: 0 success, 1 failure, 2 usage, 3 auth, 4 weak-only checksums, 5 not found, 6 integrity, 7 reserved for changes detected; see `docs/cli-exit-codes.md` and `docs/cli-json.md`. The library equivalents (`Service::download_format_to_file` and friends) are experimental.
 
 **Credentials precedence:** complete `--api-key-id` + `--api-key-secret` pair (secret on argv is **insecure**), else complete `TEA_API_KEY_ID` + `TEA_API_KEY_SECRET`, else anonymous. Partial pairs and mixing CLI id with env secret are errors. JSON modes write structured data to stdout; diagnostics go to stderr.
 
@@ -232,7 +241,7 @@ cargo run -p libtea-cli --locked -- download --base https://api.example.com --ar
 ## Limitations
 
 - Default supported API version is `1.0.0`.
-- No HTTPS SVCB lookup; no persistent HTTP cache.
+- No HTTPS SVCB lookup. A persistent HTTP cache and offline mode exist but are opt-in and experimental (`docs/cache.md`).
 - Signature formats and trust anchors are not interpreted.
 - Value-only identifier filters are rejected (`idValue requires idType`).
 - CLI is intentionally thin; list identifier filters remain library calls.

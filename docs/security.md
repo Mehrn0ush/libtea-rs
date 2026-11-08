@@ -71,3 +71,11 @@ The lockfile is committed. `deny.toml` allows common permissive licenses and den
 ## Out of scope
 
 This SDK does not verify detached signature technology, trust anchors, Sigstore trust policy, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. Callers who need that assurance have to verify signatures themselves. The client can download signature bytes and does not interpret them.
+
+## Persistent cache
+
+The opt-in response cache (`docs/cache.md`) is not a trust boundary: its entries
+are checked for corruption, not authenticity, and anyone who can write the
+directory can feed the client fake metadata. The directory is private by
+construction, artifact bytes are re-checked against declared checksums on every
+use, and credentials and secrets are never stored.

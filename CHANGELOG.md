@@ -108,3 +108,34 @@ New public API:
 - Live interoperability evidence is Oolong (local) and Vulnetix (public read-only); not universal compatibility.
 - CLI and conformance remain unpublished (`publish = false`).
 - No HTTPS SVCB, persistent HTTP cache, OAuth beyond API-key `client_credentials`, full ECMA-428 CLE validate, or `no_std` (see `docs/roadmap.md`).
+
+### Added (F1: streaming download, `--json`, exit codes; unreleased)
+
+- **Experimental** streaming download in `libtea-client`: `Service::download_format_to_file`, `download_artifact_to_file`, `download_latest_artifact_to_file` (temporary file, renamed only after the stream ended cleanly and the checksum policy passed; removed on failure or cancellation; symlink destinations refused; `FileDownloadOptions::overwrite`) and `download_format_to_writer` (the writer sees unverified bytes until the call returns `Ok`). New types `StreamedDownload`, `FileDownload`, `FileDownloadOptions` (all `#[non_exhaustive]`). New `ClientError::Io` variant. Size, decode, redirect and destination limits are the same as for the whole-body methods. Range resume is not supported.
+- `libtea_core::checksum::ContentDecoder::take_output` (experimental): hand out decoded bytes as they are produced; the size cap still covers the whole body.
+- CLI: `download --output` now streams; `--json` on every command (`conformance` and `download` gained it); `download --json` requires `--output` and prints one object on stdout; with `--json` a failure is one JSON object on stderr.
+- CLI exit codes: 2 usage, 3 auth, 5 not found, 6 integrity (4 weak-only and 1 generic are unchanged; 7 is reserved for changes detected). Documented in `docs/cli-exit-codes.md`, `docs/cli-json.md` and `--help`. **Behavior change:** failures that exited 1 before (a bad TEI, a missing credential, a 404, a checksum mismatch) now exit 2, 3, 5 or 6. A script that tests for exactly 1 must be updated.
+- `tokio` `fs` feature enabled; no new crate.
+
+### Added (F2: lock file, sync, diff; unreleased)
+
+- **Experimental** lock file in `libtea-core` (`libtea_core::lock`, re-exported: `LockFile`, `LockedArtifact`, `LockedChecksum`, `LockedIntegrity`, `LockDiff`, `FieldChange`, `ChangedArtifact`, `diff_locks`, `LOCK_SCHEMA_VERSION`): `schemaVersion` 1, strict parsing, canonical deterministic serialisation, validation (no secrets in `server`, no duplicate entries), and a diff that ignores `fetchedAt`. Documented in `docs/lock-file.md` with `docs/schemas/lock-v1.schema.json`.
+- CLI: `libtea sync <TEI> --lock FILE [--check] [--artifacts-dir DIR]` (resolves, downloads and verifies every artifact format of the latest collection, writes the lock atomically, leaves an unchanged lock alone, fails closed) and `libtea diff OLD NEW`. Exit status 7 now means "changes detected" (`sync --check`, `diff`). `--json` output is described in `docs/cli-json.md`.
+- New fuzz target `lock_parse`.
+
+### Added (F3: release workflow; unreleased)
+
+- `.github/workflows/release.yml`: tag-triggered (`v*` tags only) build of the CLI for Linux x86_64 and aarch64 (gnu and musl), macOS x86_64 and aarch64, and Windows x86_64; `SHA256SUMS`; a CycloneDX SBOM of the CLI's dependency tree; a GitHub build-provenance attestation; a **draft** release. It never publishes to crates.io and holds no repository secret; each job has its own least-privilege `permissions`. **Not run yet**, and four pins are placeholders (`docs/release-pins.md`).
+- `scripts/package-release.py` (deterministic archives), `scripts/check-release-tag.sh` (tag validation), `scripts/make-sbom.sh`; tests in `crates/tea-cli/tests/release_scripts.rs` and the extended `workflow_policy.rs`.
+- Docs: `docs/installing.md`, `docs/release-pins.md`, a binary-release section and dry-run commands in `docs/release-checklist.md`.
+
+### Added (F4: GitHub Action; unreleased)
+
+- `action.yml` (composite): installs a released `libtea` binary for the runner, checks its SHA-256 against the release's `SHA256SUMS` (fetched on every run; a cached archive must match too), verifies the build-provenance attestation when `gh` is available, caches the archive, and runs `sync` (with `check`), `diff`, `discover`, `download`, `product-release`, `collections`, `parse-tei`, `spec` or `conformance`. No credential input: `TEA_API_KEY_ID` and `TEA_API_KEY_SECRET` come from the caller's `env:`. Scripts in `scripts/action/`; guide and example workflows (including a `sync --check` job) in `docs/github-action.md`. Not run on GitHub yet; `actions/cache` is a placeholder pin (`docs/release-pins.md`).
+
+### Added (F6: cache, offline mode, Retry-After; unreleased)
+
+- **Experimental** opt-in persistent cache: `ClientBuilder::cache_dir`, `ClientBuilder::cache(CacheConfig)`, `ClientBuilder::offline`, `libtea_client::{CacheConfig, CacheStats, cache_stat, cache_clear}`. Conditional `GET`s with `ETag` / `Last-Modified`; keyed by method, normalized URL and a hash of origin and key id (never the secret); honors `Cache-Control: no-store` and (by default) `private`; responses to credentialed requests are not stored unless enabled; private directory (0700 / 0600, symlink and open directories refused); atomic writes; total-size, entry-size and age limits; damaged entries are treated as absent; artifact checksums are re-verified on every use. Streaming downloads are cached after they verify. See `docs/cache.md`.
+- CLI: `--cache-dir` (or `LIBTEA_CACHE_DIR`), `--offline`, `--cache-authenticated` on `discover`, `product-release`, `collections`, `download`, `sync`; `libtea cache stat|clear`.
+- `libtea_core::http_cache` (experimental): cache key, `Cache-Control` and `Retry-After` parsers, storage decision, entry codec. Proptests and the `http_cache_entry` and `http_cache_headers` fuzz targets.
+- `Limits::max_retry_after` (default 30 s) and `ClientError::Throttled { status, retry_after_secs }`: `GET`s answered `429` or `503` honor `Retry-After` (seconds or HTTP-date) up to the cap and fail at once above it. **Behavior change:** a final `503` is now `Throttled`, not `Transport("HTTP 503")`. `ClientError::Offline` is new.
