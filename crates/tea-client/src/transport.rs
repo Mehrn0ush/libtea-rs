@@ -43,8 +43,20 @@ pub struct Limits {
     pub max_artifact_bytes: usize,
     /// Maximum redirects for one operation.
     pub max_redirects: usize,
-    /// Overall request timeout.
+    /// Overall time for one request that is not an artifact download: the
+    /// response headers and the whole body (discovery, JSON metadata, the token
+    /// exchange). Artifact `GET`s use [`Self::download_timeout`] instead.
     pub request_timeout: Duration,
+    /// Overall time for one artifact or signature download, body included.
+    /// A transfer that keeps making progress is not cut off by the shorter
+    /// [`Self::request_timeout`]; this is the ceiling for the whole transfer.
+    /// Default 30 minutes.
+    pub download_timeout: Duration,
+    /// Longest the connection may stay silent: the limit on any single wait for
+    /// the next bytes of a response, for every request. A stalled transfer
+    /// fails after this long even if the total time has not run out. Default
+    /// 30 seconds. Must not be zero.
+    pub idle_timeout: Duration,
     /// TCP connect timeout.
     pub connect_timeout: Duration,
     /// Extra attempts for idempotent GET transport failures, HTTP 429 and HTTP 503.
@@ -69,6 +81,8 @@ impl Default for Limits {
             max_artifact_bytes: 256 * 1024 * 1024,
             max_redirects: 5,
             request_timeout: Duration::from_secs(30),
+            download_timeout: Duration::from_secs(30 * 60),
+            idle_timeout: Duration::from_secs(30),
             connect_timeout: Duration::from_secs(10),
             max_retries: 2,
             max_retry_after: Duration::from_secs(30),
@@ -112,6 +126,20 @@ impl Limits {
     #[must_use]
     pub fn with_request_timeout(mut self, value: Duration) -> Self {
         self.request_timeout = value;
+        self
+    }
+
+    /// Set [`Self::download_timeout`].
+    #[must_use]
+    pub fn with_download_timeout(mut self, value: Duration) -> Self {
+        self.download_timeout = value;
+        self
+    }
+
+    /// Set [`Self::idle_timeout`].
+    #[must_use]
+    pub fn with_idle_timeout(mut self, value: Duration) -> Self {
+        self.idle_timeout = value;
         self
     }
 
@@ -530,6 +558,11 @@ impl ClientBuilder {
     ///
     /// Returns an error when TLS or the HTTP client cannot be constructed.
     pub fn build(self) -> Result<Client, ClientError> {
+        if self.limits.idle_timeout.is_zero() || self.limits.download_timeout.is_zero() {
+            return Err(ClientError::Model(libtea_core::ModelError::Invalid(
+                "idle_timeout and download_timeout must not be zero".into(),
+            )));
+        }
         if self.limits.max_in_flight == 0 {
             return Err(ClientError::Model(libtea_core::ModelError::Invalid(
                 "max_in_flight must be at least 1".into(),
@@ -547,7 +580,11 @@ impl ClientBuilder {
         let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(self.limits.connect_timeout)
-            .timeout(self.limits.request_timeout)
+            // No client-wide total timeout: a total would end a large artifact
+            // download that is still making progress. Each request gets its own
+            // total (`request_timeout` or `download_timeout`, see `open_once`),
+            // and a stall is caught by the per-read timeout.
+            .read_timeout(self.limits.idle_timeout)
             .user_agent(concat!("libtea/", env!("CARGO_PKG_VERSION")))
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
             .https_only(false)
@@ -1198,6 +1235,12 @@ impl ClientInner {
                 .await
                 .map_err(|_| ClientError::Transport("request limiter closed".into()))?;
             let mut request = self.http.request(call.method.clone(), url.clone());
+            let total = if call.artifact && call.method == Method::GET {
+                self.limits.download_timeout
+            } else {
+                self.limits.request_timeout
+            };
+            request = request.timeout(total);
             if call.artifact {
                 request = request.header("accept-encoding", "gzip, deflate, identity");
             }

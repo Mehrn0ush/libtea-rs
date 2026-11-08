@@ -33,6 +33,24 @@ libtea-cli
 
 Well-known documents, discovery entries, and server-info objects reject unknown fields because their schemas set `additionalProperties: false`.
 
+## Timeouts
+
+Three limits bound a request (`Limits`):
+
+| Limit | Default | Applies to |
+| --- | --- | --- |
+| `request_timeout` | 30 s | The whole of a request that is not an artifact download: discovery, JSON metadata, the token exchange. Headers and body. |
+| `download_timeout` | 30 min | The whole of an artifact or signature `GET`, body included. |
+| `idle_timeout` | 30 s | Any single wait for the next bytes of a response, for every request. |
+
+`connect_timeout` (10 s) bounds connecting. An artifact that keeps arriving is
+therefore not cut off after 30 s, which a single total timeout would do; a
+transfer that stalls is cut off after `idle_timeout`, and no download runs longer
+than `download_timeout`. Raise `download_timeout` for very large artifacts on
+slow links. `idle_timeout` and `download_timeout` must not be zero
+(`ClientBuilder::build` fails). Retries (`max_retries`) start a new attempt with
+a fresh clock.
+
 ## Dependency direction
 
 `libtea-core` does not depend on `libtea-client`. `libtea-client` does not depend on `libtea-cli` or `libtea-conformance`. The fuzz crate is excluded from the workspace so `cargo test --workspace` does not require `cargo-fuzz`.

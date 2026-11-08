@@ -161,3 +161,11 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | `docs/cache.md` | A hit obeys the destination policy | `a_cache_hit_obeys_this_clients_destination_policy` (buffered and streaming, with a control that serves the same entry when the origin is allowed). The check is `DestinationPolicy::check_url`, the one applied before a request; it does not repeat the DNS-level checks, which need a connection. |
 | same | A hit obeys the current size limit | `a_cache_hit_obeys_the_current_size_limit_for_json`, `an_oversize_entry_is_ignored_online_and_the_server_is_asked_afresh`, `a_streamed_cache_hit_obeys_the_size_limit_too`. |
 | same | A failed check evicts; age renews only after the check | `bytes_from_the_cache_that_fail_their_checksums_are_evicted`, `a_streamed_304_with_forged_bytes_evicts_instead_of_renewing`, `a_304_renews_the_entry_only_after_the_checksums_passed`, `a_json_304_renews_the_entry_at_once`. |
+
+### A4: timeouts
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/architecture.md` Timeouts | A progressing download outlives `request_timeout` | `a_download_that_keeps_arriving_outlives_the_request_timeout` and the streamed variant: a raw TCP server paces a ~1 s body against a 400 ms request timeout. Timing-based, with generous margins. |
+| same | A stall is cut off after `idle_timeout`; `download_timeout` caps the whole transfer; metadata keeps the short total | `a_stalled_download_fails_after_the_idle_timeout`, `the_download_timeout_still_caps_the_whole_transfer`, `metadata_requests_keep_the_short_total_timeout`. |
+| same | Defaults and zero rejected | `the_defaults_and_the_zero_check_are_as_documented`. |
