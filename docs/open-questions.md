@@ -3,6 +3,12 @@
 Questions that need an owner decision before implementation. Work continues
 elsewhere without blocking on these.
 
+Questions 1–4 are decided for the first signature stage: strict stage 1 (raw
+detached signatures over decoded artifact bytes, no base64 signatures,
+caller-supplied trust, Sigstore deferred), implemented with `ring`. Question 5
+is decided: the CLI ships as release binaries and `cargo install --git`, not on
+crates.io. The text below is kept as the record of the questions.
+
 1. **Signature formats for 0.2:** Which media types are in scope for the first
    real `SignatureVerifier` implementation (raw-over-digest only vs CMS/PGP)?
 2. **Sigstore:** Separate Cargo feature vs separate crate?

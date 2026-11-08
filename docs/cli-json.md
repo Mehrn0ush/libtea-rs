@@ -6,9 +6,10 @@ are asserted by `crates/tea-cli/tests/json_and_exit_codes.rs`; renaming one
 fails a test. Fields are snake_case. New fields may be added in a minor release;
 consumers should ignore unknown fields.
 
-Objects introduced in 0.1.x carry `schema_version` (currently `1`). The older
-outputs (`spec`, `parse-tei`, `discover`, `product-release`, `collections`,
-`conformance`) keep the shapes they had in 0.1.0 and have no version field.
+Newer objects (`sync`, `diff`, `download` status, `cache`) carry `schema_version`
+(currently `1`). The first group of outputs (`spec`, `parse-tei`, `discover`,
+`product-release`, `collections`, `conformance`) has no version field. All of
+this is the 0.1.0 contract.
 
 ## `spec --json`
 

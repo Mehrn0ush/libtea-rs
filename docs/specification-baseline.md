@@ -39,7 +39,7 @@ The OpenAPI document at that commit is `spec/openapi.yaml`. Its `info.version` i
 ## Known implementation limitations
 
 - HTTPS SVCB records are not queried. The discovery document allows them when a client is known to support them. This client uses `A`/`AAAA` resolution through the system resolver and then the HTTPS URL from the TEI domain.
-- There is no persistent HTTP cache. Callers can send `If-None-Match`. `Cache-Control` is returned and not stored.
+- The persistent HTTP cache is opt-in and experimental (`docs/cache.md`); by default nothing is cached. Callers can send `If-None-Match`. `Cache-Control` is honoured only for `no-store` and `private`; `max-age` does not skip revalidation.
 - Detached signature bytes are downloaded. Signature technology is not interpreted. `signatures/signature.md` describes a `/trust-anchors/` resource that is not in the OpenAPI document, so it is not implemented.
 - Optional OAuth profiles other than the API-key `client_credentials` baseline (SAML, JWT bearer, token exchange, mutual TLS) are not implemented.
 - CLE is retrieved as the TEA projection. This client does not fetch or validate a full ECMA-428 document.

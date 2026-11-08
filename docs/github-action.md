@@ -1,7 +1,8 @@
 # GitHub Action
 
-> **Status.** Written, tested against stubs, **not run on GitHub**. It installs a
-> released `libtea` binary, and no release exists yet (`docs/installing.md`).
+> **Status.** Written for 0.1.0, tested against stubs, **not run on GitHub**. It
+> installs a released `libtea` binary, and no release exists yet
+> (`docs/installing.md`).
 > Its one third-party dependency, `actions/cache`, is a placeholder pin until
 > `docs/release-pins.md` is followed. Treat the examples as the intended use,
 > not as something exercised end to end.

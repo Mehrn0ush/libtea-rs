@@ -31,7 +31,7 @@ libtea-cli
 - API versions other than `1.0.0` are selected when the caller lists them in `SupportedApi`.
 - Checksum algorithms outside the registry are `ChecksumAlgorithm::Other` and produce `IntegrityOutcome::Unsupported`.
 
-Well-known documents, discovery entries, and server-info objects reject unknown fields because their schemas set `additionalProperties: false`.
+Well-known documents and discovery entries accept unknown fields at every level (tested in `crates/tea-core/tests/discovery_tolerance.rs`), although the upstream schemas set `additionalProperties: false`; the client is deliberately tolerant of what servers send. The lock file and cache entries are our own formats and reject unknown fields.
 
 ## Timeouts
 

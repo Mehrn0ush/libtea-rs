@@ -15,4 +15,4 @@ Where this order differs from the first suggestion (CLI/lock/Action → purl+dis
 | [0.7](0.7.md) | hardening and external review | 6 |
 | [1.0](1.0.md) | gates and decision record | 6 |
 
-Decision record "1.0.0 versus upstream TEA beta": end of [1.0.md](1.0.md).
+Several items listed under 0.2–0.4 (for example 0.2-9, the streaming download, JSON and exit-code items, the lock file, `sync`/`diff`, the cache and offline mode) are already in 0.1.0; their checkboxes in each file say which. Decision record "1.0.0 versus upstream TEA beta": end of [1.0.md](1.0.md).

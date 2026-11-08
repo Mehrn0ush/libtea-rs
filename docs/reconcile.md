@@ -22,7 +22,7 @@ Generated on 2026-11-08 against the working tree on top of `46927402c65c0f43d695
 | `DeflateDecoder` | removed (historical) | code before TEA-AUD-001; cited as the finding | conformance-gap-analysis.md, security-review.md |
 | `DestinationPolicy::host_excepted` | removed (historical) | removed in the 2026-10-11 remediation; cited as the finding | security-review.md |
 | `DestinationPolicy::only_hosts` | planned (not code yet) | proposed name for work item 0.4-4; the exact API is decided when that item starts | milestones/0.4.md |
-| `Limits::max_retry_after` | planned (not code yet) | proposed name for work item 0.2-9; the exact API is decided when that item starts | milestones/0.2.md |
+| `Limits::max_retry_after` (set with `Limits::with_max_retry_after`) | in 0.1.0 | work item 0.2-9, done | milestones/0.2.md |
 | `ValidAndTrusted` | not code | proposed outcome name in docs/design/signature-verification.md; no such variant exists (by design, 0.6 work) | roadmap-gap-analysis.md |
 | `ValidButUntrusted` | not code | proposed outcome name in docs/design/signature-verification.md; no such variant exists (by design, 0.6 work) | roadmap-gap-analysis.md |
 | `danger_accept_invalid_certs` | absent by design | reqwest API that this repository must not call; docs cite its absence; `grep` over crates/ finds none | claims-audit.md |
@@ -142,7 +142,7 @@ Historical documents (`docs/audit-report.md`, `docs/security-review.md`, `docs/c
 | `Limits::max_discovery_attempts` | exists | roadmap-gap-analysis.md |
 | `Limits::max_in_flight` | exists | roadmap-gap-analysis.md |
 | `Limits::max_retries` | exists | roadmap-gap-analysis.md |
-| `Limits::max_retry_after` | planned (not code yet) | milestones/0.2.md |
+| `Limits::max_retry_after` | in 0.1.0 | milestones/0.2.md |
 | `Limits::request_timeout` | exists | auth.md, security.md |
 | `LintWarning` | exists | REPORT.md |
 | `ListParams` | exists | architecture.md, interoperability.md, release-readiness.md, roadmap-gap-analysis.md, roadmap.md |

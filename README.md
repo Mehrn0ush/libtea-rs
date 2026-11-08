@@ -15,7 +15,7 @@ These crates are a TEA **consumer** (client). They are not a TEA server, not an 
 | `libtea-conformance` | Offline checks and a JSON report (`publish = false`) |
 | `libtea-cli` | `libtea` binary that calls the libraries (`publish = false`) |
 
-Version `0.1.0`. Edition 2021. MSRV 1.89. License Apache-2.0. Publish `libtea-core` first, then `libtea-client`. The CLI stays unpublished for now.
+Version `0.1.0`. Edition 2021. MSRV 1.89. License Apache-2.0. Publish `libtea-core` first, then `libtea-client`. The CLI is not published to crates.io: it ships as release binaries (`docs/installing.md`, none published yet) and can be built with `cargo install --git https://github.com/Mehrn0ush/libtea-rs --locked libtea-cli`. Folding `libtea-conformance` into the CLI is considered for 0.2 (`docs/release-checklist.md`).
 
 **MSRV.** The minimum supported Rust version is 1.89 for 0.1.0. Policy: the latest stable release minus about four releases; it is raised only in minor releases, and every raise is listed in the `CHANGELOG.md`. Dependencies use plain caret ranges and `Cargo.lock` is committed, so MSRV is verified with the committed lock file (`cargo +1.89.0 test --workspace --all-targets --locked`).
 

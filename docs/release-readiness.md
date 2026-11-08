@@ -1,12 +1,12 @@
 # Release readiness
 
-The 2026-10-10 sections below keep the package names from that audit. Current package names are `libtea-core`, `libtea-client`, `libtea-conformance`, and `libtea-cli`. Directory paths are unchanged. Nothing has been published.
+Status for the first public release, 0.1.0. Package names are `libtea-core`, `libtea-client`, `libtea-conformance`, and `libtea-cli`; directory paths are `crates/tea-*`. Nothing has been published. Sections dated 2026-10-10 are the pre-release audit record and use the names of that time.
 
 ## Verdict
 
-The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong fixture profile has been exercised by checked-in ignored tests; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. The old `tea-core` and `tea-cli` names are still taken on crates.io. This workspace now uses the `libtea-*` names recorded below. `libtea-cli` and `libtea-conformance` remain `publish = false`.
+The 2026-10-10 audit blockers TEA-AUD-001 through TEA-AUD-005 and TEA-AUD-007 are fixed and covered by the regression tests named in `docs/audit-report.md`. The workspace is not a conforming or certified TEA 1.0.0 consumer. It is implemented against CycloneDX Transparency Exchange API commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`. SDK version is `0.1.0`. One local Oolong fixture profile has been exercised by checked-in ignored tests; that is recorded in `docs/interoperability.md` and is not a multi-implementation result. The names `tea-core` and `tea-cli` are taken on crates.io, so the workspace uses the `libtea-*` names recorded below. `libtea-cli` and `libtea-conformance` remain `publish = false`.
 
-**Current publication posture (2026-11-05 working tree):** libraries are prepared for owner review (env credentials, token coalescing, expanded mock surface, packaging metadata, CHANGELOG, Vulnetix interop notes). The candidate is **not** published until the owner commits a reviewed SHA, GitHub Actions is green on that SHA, `libtea-core` is published, then `libtea-client` is published. Do not commit local download artifacts such as `vulnetix-sbom.cdx.json`.
+**Publication posture.** The 0.1.0 candidate is **not** published. It is published when the owner has committed a reviewed SHA, GitHub Actions is green on that SHA, the repository settings in `docs/release-checklist.md` are in place, `libtea-core` is published, then `libtea-client`. The CLI is released as binaries by the tag workflow (a draft the owner publishes by hand), which has not run on GitHub yet. Do not commit local download artifacts such as `vulnetix-sbom.cdx.json`.
 
 ## Blockers before a conformance claim
 
@@ -31,7 +31,7 @@ Recheck with `GET https://crates.io/api/v1/crates/{name}` before publish. HTTP 4
 
 `libtea-client` depends on `libtea-core` and does not depend on the CLI or the conformance crate. Workspace directories stay `crates/tea-core`, `crates/tea-client`, `crates/tea-conformance`, and `crates/tea-cli`. Rust import paths are `libtea_core` and `libtea_client`.
 
-The CLI package is `libtea-cli` and the executable is `libtea` (no longer the colliding `tea` binary name). This pass still does not publish the CLI (`publish = false`).
+The CLI package is `libtea-cli` and the executable is `libtea` (not the colliding `tea` name). The CLI is not published to crates.io (`publish = false`); it ships as release binaries and via `cargo install --git`.
 
 These libraries are an independent consumer implementation of the CycloneDX Transparency Exchange API. The `libtea` prefix does not make them a CycloneDX project release.
 
@@ -106,7 +106,7 @@ A stale `401` no longer deletes a newer bearer token for the same origin. The de
 ## Not a blocker
 
 - Missing HTTPS SVCB lookup. The discovery text allows it when a client is known to support it. This client does not.
-- Missing a persistent discovery cache. The text says implementations should respect caching headers. Callers can pass `If-None-Match` on downloads.
+- The persistent cache is opt-in and experimental (`docs/cache.md`) and does not use `max-age`; every online use revalidates. Callers can pass `If-None-Match` on downloads.
 - Optional OAuth grants other than API-key `client_credentials`.
 - Signature formats and `/trust-anchors/`. The signatures note is outside the standard, and that path is not in the pinned OpenAPI.
 - Dropping alternate `servers[]` after the client has selected one. The spec requires a selection. Keeping the rest would be an API improvement, not a missing operation.
