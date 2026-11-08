@@ -21,7 +21,7 @@ A `401` with `WWW-Authenticate: Bearer`, with no error or with `error=invalid_to
 
 The request body is only `grant_type=client_credentials`. No `scope` or `audience` parameter is sent. A `scope` on the token response is ignored. When `expires_in` is greater than five seconds, the cached token is treated as expired five seconds early. A shorter positive lifetime is kept for its full `expires_in`. `expires_in` of `0` is already expired. If `expires_in` is omitted, the token stays cached until the server rejects it.
 
-**Token-refresh serialization (revised in the 2026-11-07 audit):** refresh uses one async lock **per API origin**, created on first use for an origin the key may be sent to. Behavior:
+**Token-refresh serialization:** refresh uses one async lock **per API origin**, created on first use for an origin the key may be sent to. Behavior:
 
 1. A challenge that should refresh acquires that origin's lock before `POST /token`.
 2. After waiting, if the cache already holds a usable bearer different from the value that received `401` (or any bearer when none was presented), that token is reused and no additional exchange runs.

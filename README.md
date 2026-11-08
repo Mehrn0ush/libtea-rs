@@ -2,7 +2,7 @@
 
 Independent Rust client libraries for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 
-This repository targets commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (2026-10-08). The OpenAPI document at that commit is version `1.0.0` (`OpenAPI 3.1.1`). The specification README still says "Beta 2"; this project follows the OpenAPI document and the normative discovery, authentication, collection, and TEI files at that commit. The baseline is [docs/specification-baseline.md](docs/specification-baseline.md).
+This repository targets commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (2026-10-08). The OpenAPI document at that commit is version `1.0.0` (`OpenAPI 3.1.1`). The specification README still says "Beta 2"; this project follows the OpenAPI document and the normative discovery, authentication, collection, and TEI files at that commit. The baseline is described in [docs/architecture.md](docs/architecture.md) and `spec/PINNED.md`.
 
 These crates are a TEA **consumer** (client). They are not a TEA server, not an official CycloneDX release, and not a conformance certificate. Interoperability evidence to date is one local Oolong fixture and one public Vulnetix TEA 1.0.0 deployment. That is not universal compatibility. See [docs/interoperability.md](docs/interoperability.md).
 
@@ -28,12 +28,11 @@ built-in signature verification that returns Verified.
 | Feature | Default | Status |
 | --- | --- | --- |
 | (none named) | default = today’s behavior (rustls TLS, CLE fetch, `follow_pages`) | Shipped |
-| `native-tls` (proposed) | off | Not implemented — open question in `docs/open-questions.md` |
+| `native-tls` (proposed) | off | Not implemented (rustls only) |
 | `stream` (proposed) | — | Not gated: `follow_pages` uses existing `futures-util` already required by `reqwest` |
 | `cle` (proposed) | on | Not split: CLE projection stays in the default client |
 
-Default features must stay equivalent to today’s behavior. See
-[docs/roadmap.md](docs/roadmap.md) for deferred weight reductions.
+Default features must stay equivalent to today’s behavior.
 
 These packages are independent libraries, not CycloneDX-owned packages.
 
@@ -235,6 +234,16 @@ A composite GitHub Action (`action.yml`, `docs/github-action.md`) installs a ver
 | Content integrity | Declared checksums over decoded bytes |
 | Publisher authenticity | Not established by checksum match |
 | Detached signature / Sigstore | Download only; no crypto verification in 0.1.0 |
+
+## Scope and non-goals
+
+Not in 0.1.0: a publisher API; official CycloneDX or ECMA certification (the
+offline suite is a smoke test); signature authenticity (no trust policy exists
+in the TEA OpenAPI; see `docs/design/signature-verification.md`); universal
+server compatibility (evidence is the named deployments in
+`docs/interoperability.md`); HTTPS SVCB lookup; OAuth beyond API-key
+`client_credentials`; publishing `libtea-cli` or `libtea-conformance` to
+crates.io. Later work is tracked as GitHub issues, not in this repository.
 
 ## Versioning policy
 

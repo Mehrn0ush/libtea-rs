@@ -18,8 +18,9 @@ feature branch and again on `main` before anything is tagged or published.
    release after 0.1.0 it runs against the latest published version; make it
    a required check then.
 3. **Merge to `main` without squashing** (merge commit or fast-forward), so
-   the reviewed commits, and the per-commit build proof from
-   `HANDOFF-COMMANDS.md`, land unchanged.
+   the reviewed commits land unchanged (check that each builds with
+   `git rebase -x 'cargo check --workspace --all-targets --locked' <base>` on a
+   throwaway branch).
 4. **CI green on `main`** at the merge result. Record that SHA as
    `RELEASE_SHA`. If it differs from the reviewed SHA (a merge commit), the
    diff between them must be empty: `git diff <reviewed-sha> RELEASE_SHA`.

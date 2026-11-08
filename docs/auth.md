@@ -11,7 +11,7 @@ baseline:
 3. The access token is not inspected beyond storage and presentation.
 
 Other OAuth profiles (SAML, JWT bearer, token exchange, mutual TLS) are
-**not** implemented. See `docs/roadmap.md`.
+**not** implemented and not planned until an interoperability need appears.
 
 ## Single-flight refresh
 
@@ -45,7 +45,7 @@ the number of `POST /token` requests for the burst is **1** if either:
 Covered by:
 
 - `concurrent_n32_challenges_one_token_exchange` (`N = 32`, barrier, 200 ms
-  token delay, success; looped 50/50 in the 2026-11-07 audit);
+  token delay, success);
 - `concurrent_challenges_share_one_token_exchange` (success);
 - `hanging_token_origin_does_not_stall_waiters_or_other_origins` (4 waiters,
   hanging `/token`, exactly 1 POST, every waiter gets `ClientError::Timeout`).
@@ -91,9 +91,8 @@ about `request_timeout` (`hanging_token_endpoint_times_out_without_the_secret`).
   same time with `Timeout`; they do not each wait a further `request_timeout`.
 - Other origins on the same `Client` are not blocked by it.
 
-Before the 2026-11-07 audit the lock was client-wide, and each queued waiter
-repeated the full timeout. In a scratch copy with the old code, a healthy
-origin waited 3.2 s behind four 800 ms timeouts of a hanging discovered origin.
+The lock is per origin, not client-wide, so a hanging origin does not stall
+requests to a healthy one (`hanging_token_origin_does_not_stall_waiters_or_other_origins`).
 
 ## Secrets
 
