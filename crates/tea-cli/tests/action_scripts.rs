@@ -973,6 +973,7 @@ fn a_missing_binary_is_reported_and_the_scripts_pass_shellcheck() {
         command.current_dir(root()).arg("--shell=bash").arg("-x");
         for name in [
             "common.sh",
+            "refuse-ambient-credentials.sh",
             "resolve-target.sh",
             "fetch-and-verify.sh",
             "verify-attestation.sh",
@@ -983,4 +984,51 @@ fn a_missing_binary_is_reported_and_the_scripts_pass_shellcheck() {
         let result = command.output().unwrap();
         assert!(result.status.success(), "{}", text(&result.stdout));
     }
+}
+
+#[test]
+fn credentials_in_the_ambient_environment_stop_the_action() {
+    let sandbox = Sandbox::new("ambient");
+    let secret = "very-secret-value-123";
+    // Each of these would be inherited by every step of the composite action.
+    for (name, value) in [
+        ("TEA_API_KEY_SECRET", secret),
+        ("TEA_API_KEY_ID", "some-id"),
+        ("TEA_API_KEY_OTHER", "x"),
+    ] {
+        let out = run(
+            &sandbox,
+            "refuse-ambient-credentials.sh",
+            &[(name, value)],
+            false,
+        );
+        assert_eq!(out.status.code(), Some(2), "{name}: {}", text(&out.stderr));
+        let shown = format!("{}{}", text(&out.stdout), text(&out.stderr));
+        assert!(
+            shown.contains(name),
+            "the message names the variable: {shown}"
+        );
+        assert!(
+            shown.contains("api-key-secret"),
+            "and says what to do: {shown}"
+        );
+        assert!(
+            !shown.contains(secret) && !shown.contains("some-id"),
+            "a value was printed: {shown}"
+        );
+    }
+    // Unset or empty is fine, and unrelated TEA_ variables are not touched.
+    let clean = run(&sandbox, "refuse-ambient-credentials.sh", &[], false);
+    assert!(clean.status.success(), "{}", text(&clean.stderr));
+    let empty = run(
+        &sandbox,
+        "refuse-ambient-credentials.sh",
+        &[
+            ("TEA_API_KEY_ID", ""),
+            ("TEA_API_KEY_SECRET", ""),
+            ("TEA_BASE_URL", "x"),
+        ],
+        false,
+    );
+    assert!(empty.status.success(), "{}", text(&empty.stderr));
 }

@@ -113,7 +113,7 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | File | Claim | Why it is honest |
 | --- | --- | --- |
 | `action.yml` header | "poisoned cache entry is rejected" | `a_cached_archive_is_reused_only_when_it_matches_the_fresh_sums` (stubbed network). |
-| `action.yml` header | "Credentials: never inputs" | `no_input_can_carry_a_credential`; `extra-args` refusal tested; the final step is the only one that sees the variables (`a_matching_release_is_installed_cached_and_fetched_without_credentials`). Echoing is limited to the command name (tested). |
+| `action.yml` header | Credentials reach only the final step | **Corrected (A2).** The earlier wording ("never inputs; only the final step sees the variables") was wrong: a calling step's `env:` is inherited by every step of a composite action, third-party ones included. Credentials are now the `api-key-id` / `api-key-secret` inputs, referenced once each, in the final step's `env:` (`credentials_are_inputs_that_only_the_final_step_reads`), and the first step refuses a non-empty `TEA_API_KEY*` in the ambient environment (`credentials_in_the_ambient_environment_stop_the_action`). That GitHub inherits a calling step's env into composite steps is taken from its documented behavior, not run here. |
 | `action.yml` header | "Input values reach the scripts through env, never the shell text" | `inputs_reach_scripts_through_env_only` (no `${{` in a run line; the run lines are fixed). |
 | `docs/github-action.md` status | "not run on GitHub", "tested against stubs" | True. Stubs replace curl, gh and libtea; the real flags of `gh attestation verify` and the Windows path handling are untested. |
 | `docs/github-action.md` "What the action checks" | SHA-256 and attestation | Tested with stubs. The wording of what a pass proves repeats `docs/installing.md` (integrity of the download, build by this repository's workflow; not source safety). |
@@ -145,3 +145,11 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | `release.yml` | Exactly the expected files are attested | `the_attest_job_rejects_any_other_set_of_files` executes the step's shell against good and bad `dist/` directories. |
 | `release.yml` | Both privileged jobs run in the `release` Environment | The test checks the text. That the Environment has required reviewers is a repository setting (`docs/release-checklist.md`) and is **not** checked by any test. |
 | `release.yml` | The workflow only ever creates a draft | `release_never_publishes_the_github_release`. Publishing is a manual step. |
+
+### A2: credentials in the Action
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/github-action.md` Credentials | Only the final step has the credentials | Policy test on `action.yml` (each input used once, in the run step; no other step mentions `TEA_API_KEY`, apart from the guard that only reads names). It lints text; it does not run the action on GitHub. |
+| same | The action refuses ambient credentials | Script test with the stub environment, including that no value is printed. A calling workflow that sets them anyway fails at the first step. |
+| same | Examples pass credentials via `with:` | `example_workflows_are_safe_to_copy` rejects `TEA_API_KEY` anywhere in an example. |

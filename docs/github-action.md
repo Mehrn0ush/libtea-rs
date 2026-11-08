@@ -31,6 +31,7 @@ lock file honest in CI:
 | `lock-file-new` | The new lock for `diff`. |
 | `base-url` | API base for `download`, `product-release`, `collections` (becomes `--base`). |
 | `check` | `"true"` runs `sync --check`: exit 7 when the server differs from the lock. |
+| `api-key-id`, `api-key-secret` | The API key, from secrets; see Credentials. Optional for servers that need no key. |
 | `extra-args` | More `libtea` arguments, **one per line**, passed as-is with no shell (so `--artifact`, UUID, `--output`, `--allow-origin`, `--json`, ...). |
 | `working-directory` | Directory to run in. |
 | `libc` | Linux only: `gnu` (default) or `musl`. |
@@ -43,20 +44,32 @@ also fails unless it is 0) and `attestation` (`verified` or `not-checked`).
 
 ## Credentials
 
-There is no credential input, on purpose. Put the API key in the step's (or
-job's) `env:` from repository secrets; the action passes the environment to
-`libtea`, which reads `TEA_API_KEY_ID` and `TEA_API_KEY_SECRET`:
+Pass the API key with the `api-key-id` and `api-key-secret` inputs, from
+repository secrets:
 
 ```yaml
-env:
-  TEA_API_KEY_ID: ${{ secrets.TEA_API_KEY_ID }}
-  TEA_API_KEY_SECRET: ${{ secrets.TEA_API_KEY_SECRET }}
+with:
+  api-key-id: ${{ secrets.TEA_API_KEY_ID }}
+  api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
 ```
+
+Both inputs are read in exactly one place: the environment of the final step
+that runs `libtea` (as `TEA_API_KEY_ID` and `TEA_API_KEY_SECRET`). No other step
+of the action references them.
+
+**Do not set `TEA_API_KEY_ID` or `TEA_API_KEY_SECRET` in `env:`** of the calling
+step, the job or the workflow. A composite action's steps inherit that
+environment, so every step inside this action, third-party ones included (the
+action uses `actions/cache`), would receive the secret. The action's first step
+checks for those variables and refuses to run (exit 2, names only, never values)
+if it finds a non-empty one.
 
 - `extra-args` is refused if it contains `--api-key-id` or `--api-key-secret`
   (a secret on a command line shows up in process lists and logs).
-- The scripts that download and verify unset both variables first; only the
-  final `libtea` step sees them.
+- Only the final `libtea` step has the credentials. The steps that download and
+  verify also unset both variables defensively.
+- An input is masked in the logs only if its value comes from a secret (or is
+  registered with `::add-mask::`); pass secrets, not literals.
 - The action echoes only the command name, never argument values.
 - Do not use `pull_request_target` with this action. It runs workflow code from
   the base branch with secrets while handling data from the pull request.
@@ -97,10 +110,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: Mehrn0ush/libtea-rs@<commit-sha>
-        env:
-          TEA_API_KEY_ID: ${{ secrets.TEA_API_KEY_ID }}
-          TEA_API_KEY_SECRET: ${{ secrets.TEA_API_KEY_SECRET }}
         with:
+          api-key-id: ${{ secrets.TEA_API_KEY_ID }}
+          api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
           version: "0.1.0"
           command: sync
           check: "true"
@@ -126,10 +138,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: Mehrn0ush/libtea-rs@<commit-sha>
-        env:
-          TEA_API_KEY_ID: ${{ secrets.TEA_API_KEY_ID }}
-          TEA_API_KEY_SECRET: ${{ secrets.TEA_API_KEY_SECRET }}
         with:
+          api-key-id: ${{ secrets.TEA_API_KEY_ID }}
+          api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
           version: "0.1.0"
           command: sync
           check: "true"
@@ -156,10 +167,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: Mehrn0ush/libtea-rs@<commit-sha>
-        env:
-          TEA_API_KEY_ID: ${{ secrets.TEA_API_KEY_ID }}
-          TEA_API_KEY_SECRET: ${{ secrets.TEA_API_KEY_SECRET }}
         with:
+          api-key-id: ${{ secrets.TEA_API_KEY_ID }}
+          api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
           version: "0.1.0"
           command: sync
           tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
@@ -182,10 +192,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: Mehrn0ush/libtea-rs@<commit-sha>
-        env:
-          TEA_API_KEY_ID: ${{ secrets.TEA_API_KEY_ID }}
-          TEA_API_KEY_SECRET: ${{ secrets.TEA_API_KEY_SECRET }}
         with:
+          api-key-id: ${{ secrets.TEA_API_KEY_ID }}
+          api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
           version: "0.1.0"
           command: download
           base-url: https://api.example.com

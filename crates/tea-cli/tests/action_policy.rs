@@ -100,6 +100,8 @@ fn the_action_is_composite_and_has_the_documented_inputs() {
             "lock-file-new",
             "base-url",
             "check",
+            "api-key-id",
+            "api-key-secret",
             "extra-args",
             "working-directory",
             "libc",
@@ -111,27 +113,76 @@ fn the_action_is_composite_and_has_the_documented_inputs() {
 }
 
 #[test]
-fn no_input_can_carry_a_credential() {
+fn credentials_are_inputs_that_only_the_final_step_reads() {
     let text = action();
+    // Only these two inputs may look like credentials.
     for name in input_names(&text) {
         let lower = name.to_ascii_lowercase();
-        for word in ["secret", "token", "key", "password", "credential", "auth"] {
+        let credential_like = ["secret", "token", "key", "password", "credential", "auth"]
+            .iter()
+            .any(|word| lower.contains(word));
+        assert_eq!(
+            credential_like,
+            matches!(name.as_str(), "api-key-id" | "api-key-secret"),
+            "input `{name}`"
+        );
+    }
+    // The action never reads repository secrets itself.
+    for line in code_lines(&text) {
+        assert!(!line.contains("secrets."), "{line}");
+    }
+    let all = steps(&text);
+    let run = all
+        .iter()
+        .find(|s| s.name == "Run libtea")
+        .expect("a run step");
+    assert_eq!(
+        all.last().unwrap().name,
+        "Run libtea",
+        "the run step is last"
+    );
+    // Each credential input is referenced exactly once, in the run step's env.
+    for (input, var) in [
+        ("inputs.api-key-id", "TEA_API_KEY_ID"),
+        ("inputs.api-key-secret", "TEA_API_KEY_SECRET"),
+    ] {
+        let code = code_lines(&text).join("\n");
+        assert_eq!(
+            code.matches(input).count(),
+            1,
+            "{input} must be used exactly once"
+        );
+        assert!(
+            run.raw.contains(&format!("{var}: ${{{{ {input} }}}}")),
+            "{input} must feed {var} in the run step:\n{}",
+            run.raw
+        );
+    }
+    // No other step mentions a credential variable or the GitHub token.
+    for step in &all {
+        if step.name != "Run libtea" {
             assert!(
-                !lower.contains(word),
-                "input `{name}` looks like a credential"
+                !step.raw.contains("TEA_API_KEY")
+                    || step.name == "Refuse credentials in the ambient environment",
+                "step `{}` handles credentials",
+                step.name
             );
         }
     }
-    for line in code_lines(&text) {
-        assert!(
-            !line.contains("secrets."),
-            "the action must not read secrets: {line}"
-        );
-        assert!(
-            !line.contains("TEA_API_KEY"),
-            "the action must not map credentials: {line}"
-        );
-    }
+    assert!(!run.raw.contains("GH_TOKEN") && !run.raw.contains("github.token"));
+}
+
+#[test]
+fn the_ambient_credential_guard_runs_before_every_other_step() {
+    let text = action();
+    let all = steps(&text);
+    assert_eq!(all[0].name, "Refuse credentials in the ambient environment");
+    assert!(all[0]
+        .raw
+        .contains("scripts/action/refuse-ambient-credentials.sh"));
+    // In particular before any third-party action runs.
+    let first_uses = all.iter().position(|s| s.raw.contains("uses: ")).unwrap();
+    assert!(first_uses > 0);
 }
 
 #[test]
@@ -152,7 +203,7 @@ fn only_the_attestation_step_sees_the_github_token() {
 fn inputs_reach_scripts_through_env_only() {
     let text = action();
     let all = steps(&text);
-    assert_eq!(all.len(), 5);
+    assert_eq!(all.len(), 6);
     for step in &all {
         for line in run_lines(step) {
             assert!(
@@ -279,14 +330,20 @@ fn example_workflows_are_safe_to_copy() {
             if line.contains("secrets.") {
                 let key = line.trim().split(':').next().unwrap();
                 assert!(
-                    matches!(key, "TEA_API_KEY_ID" | "TEA_API_KEY_SECRET"),
-                    "a secret is used outside the two credential env vars: {line}"
+                    matches!(key, "api-key-id" | "api-key-secret"),
+                    "a secret is used outside the two credential inputs: {line}"
                 );
-                assert!(
-                    indent(line) >= 10,
-                    "credentials belong in a step's env: {line}"
+                assert_eq!(
+                    indent(line),
+                    10,
+                    "credentials belong directly under the libtea step's with: {line}"
                 );
             }
+            // The ambient-environment route is refused by the action itself.
+            assert!(
+                !line.trim_start().starts_with("TEA_API_KEY"),
+                "examples must not use env for credentials: {line}"
+            );
             if let Some(uses) = line.trim().strip_prefix("- uses: ") {
                 let (_, reference) = uses.split_once('@').expect("uses: owner/repo@ref");
                 assert!(
@@ -299,7 +356,10 @@ fn example_workflows_are_safe_to_copy() {
         for key in with_keys(workflow) {
             let key = key.to_ascii_lowercase();
             for word in ["secret", "token", "password", "api-key", "key-id"] {
-                assert!(!key.contains(word), "suspicious input `{key}`");
+                assert!(
+                    !key.contains(word) || matches!(key.as_str(), "api-key-id" | "api-key-secret"),
+                    "suspicious input `{key}`"
+                );
             }
         }
         for line in workflow
