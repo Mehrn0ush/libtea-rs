@@ -25,21 +25,36 @@ feature branch and again on `main` before anything is tagged or published.
    diff between them must be empty: `git diff <reviewed-sha> RELEASE_SHA`.
 5. `cargo publish --dry-run -p libtea-core --locked` from a clean checkout of
    `RELEASE_SHA`.
-6. **Tag `RELEASE_SHA`** (`v0.1.0`, annotated) and push the tag. The tag points
-   at the `main` commit, never at a feature-branch commit.
-7. `cargo publish -p libtea-core --locked`.
-8. **Wait** until the index serves `libtea-core 0.1.0`, for example until
+6. **Tag `RELEASE_SHA`** once: `git tag -a v0.1.0 RELEASE_SHA -m "libtea 0.1.0"`
+   and push the tag. The tag points at the `main` commit, never at a
+   feature-branch commit. This is the only tag; there is no separate trial tag.
+7. **Binary release workflow** (details in "Binary release" below). The tag
+   starts `release.yml`. Approve the two deployments (`attest`,
+   `draft-release`), download the **draft** release, and verify it with
+   `docs/installing.md`: checksums, `gh attestation verify` with
+   `--source-ref refs/tags/v$VERSION`, run the binary, open the SBOM. Do not go
+   on until this passes. Nothing has been published to crates.io yet.
+8. `cargo publish -p libtea-core --locked`.
+9. **Wait** until the index serves `libtea-core 0.1.0`, for example until
    `cargo info libtea-core@0.1.0` (or `cargo search libtea-core`) shows it.
-9. `cargo publish --dry-run -p libtea-client --locked` (this resolves
-   `libtea-core` from crates.io).
-10. `cargo publish -p libtea-client --locked`.
-11. **Post-publish checks:** a fresh project depending on both crates from
+10. `cargo publish --dry-run -p libtea-client --locked` (this resolves
+    `libtea-core` from crates.io).
+11. `cargo publish -p libtea-client --locked`.
+12. **Publish the GitHub draft: publish the release by hand** (the workflow
+    never does).
+13. **Post-publish checks:** a fresh project depending on both crates from
     crates.io builds and runs a `Tei::parse` / `Client::builder()` smoke;
     docs.rs pages for both crates build and show the independence /
     no-certification / checksum≠authenticity banners.
 
-If step 5 or 9 fails, fix it on a branch and start again at step 1. Do not
-move or re-point a pushed tag.
+**If something fails.** Before the first `cargo publish` (steps 5 to 7: the
+workflow, or the verification of the draft): the maintainer deletes the draft
+release and the tag (`gh release delete v0.1.0 --yes --cleanup-tag`, which needs
+the tag ruleset's bypass list), fixes the problem on a branch, merges it to
+`main` by pull request, records the new `RELEASE_SHA`, and tags that commit.
+After the first `cargo publish` succeeded, never move, delete or re-point a
+tag: the crates on crates.io are fixed, so bump the version instead and start
+again at step 1.
 
 ## Local preflight (does not replace CI)
 
@@ -70,7 +85,7 @@ here is exercised by the test suite; check each item by hand.
 
 1. **Environment `release`** (Settings, Environments). Required reviewers: at
    least one maintainer other than the person who pushes the tag, with "Prevent
-   self-review" on. Deployment branches and tags: "Selected branches and tags",
+   self-review" on (a solo maintainer: see the next subsection). Deployment branches and tags: "Selected branches and tags",
    with the tag pattern `v*` only. Each privileged job asks for approval, so a
    release needs **two approvals** (one for `attest`, one for `draft-release`).
 2. **Tag ruleset** (Settings, Rules, Rulesets, New tag ruleset). Target tags
@@ -90,55 +105,55 @@ here is exercised by the test suite; check each item by hand.
    so that a published release's assets cannot be replaced later. The Action's
    `SHA256SUMS` check is only as strong as the release's assets are fixed.
 
+### Solo maintainer
+
+With one maintainer the settings above cannot all hold literally. These exact
+settings keep the protections that still mean something:
+
+- **Environment `release`:** Required reviewers: yourself (or a second account
+  you control). "Prevent self-review": **off**, otherwise no one can approve.
+  The Environment still stops a run until you approve each of the two jobs, and
+  limits it to `v*` tags.
+- **Ruleset for `main`:** require the CI status checks (the jobs named in step 2
+  of the order above), **0** required approvals, block force pushes and
+  deletion. Changes reach `main` only through a pull request whose checks passed.
+- **Tag ruleset (`v*`):** restrict creation, updates and deletion, and put
+  yourself on the bypass list, so you can create the release tag and, before the
+  first `cargo publish`, delete a failed one.
+
+None of this is review by a second person. It guards against mistakes and
+stolen tokens, not against the maintainer.
+
 ## Binary release (GitHub, never crates.io)
 
 `.github/workflows/release.yml` builds the CLI for seven targets, writes
 `SHA256SUMS` and a CycloneDX SBOM, attests build provenance, and creates a
 **draft** GitHub release. It publishes nothing to crates.io, never publishes the
-GitHub release itself, and holds no secret. It has **not been run**; the first
-run is the dry run below. Read `docs/release-pins.md` first: four values are
-still placeholders.
+GitHub release itself, and holds no secret. It has **not been run**; its first
+run is the real `v0.1.0` tag (step 6 above), so read `docs/release-pins.md`
+first: the placeholder pins block the run until they are replaced.
 
-1. Fill in the pins (`docs/release-pins.md`). Then `./scripts/check-pins.sh --release`
-   must pass and `cargo test` must pass with `LIBTEA_ALLOW_PIN_PLACEHOLDERS`
-   unset. The workflow runs the same script first and fails the whole run if a
-   placeholder remains.
-2. Dry run. Every tag, dry runs included, must point at a commit on `main`; the
-   workflow's first job fails otherwise. A tag with a suffix is a dry run: the
-   release is a draft *prerelease* and the files are named with the whole tag
-   version (`libtea-1.2.3-dryrun.1-...`). Tag a commit that is on `main`:
+1. Before tagging, fill in the pins (`docs/release-pins.md`). Then
+   `./scripts/check-pins.sh --release` must pass and `cargo test` must pass with
+   `LIBTEA_ALLOW_PIN_PLACEHOLDERS` unset. The workflow runs the same script first
+   and fails the whole run if a placeholder remains.
+2. After the tag is pushed, watch the run and approve the two deployments:
 
    ```sh
-   git switch main && git pull --ff-only
    VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/tea-cli/Cargo.toml | head -n 1)
-   git tag -a "v$VERSION-dryrun.1" -m "release workflow dry run"
-   git push origin "v$VERSION-dryrun.1"
    gh run list --workflow release.yml --limit 3
-   gh run watch                      # pick the run for the tag; approve the two deployments
-   gh release view "v$VERSION-dryrun.1"
-   gh release download "v$VERSION-dryrun.1" --dir /tmp/libtea-dryrun
+   gh run watch                      # pick the run for the tag
+   gh release view "v$VERSION"
+   gh release download "v$VERSION" --dir /tmp/libtea-release
    ```
 
-   Then follow `docs/installing.md` on the downloaded files, with
-   `VERSION=$VERSION-dryrun.1` (checksums, `gh attestation verify` with
-   `--source-ref refs/tags/v$VERSION-dryrun.1`, run the binary on at least one
-   platform you have, open the SBOM). Clean up:
-
-   ```sh
-   gh release delete "v$VERSION-dryrun.1" --yes --cleanup-tag
-   git tag -d "v$VERSION-dryrun.1"
-   ```
-
-   The tag ruleset blocks deleting `v*` tags; the maintainer who may release
-   deletes the dry-run tag through the bypass list, or the ruleset needs a
-   second pattern that allows deleting `v*-dryrun.*`.
-
-3. Real release: after step 10 of the crate release above, tag
-   `RELEASE_SHA` (`v$VERSION`, annotated, on `main`); the workflow validates the
-   tag against `crates/tea-cli/Cargo.toml`. Approve the two deployments. The
-   result is a **draft** release. Review it, check the files against
-   `docs/installing.md`, and publish the release by hand (the workflow never
-   does).
+   Then follow `docs/installing.md` on the downloaded files (checksums,
+   `gh attestation verify ... --source-ref "refs/tags/v$VERSION"`, run the binary
+   on at least one platform you have, open the SBOM).
+3. The release stays a draft until step 12 of the crate order. A tag with a
+   suffix (for example `v0.1.1-rc.1`) produces a draft *prerelease* with file
+   names carrying the whole tag version; that is kept for future use and is not
+   part of the first release. Every tag, suffix or not, must be on `main`.
 
 ## How the CLI is distributed, and what folding conformance in would involve
 

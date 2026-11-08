@@ -79,13 +79,13 @@ with the flag **unset**. Commit the three files together.
 1. `scripts/make-sbom.sh` matches the installed `cargo-cyclonedx`: check
    `cargo cyclonedx --help` lists `--manifest-path`, `--format` and
    `--spec-version`. The script was written from the tool's documentation, not
-   run; the first dry run is where it is first exercised.
+   run; the first real release run (the `v0.1.0` tag) is where it is first exercised.
 2. Create the `release` Environment and the tag ruleset described in
    `docs/release-checklist.md` ("Repository settings required before the first
    tag"). The workflow runs both privileged jobs in that Environment; without a
    required reviewer it stops nothing, and without the tag ruleset anyone who can
    push a tag can start a run.
-3. Run the dry run in `docs/release-checklist.md`.
+3. Follow the release order in `docs/release-checklist.md`; the workflow's first run is the real tag.
 
 The tag-pinned actions in `ci.yml` and the other workflows
 (`taiki-e/install-action` twice, `actions/upload-artifact@v4` twice) are older

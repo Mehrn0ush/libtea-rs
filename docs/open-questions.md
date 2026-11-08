@@ -289,17 +289,14 @@ the docs say so.
 
 **32 — runner labels.** `ubuntu-24.04-arm` and `macos-latest` are GitHub-hosted
 labels as documented at the time of writing and were not checked. A label that
-does not exist leaves the job queued, which a dry run shows at once.
+does not exist leaves the job queued, which the first release run shows at once.
 
 ## F4: GitHub Action (2026-11-08)
 
 **33 — the action installs from a release that does not exist yet.** It can
 only be exercised end to end after the first release (F3). Until then the
-scripts are tested against stubs. Recommendation: make the F3 dry run the first
-real test of the action, by pointing `repository` at the dry-run tag's release
-(`version: 0.1.0-dryrun.1` works because the release is a draft prerelease only
-if you publish it; a draft is not downloadable anonymously, so publish the
-dry-run release as a prerelease, test, then delete it).
+scripts are tested against stubs. There is no trial release: the first real
+test of the action is after `v0.1.0` is published, pointing it at that release.
 
 **34 — `actions/cache` is the action's one third-party dependency**, a
 placeholder pin (`docs/release-pins.md`). Option: drop caching and always

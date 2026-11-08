@@ -65,11 +65,11 @@ To read the SBOM: `libtea-X.Y.Z.cdx.json` is plain JSON.
   `gh attestation verify` checks it against GitHub's records. Pass
   `--signer-workflow` and `--source-ref` as shown: without them an
   attestation made by some other workflow, or by the same workflow for another
-  tag, a branch or a dry run, would satisfy the check, and so would an older
+  tag, or a branch, would satisfy the check, and so would an older
   release's genuine archive renamed to the version you asked for. With
   `--source-ref "refs/tags/v$VERSION"` the attestation must be for the tag you
   are installing. Archives and the SBOM carry the full tag version in their
-  names (a dry-run tag `v1.2.3-dryrun.1` gives `libtea-1.2.3-dryrun.1-...`), and
+  names (a tag `v1.2.3-rc.1` gives `libtea-1.2.3-rc.1-...`), and
   the release workflow refuses to attest any other set of file names.
 - **The SBOM** lists what `Cargo.lock` resolves for the CLI at the tagged
   commit. It is an inventory, not a vulnerability assessment.
