@@ -47,7 +47,7 @@ Remediation: in the resolver, allow a non-public answer only when the URL being 
 
 ## TEA-AUD-001 — `deflate` is not HTTP deflate
 
-Status after remediation: **Verified**. `deflate` uses `flate2::write::ZlibDecoder`. Gzip still uses `GzDecoder`. Raw DEFLATE is an error. `zlib_deflate_is_decoded_before_the_checksum` checks SHA-256 of the decoded bytes. Input and output are both capped.
+Status after remediation: **Verified**. `deflate` is decoded by `ZlibInflate`, a wrapper over `flate2::Decompress` that accepts a member only at the zlib stream end (it replaced an earlier `flate2::write::ZlibDecoder` use). Gzip still uses `GzDecoder`. Raw DEFLATE is an error. `zlib_deflate_is_decoded_before_the_checksum` checks SHA-256 of the decoded bytes. Input and output are both capped.
 
 Severity: High. Class: implementation defect. Also an interoperability defect.
 

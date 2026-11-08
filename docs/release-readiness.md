@@ -31,7 +31,7 @@ Recheck with `GET https://crates.io/api/v1/crates/{name}` before publish. HTTP 4
 
 `libtea-client` depends on `libtea-core` and does not depend on the CLI or the conformance crate. Workspace directories stay `crates/tea-core`, `crates/tea-client`, `crates/tea-conformance`, and `crates/tea-cli`. Rust import paths are `libtea_core` and `libtea_client`.
 
-The CLI package was renamed. The executable name is still `tea`. That name collides with another tool. Reconsider the binary name before publishing `libtea-cli`. This pass does not publish the CLI.
+The CLI package is `libtea-cli` and the executable is `libtea` (no longer the colliding `tea` binary name). This pass still does not publish the CLI (`publish = false`).
 
 These libraries are an independent consumer implementation of the CycloneDX Transparency Exchange API. The `libtea` prefix does not make them a CycloneDX project release.
 
@@ -50,7 +50,7 @@ Checked with `GET https://crates.io/api/v1/crates/{name}` on 2026-10-10, before 
 
 `publish` is false on the workspace, which is appropriate. There is no `[package] repository`, `documentation`, `homepage`, or `readme` path on the member crates. The license field is `Apache-2.0` and `LICENSE` is the Apache 2.0 text. There are no feature flags. The public API is `0.1.0` and should be treated as unstable.
 
-That 2026-10-10 note said not to rename during the audit. Names later moved from the taken `tea-*` crates.io names through a temporary `cdx-tea-*` prefix to the current `libtea-*` packages. `tea-core` and `tea-cli` still cannot be used as crates.io names while those other packages exist. Publish `libtea-core` 0.1.0, then `libtea-client` 0.1.0. Leave `libtea-conformance` and `libtea-cli` unpublished. The executable is still named `tea`; change that only when the CLI itself is prepared for publication.
+That 2026-10-10 note said not to rename during the audit. Names later moved from the taken `tea-*` crates.io names through a temporary `cdx-tea-*` prefix to the current `libtea-*` packages. `tea-core` and `tea-cli` still cannot be used as crates.io names while those other packages exist. Publish `libtea-core` 0.1.0, then `libtea-client` 0.1.0. Leave `libtea-conformance` and `libtea-cli` unpublished. The local executable is now `libtea`.
 
 ## Tooling gaps
 
