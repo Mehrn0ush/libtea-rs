@@ -515,7 +515,7 @@ fn the_attestation_is_verified_against_this_repository_and_workflow() {
     let out = run(
         &sandbox,
         "verify-attestation.sh",
-        &[("ARCHIVE_PATH", &archive)],
+        &[("ARCHIVE_PATH", &archive), ("VERSION", "0.1.0")],
         true,
     );
     assert!(out.status.success(), "{}", text(&out.stderr));
@@ -536,7 +536,11 @@ fn the_attestation_is_verified_against_this_repository_and_workflow() {
         let out = run(
             &sandbox,
             "verify-attestation.sh",
-            &[("ARCHIVE_PATH", &archive), ("ATTESTATION", mode)],
+            &[
+                ("ARCHIVE_PATH", &archive),
+                ("VERSION", "0.1.0"),
+                ("ATTESTATION", mode),
+            ],
             true,
         );
         assert_eq!(out.status.code(), Some(1), "{mode}");
@@ -545,10 +549,121 @@ fn the_attestation_is_verified_against_this_repository_and_workflow() {
     let other = run(
         &sandbox,
         "verify-attestation.sh",
-        &[("ARCHIVE_PATH", &archive), ("REPO", "a/b;c")],
+        &[
+            ("ARCHIVE_PATH", &archive),
+            ("VERSION", "0.1.0"),
+            ("REPO", "a/b;c"),
+        ],
         true,
     );
     assert_eq!(other.status.code(), Some(1));
+}
+
+#[test]
+fn the_attestation_must_be_for_this_release_tag() {
+    let sandbox = Sandbox::new("attest-ref");
+    let archive = archive_for_attestation(&sandbox);
+    sandbox.install_gh(0);
+    let out = run(
+        &sandbox,
+        "verify-attestation.sh",
+        &[("ARCHIVE_PATH", &archive), ("VERSION", "0.1.0")],
+        true,
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let call = sandbox.log("gh.log");
+    assert!(
+        call.contains("--source-ref refs/tags/v0.1.0"),
+        "the tag ref is part of the check: {call}"
+    );
+    // Repository and workflow are still pinned.
+    assert!(call.contains("--repo Mehrn0ush/libtea-rs"), "{call}");
+    assert!(
+        call.contains("--signer-workflow Mehrn0ush/libtea-rs/.github/workflows/release.yml"),
+        "{call}"
+    );
+}
+
+#[test]
+fn a_version_that_does_not_match_the_archive_is_refused_before_gh_runs() {
+    let sandbox = Sandbox::new("attest-ver");
+    let archive = archive_for_attestation(&sandbox); // libtea-0.1.0-<target>.tar.gz
+    sandbox.install_gh(0);
+    for version in [
+        "0.2.0",
+        "0.1.1",
+        "0.1",
+        "0.1.0-dryrun.1",
+        "v0.1.0",
+        "0.1.0;id",
+        "",
+    ] {
+        let out = run(
+            &sandbox,
+            "verify-attestation.sh",
+            &[("ARCHIVE_PATH", &archive), ("VERSION", version)],
+            true,
+        );
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "VERSION={version:?}: {}",
+            text(&out.stderr)
+        );
+    }
+    // No VERSION at all.
+    let out = run(
+        &sandbox,
+        "verify-attestation.sh",
+        &[("ARCHIVE_PATH", &archive)],
+        true,
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        sandbox.log("gh.log").is_empty(),
+        "gh must not run for a mismatched version"
+    );
+}
+
+#[test]
+fn a_dry_run_archive_is_not_accepted_as_the_release_it_prefixes() {
+    let sandbox = Sandbox::new("attest-dry");
+    let name = sandbox.make_release("0.1.0-dryrun.1", "x86_64-unknown-linux-gnu");
+    let archive = sandbox.path("release").join(name).display().to_string();
+    sandbox.install_gh(0);
+    // As itself: accepted, and the ref is the dry-run tag.
+    let ok = run(
+        &sandbox,
+        "verify-attestation.sh",
+        &[("ARCHIVE_PATH", &archive), ("VERSION", "0.1.0-dryrun.1")],
+        true,
+    );
+    assert!(ok.status.success(), "{}", text(&ok.stderr));
+    assert!(sandbox
+        .log("gh.log")
+        .contains("--source-ref refs/tags/v0.1.0-dryrun.1"));
+    // As the real 0.1.0: refused.
+    let bad = run(
+        &sandbox,
+        "verify-attestation.sh",
+        &[("ARCHIVE_PATH", &archive), ("VERSION", "0.1.0")],
+        true,
+    );
+    assert_eq!(bad.status.code(), Some(1), "{}", text(&bad.stderr));
+}
+
+#[test]
+fn skipping_the_attestation_needs_no_version() {
+    let sandbox = Sandbox::new("attest-skip");
+    let archive = archive_for_attestation(&sandbox);
+    sandbox.install_gh(1);
+    let out = run(
+        &sandbox,
+        "verify-attestation.sh",
+        &[("ARCHIVE_PATH", &archive), ("ATTESTATION", "skip")],
+        true,
+    );
+    assert!(out.status.success());
 }
 
 #[test]
@@ -558,7 +673,7 @@ fn a_missing_gh_warns_unless_the_attestation_is_required_and_skip_does_not_call_
     let auto = run(
         &sandbox,
         "verify-attestation.sh",
-        &[("ARCHIVE_PATH", &archive)],
+        &[("ARCHIVE_PATH", &archive), ("VERSION", "0.1.0")],
         false,
     );
     assert!(auto.status.success(), "{}", text(&auto.stderr));
@@ -574,7 +689,11 @@ fn a_missing_gh_warns_unless_the_attestation_is_required_and_skip_does_not_call_
     let required = run(
         &sandbox,
         "verify-attestation.sh",
-        &[("ARCHIVE_PATH", &archive), ("ATTESTATION", "required")],
+        &[
+            ("ARCHIVE_PATH", &archive),
+            ("VERSION", "0.1.0"),
+            ("ATTESTATION", "required"),
+        ],
         false,
     );
     assert_eq!(required.status.code(), Some(1));
@@ -583,7 +702,11 @@ fn a_missing_gh_warns_unless_the_attestation_is_required_and_skip_does_not_call_
     let skip = run(
         &sandbox,
         "verify-attestation.sh",
-        &[("ARCHIVE_PATH", &archive), ("ATTESTATION", "skip")],
+        &[
+            ("ARCHIVE_PATH", &archive),
+            ("VERSION", "0.1.0"),
+            ("ATTESTATION", "skip"),
+        ],
         true,
     );
     assert!(skip.status.success());
@@ -592,7 +715,11 @@ fn a_missing_gh_warns_unless_the_attestation_is_required_and_skip_does_not_call_
     let bad_mode = run(
         &sandbox,
         "verify-attestation.sh",
-        &[("ARCHIVE_PATH", &archive), ("ATTESTATION", "maybe")],
+        &[
+            ("ARCHIVE_PATH", &archive),
+            ("VERSION", "0.1.0"),
+            ("ATTESTATION", "maybe"),
+        ],
         false,
     );
     assert_eq!(bad_mode.status.code(), Some(1));

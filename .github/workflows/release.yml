@@ -1,7 +1,8 @@
 # Release binaries: build, checksum, SBOM, provenance, DRAFT GitHub release.
 #
-# Triggered only by pushing a tag. It never publishes to crates.io and holds no
-# repository secret. Three third-party actions and the cargo-cyclonedx version
+# Triggered only by pushing a tag that points at a commit on main. It never
+# publishes to crates.io, never publishes the GitHub release (the result is a
+# draft), and holds no repository secret. Three third-party actions and the cargo-cyclonedx version
 # are not pinned yet: their `PIN_ME_*` placeholders make the workflow fail at
 # job setup until `docs/release-pins.md` is followed. Not run yet.
 #
@@ -49,15 +50,15 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: ./scripts/check-release-tag.sh "$TAG" >> "$GITHUB_OUTPUT"
-      - name: A real release comes from main
-        env:
-          DRY_RUN: ${{ steps.tag.outputs.dry_run }}
+      # Every tag, dry runs included, must point at a commit on main. The
+      # workflow that runs is the one in the tagged commit, so this keeps a
+      # branch-only edit of release.yml from ever holding the write and
+      # attestation permissions below.
+      - name: The tagged commit is on main
         run: |
           set -euo pipefail
-          if [[ "$DRY_RUN" == "false" ]]; then
-            git fetch --no-tags origin main
-            git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-          fi
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
   build:
     name: build ${{ matrix.target }}
@@ -202,9 +203,12 @@ jobs:
 
   attest:
     name: checksums and provenance
-    needs: [build, sbom]
+    needs: [meta, build, sbom]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Mandatory: the Environment's required reviewers are the last gate before
+    # anything is signed (docs/release-checklist.md, repository settings).
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -216,12 +220,35 @@ jobs:
           pattern: dist-*
           merge-multiple: true
           path: dist
+      # Exactly these files, named for exactly this tag, and nothing else. A
+      # count would let a misnamed or extra artifact through.
+      - name: Check the file names
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          expected=$(
+            for target in aarch64-apple-darwin aarch64-unknown-linux-gnu aarch64-unknown-linux-musl \
+              x86_64-apple-darwin x86_64-pc-windows-msvc x86_64-unknown-linux-gnu x86_64-unknown-linux-musl; do
+              case "$target" in
+                (*windows*) printf 'libtea-%s-%s.zip\n' "$VERSION" "$target" ;;
+                (*) printf 'libtea-%s-%s.tar.gz\n' "$VERSION" "$target" ;;
+              esac
+            done
+            printf 'libtea-%s.cdx.json\n' "$VERSION"
+          )
+          actual=$(cd dist && printf '%s\n' ./* | sed 's|^\./||')
+          if [[ "$(printf '%s\n' "$expected" | LC_ALL=C sort)" != "$(printf '%s\n' "$actual" | LC_ALL=C sort)" ]]; then
+            echo "dist/ does not hold exactly the expected files" >&2
+            echo "--- expected" >&2; printf '%s\n' "$expected" >&2
+            echo "--- found" >&2; printf '%s\n' "$actual" >&2
+            exit 1
+          fi
       - name: SHA-256 checksums
         run: |
           set -euo pipefail
           cd dist
           printf '%s\n' ./* | sed 's|^\./||' | LC_ALL=C sort > ../files.txt
-          [[ "$(wc -l < ../files.txt)" -eq 8 ]] || { echo "expected 8 files" >&2; cat ../files.txt >&2; exit 1; }
           xargs sha256sum < ../files.txt > SHA256SUMS
           sha256sum --check --strict SHA256SUMS
       - name: Attest build provenance
@@ -241,6 +268,8 @@ jobs:
     needs: [meta, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Mandatory, like the attest job. The release is created as a DRAFT only;
+    # publishing it is a manual step (docs/release-checklist.md).
     environment: release
     permissions:
       contents: write

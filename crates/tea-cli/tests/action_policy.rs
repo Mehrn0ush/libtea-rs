@@ -359,3 +359,49 @@ fn examples_use_only_documented_inputs() {
     }
     assert!(checked >= 12, "only {checked} inputs were checked");
 }
+
+#[test]
+fn the_attestation_step_is_told_which_release_it_is_verifying() {
+    let text = action();
+    let all = steps(&text);
+    let step = all
+        .iter()
+        .find(|s| s.name == "Verify the build-provenance attestation")
+        .expect("an attestation step");
+    assert!(
+        step.raw.contains("VERSION: ${{ inputs.version }}"),
+        "the version selects the tag ref the attestation must be for:\n{}",
+        step.raw
+    );
+}
+
+#[test]
+fn the_installation_docs_pin_the_attestation_to_the_tag() {
+    let docs = std::fs::read_to_string(root().join("docs/installing.md")).unwrap();
+    let block = docs
+        .split("gh attestation verify")
+        .nth(1)
+        .expect("installing.md shows gh attestation verify");
+    let command: String = block.lines().take(5).collect::<Vec<_>>().join("\n");
+    for flag in [
+        "--repo",
+        "--signer-workflow",
+        "--source-ref \"refs/tags/v$VERSION\"",
+    ] {
+        assert!(command.contains(flag), "`{flag}` missing from:\n{command}");
+    }
+    // The checklist makes the settings that back the workflow explicit.
+    let checklist = std::fs::read_to_string(root().join("docs/release-checklist.md")).unwrap();
+    for needed in [
+        "Environment `release`",
+        "Tag ruleset",
+        "Branch protection",
+        "Private vulnerability reporting",
+        "publish the release by hand",
+    ] {
+        assert!(
+            checklist.contains(needed),
+            "release-checklist.md lacks `{needed}`"
+        );
+    }
+}

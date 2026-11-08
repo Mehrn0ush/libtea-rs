@@ -471,10 +471,17 @@ fn release_permissions_are_least_privilege() {
             );
         }
     }
-    // The release environment gates the job that can create a release.
-    assert!(job(&jobs, "draft-release")
-        .raw
-        .contains("    environment: release\n"));
+    // The release environment gates both jobs that hold more than read access:
+    // the one that signs (attest) and the one that creates the draft.
+    for id in ["attest", "draft-release"] {
+        assert!(
+            job(&jobs, id).raw.contains("    environment: release\n"),
+            "{id} must run in the release Environment"
+        );
+    }
+    for id in ["meta", "build", "sbom"] {
+        assert!(!job(&jobs, id).raw.contains("environment:"), "{id}");
+    }
 }
 
 #[test]
@@ -748,4 +755,167 @@ fn release_tag_flows_through_env_and_the_validator() {
         .iter()
         .any(|(k, v)| k == "TAG" && v == "${{ github.ref_name }}"));
     assert!(tag.run.contains("\"$TAG\""));
+}
+
+#[test]
+fn every_release_tag_must_be_on_main_dry_runs_included() {
+    let jobs = jobs_of(&release());
+    let meta = steps_of(&job(&jobs, "meta").raw);
+    let on_main = meta
+        .iter()
+        .find(|s| s.run.contains("merge-base --is-ancestor"))
+        .expect("a step checks that the tagged commit is on main");
+    assert!(on_main.run.contains("origin/main") && on_main.run.contains("$GITHUB_SHA"));
+    // No condition: the check runs for dry-run tags too.
+    assert!(
+        !on_main.run.contains("DRY_RUN") && !on_main.run.contains("if "),
+        "{}",
+        on_main.run
+    );
+    assert!(!on_main.raw.contains("DRY_RUN"), "{}", on_main.raw);
+}
+
+#[test]
+fn release_never_publishes_the_github_release() {
+    let jobs = jobs_of(&release());
+    let mut creates = 0;
+    for step in jobs.iter().flat_map(|j| steps_of(&j.raw)) {
+        for forbidden in [
+            "gh release edit",
+            "gh release upload",
+            "--draft=false",
+            "--latest",
+            "gh api",
+            "releases/",
+            "prerelease=false",
+        ] {
+            assert!(
+                !step.run.contains(forbidden),
+                "`{forbidden}` in step `{}`",
+                step.name
+            );
+        }
+        if step.run.contains("gh release create") {
+            creates += 1;
+            assert!(step.run.contains("--draft"), "{}", step.run);
+        }
+    }
+    assert_eq!(creates, 1, "exactly one step creates the release");
+}
+
+fn run_name_check(version: &str, files: &[String]) -> std::process::Output {
+    let jobs = jobs_of(&release());
+    let attest = steps_of(&job(&jobs, "attest").raw);
+    let step = attest
+        .iter()
+        .find(|s| s.name == "Check the file names")
+        .expect("the attest job checks the file names");
+    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "libtea-names-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("dist")).unwrap();
+    for file in files {
+        std::fs::write(dir.join("dist").join(file), b"x").unwrap();
+    }
+    let output = std::process::Command::new("bash")
+        .arg("-c")
+        .arg(&step.run)
+        .current_dir(&dir)
+        .env("VERSION", version)
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    output
+}
+
+fn expected_release_files(version: &str) -> Vec<String> {
+    let mut files: Vec<String> = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+    ]
+    .iter()
+    .map(|t| format!("libtea-{version}-{t}.tar.gz"))
+    .collect();
+    files.push(format!("libtea-{version}-x86_64-pc-windows-msvc.zip"));
+    files.push(format!("libtea-{version}.cdx.json"));
+    files
+}
+
+#[test]
+fn the_attest_job_accepts_exactly_the_expected_file_names() {
+    for version in ["0.1.0", "0.1.0-dryrun.1"] {
+        let ok = run_name_check(version, &expected_release_files(version));
+        assert!(
+            ok.status.success(),
+            "{version}: {}",
+            String::from_utf8_lossy(&ok.stderr)
+        );
+    }
+}
+
+#[test]
+fn the_attest_job_rejects_any_other_set_of_files() {
+    let good = expected_release_files("0.1.0");
+    // A rejection must be the check's own message, not some unrelated failure.
+    let rejected = |out: std::process::Output, what: &str| {
+        assert!(!out.status.success(), "{what} passed");
+        assert!(
+            String::from_utf8_lossy(&out.stderr)
+                .contains("does not hold exactly the expected files"),
+            "{what}: rejected for another reason: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    let with = |edit: &dyn Fn(&mut Vec<String>)| {
+        let mut files = good.clone();
+        edit(&mut files);
+        run_name_check("0.1.0", &files)
+    };
+    // The old check only counted files: eight files with the wrong names passed.
+    rejected(
+        with(&|f| f[0] = "evil.tar.gz".to_owned()),
+        "a misnamed file with the right count",
+    );
+    rejected(with(&|f| f.truncate(7)), "a missing file");
+    rejected(with(&|f| f.push("extra.bin".to_owned())), "an extra file");
+    rejected(
+        with(&|f| f[1] = "libtea-0.0.9-aarch64-unknown-linux-gnu.tar.gz".to_owned()),
+        "an older version's archive",
+    );
+    rejected(
+        with(&|f| f[2] = "libtea-0.1.0-dryrun.1-aarch64-unknown-linux-musl.tar.gz".to_owned()),
+        "a dry-run archive as the release",
+    );
+    rejected(
+        with(&|f| f.push("SHA256SUMS".to_owned())),
+        "a stray SHA256SUMS",
+    );
+    // A different version than the tag.
+    rejected(run_name_check("0.2.0", &good), "files for another version");
+}
+
+#[test]
+fn the_name_check_runs_before_anything_is_checksummed_or_attested() {
+    let jobs = jobs_of(&release());
+    let attest = steps_of(&job(&jobs, "attest").raw);
+    let at = |name: &str| {
+        attest
+            .iter()
+            .position(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    assert!(at("Check the file names") < at("SHA-256 checksums"));
+    assert!(at("SHA-256 checksums") < at("Attest build provenance"));
+    assert!(attest[at("Check the file names")]
+        .env
+        .iter()
+        .any(|(k, v)| k == "VERSION" && v.contains("needs.meta.outputs.version")));
 }

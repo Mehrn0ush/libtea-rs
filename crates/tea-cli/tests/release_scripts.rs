@@ -65,9 +65,11 @@ fn the_tag_must_match_the_cli_version_and_a_strict_shape() {
     );
     let dry = check_tag(&format!("v{version}-dryrun.1"));
     assert!(dry.status.success());
+    // The version keeps the suffix, so archive names and the attestation's
+    // tag ref (refs/tags/v<version>) agree exactly.
     assert_eq!(
         String::from_utf8_lossy(&dry.stdout),
-        format!("version={version}\ndry_run=true\n")
+        format!("version={version}-dryrun.1\ndry_run=true\n")
     );
 
     for bad in [

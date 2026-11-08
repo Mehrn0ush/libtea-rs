@@ -45,9 +45,11 @@ so the exact version and the crate's own `Cargo.lock` decide what gets built.
    (`cargo cyclonedx --help` should list `--manifest-path`, `--format` and
    `--spec-version`). The script was written from the tool's documentation, not
    run: the first dry run is where it is first exercised.
-4. Optional but recommended: create the `release` Environment in the
-   repository settings with a required reviewer. The job that creates the draft
-   release runs in it, so a reviewer can stop a release before it exists.
+4. Create the `release` Environment and the tag ruleset described in
+   `docs/release-checklist.md` ("Repository settings required before the first
+   tag"). The workflow runs both of its privileged jobs in that Environment;
+   without a required reviewer it would not stop anything, and without the tag
+   ruleset anyone who can push a tag can start a run.
 5. Run the dry run in `docs/release-checklist.md`.
 
 The `action.yml` pin is checked by `action_has_no_unresolved_pins` (it is not

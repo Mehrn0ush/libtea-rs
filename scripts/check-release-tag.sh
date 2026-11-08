@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Validate the tag that triggered the release workflow and print, for
-# $GITHUB_OUTPUT: version=<x.y.z> and dry_run=<true|false>.
+# $GITHUB_OUTPUT: version=<the tag without its leading v> and
+# dry_run=<true|false>. The version keeps any suffix (v1.2.3-dryrun.1 gives
+# 1.2.3-dryrun.1), so file names and the attestation's tag ref agree exactly.
 #
 #   check-release-tag.sh <tag>
 #
 # The tag must be `v<version>` (a real release) or `v<version>-<suffix>` (a dry
 # run, published as a draft prerelease), where <version> equals the version of
-# crates/tea-cli/Cargo.toml. The tag text is checked against a strict pattern
+# crates/tea-cli/Cargo.toml. Both kinds must be on main; the workflow checks that. The tag text is checked against a strict pattern
 # before it is used anywhere, because it is attacker-influenced input.
 #
 # Exit status: 0 valid, 1 invalid tag, 2 setup error.
@@ -40,5 +42,5 @@ if [[ -n "$suffix" ]]; then
 else
   dry_run=false
 fi
-printf 'version=%s\n' "$crate_version"
+printf 'version=%s\n' "${tag#v}"
 printf 'dry_run=%s\n' "$dry_run"

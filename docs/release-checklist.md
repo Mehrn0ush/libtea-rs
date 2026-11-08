@@ -60,39 +60,80 @@ cargo package -p libtea-client --locked --no-verify --list
 State only what tests prove. Do not claim official conformance, universal
 compatibility, or publisher-authenticity verification.
 
+## Repository settings required before the first tag
+
+The release workflow gives two jobs more than read access: `attest` (can sign
+build provenance as this repository) and `draft-release` (can create a release).
+Both run in the `release` Environment. What stops a stranger or a mistake is
+configuration the workflow cannot enforce itself, so set it up first. Nothing
+here is exercised by the test suite; check each item by hand.
+
+1. **Environment `release`** (Settings, Environments). Required reviewers: at
+   least one maintainer other than the person who pushes the tag, with "Prevent
+   self-review" on. Deployment branches and tags: "Selected branches and tags",
+   with the tag pattern `v*` only. Each privileged job asks for approval, so a
+   release needs **two approvals** (one for `attest`, one for `draft-release`).
+2. **Tag ruleset** (Settings, Rules, Rulesets, New tag ruleset). Target tags
+   `v*`. Enforcement: Active. Rules: restrict creations, restrict updates,
+   restrict deletions, block force pushes. Bypass list: only the maintainers who
+   may release. Without it anyone with write access can create a `v*` tag.
+3. **Branch protection for `main`** (a branch ruleset works too): require a pull
+   request with at least one approval, require status checks (the CI jobs), block
+   force pushes and deletion. The workflow refuses any tag whose commit is not on
+   `main`; this makes "on main" mean "reviewed".
+4. **Private vulnerability reporting** (Settings, Code security): enable it and
+   make sure `SECURITY.md` says how to use it.
+5. **Actions settings** (Settings, Actions, General): "Workflow permissions" set
+   to read-only by default; "Allow GitHub Actions to create and approve pull
+   requests" off. The release workflow declares its own permissions per job.
+6. **Immutable releases** (Settings, General, if your plan offers it): turn it on
+   so that a published release's assets cannot be replaced later. The Action's
+   `SHA256SUMS` check is only as strong as the release's assets are fixed.
+
 ## Binary release (GitHub, never crates.io)
 
 `.github/workflows/release.yml` builds the CLI for seven targets, writes
 `SHA256SUMS` and a CycloneDX SBOM, attests build provenance, and creates a
-**draft** GitHub release. It publishes nothing to crates.io and holds no
-secret. It has **not been run**; the first run is the dry run below. Read
-`docs/release-pins.md` first: four values are still placeholders.
+**draft** GitHub release. It publishes nothing to crates.io, never publishes the
+GitHub release itself, and holds no secret. It has **not been run**; the first
+run is the dry run below. Read `docs/release-pins.md` first: four values are
+still placeholders.
 
 1. Fill in the pins (`docs/release-pins.md`), then:
    `cargo test -p libtea-cli --test workflow_policy --test action_policy -- --ignored` must pass.
-2. Dry run on a throwaway tag (a pre-release suffix makes it a draft
-   prerelease and skips the "tag is on main" check):
+2. Dry run. Every tag, dry runs included, must point at a commit on `main`; the
+   workflow's first job fails otherwise. A tag with a suffix is a dry run: the
+   release is a draft *prerelease* and the files are named with the whole tag
+   version (`libtea-1.2.3-dryrun.1-...`). Tag a commit that is on `main`:
 
    ```sh
+   git switch main && git pull --ff-only
    VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/tea-cli/Cargo.toml | head -n 1)
    git tag -a "v$VERSION-dryrun.1" -m "release workflow dry run"
    git push origin "v$VERSION-dryrun.1"
    gh run list --workflow release.yml --limit 3
-   gh run watch                      # pick the run for the tag
+   gh run watch                      # pick the run for the tag; approve the two deployments
    gh release view "v$VERSION-dryrun.1"
    gh release download "v$VERSION-dryrun.1" --dir /tmp/libtea-dryrun
    ```
 
-   Then follow `docs/installing.md` on the downloaded files (checksums,
-   `gh attestation verify`, run the binary on at least one platform you have,
-   open the SBOM). Clean up:
+   Then follow `docs/installing.md` on the downloaded files, with
+   `VERSION=$VERSION-dryrun.1` (checksums, `gh attestation verify` with
+   `--source-ref refs/tags/v$VERSION-dryrun.1`, run the binary on at least one
+   platform you have, open the SBOM). Clean up:
 
    ```sh
    gh release delete "v$VERSION-dryrun.1" --yes --cleanup-tag
    git tag -d "v$VERSION-dryrun.1"
    ```
 
+   The tag ruleset blocks deleting `v*` tags; the maintainer who may release
+   deletes the dry-run tag through the bypass list, or the ruleset needs a
+   second pattern that allows deleting `v*-dryrun.*`.
+
 3. Real release: after step 10 of the crate release above, tag
    `RELEASE_SHA` (`v$VERSION`, annotated, on `main`); the workflow validates the
-   tag against `crates/tea-cli/Cargo.toml`. Review the draft, check the files
-   against `docs/installing.md`, then publish the release by hand.
+   tag against `crates/tea-cli/Cargo.toml`. Approve the two deployments. The
+   result is a **draft** release. Review it, check the files against
+   `docs/installing.md`, and publish the release by hand (the workflow never
+   does).

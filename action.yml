@@ -112,6 +112,7 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         ARCHIVE_PATH: ${{ steps.fetch.outputs.archive-path }}
+        VERSION: ${{ inputs.version }}
         REPO: ${{ inputs.repository }}
         ATTESTATION: ${{ inputs.attestation }}
         GH_TOKEN: ${{ github.token }}

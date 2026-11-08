@@ -132,3 +132,16 @@ Same terms, re-run over `README.md`, crate READMEs, `CHANGELOG.md`,
 | `docs/cache.md` | "Atomic, not durable" | Temporary file plus rename; the concurrent-writer test; no `fsync` is said outright. |
 | `docs/cache.md` `Retry-After` | Waits up to the cap, fails fast above it | `throttle.rs`. The wait test measures elapsed time with a 900 ms floor on a 1 s wait; it is timing-based. |
 | key derivation | Different key ids and origins never share an entry | Unit test on `cache_key`; `different_keys_never_share_entries`. |
+
+## Review fixes before 0.1.0
+
+### A1: attestation, Environment, tags on main
+
+| File | Claim | Why it is honest |
+| --- | --- | --- |
+| `docs/installing.md`, `scripts/action/verify-attestation.sh` | A verified attestation is for this tag | The check passes `--source-ref refs/tags/v$VERSION` with `--repo` and `--signer-workflow`; `the_attestation_must_be_for_this_release_tag` reads the stub `gh` call. Whether `gh` honors every flag as documented is **not** verified (no network, no real attestation). |
+| same | An archive of another version is refused | `a_version_that_does_not_match_the_archive_is_refused_before_gh_runs`, `a_dry_run_archive_is_not_accepted_as_the_release_it_prefixes`. The check is on the file name and the tag ref, not on the archive's contents. |
+| `release.yml` | Every tag, dry runs included, is on main | `every_release_tag_must_be_on_main_dry_runs_included` checks the step text. Running it needs GitHub. |
+| `release.yml` | Exactly the expected files are attested | `the_attest_job_rejects_any_other_set_of_files` executes the step's shell against good and bad `dist/` directories. |
+| `release.yml` | Both privileged jobs run in the `release` Environment | The test checks the text. That the Environment has required reviewers is a repository setting (`docs/release-checklist.md`) and is **not** checked by any test. |
+| `release.yml` | The workflow only ever creates a draft | `release_never_publishes_the_github_release`. Publishing is a manual step. |
