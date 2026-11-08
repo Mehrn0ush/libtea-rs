@@ -17,7 +17,7 @@ Do **not** auto-follow `main`. Re-pin is an explicit version event.
    `spec/PINNED.md` / `spec/manifest.json`.
 3. Update `libtea_core::spec` constants (`COMMIT`, dates, version).
 4. Adjust models / client behavior as required by the delta.
-5. Update `docs/api-operation-matrix.md` and `docs/specification-baseline.md`.
+5. Update the "API operation matrix" in `docs/interoperability.md` and the "Specification baseline" in `docs/architecture.md`.
 6. Run:
    - `cargo test --workspace --all-targets --locked`
    - `cargo run -p libtea-cli --locked -- conformance`
