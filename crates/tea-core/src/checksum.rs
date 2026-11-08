@@ -379,7 +379,7 @@ pub struct ContentDecoder {
 }
 
 enum DecoderInner {
-    Plain(Vec<u8>),
+    Plain(CappedBuf),
     Gzip(flate2::write::GzDecoder<CappedBuf>),
     Zlib(ZlibInflate),
 }
@@ -496,6 +496,8 @@ fn inflate(
 /// the buffer past the cap before the error is returned.
 struct CappedBuf {
     bytes: Vec<u8>,
+    /// Bytes already handed out by [`CappedBuf::take`]; they still count toward `max`.
+    taken: usize,
     max: usize,
 }
 
@@ -503,18 +505,25 @@ impl CappedBuf {
     fn new(max: usize) -> Self {
         Self {
             bytes: Vec::new(),
+            taken: 0,
             max,
         }
     }
 
+    /// Total decoded bytes so far, including those already taken.
     fn len(&self) -> usize {
-        self.bytes.len()
+        self.taken.saturating_add(self.bytes.len())
+    }
+
+    fn take(&mut self) -> Vec<u8> {
+        self.taken = self.taken.saturating_add(self.bytes.len());
+        std::mem::take(&mut self.bytes)
     }
 }
 
 impl std::io::Write for CappedBuf {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        if self.bytes.len().saturating_add(data.len()) > self.max {
+        if self.len().saturating_add(data.len()) > self.max {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "decoded artifact exceeds the size limit",
@@ -540,9 +549,9 @@ impl ContentDecoder {
     /// Returns an error when the coding is not a single supported value.
     pub fn new(coding: Option<&str>, max_output: usize) -> Result<Self, ModelError> {
         let inner = match coding.map(str::trim).filter(|value| !value.is_empty()) {
-            None => DecoderInner::Plain(Vec::new()),
+            None => DecoderInner::Plain(CappedBuf::new(max_output)),
             Some(coding) if coding.eq_ignore_ascii_case("identity") => {
-                DecoderInner::Plain(Vec::new())
+                DecoderInner::Plain(CappedBuf::new(max_output))
             }
             Some(coding) if coding.contains(',') => {
                 return Err(ModelError::Invalid(
@@ -584,7 +593,9 @@ impl ContentDecoder {
         }
         self.input_len += chunk.len();
         match &mut self.inner {
-            DecoderInner::Plain(output) => output.extend_from_slice(chunk),
+            DecoderInner::Plain(output) => {
+                std::io::Write::write_all(output, chunk).map_err(decode_error)?;
+            }
             DecoderInner::Gzip(decoder) => {
                 std::io::Write::write_all(decoder, chunk).map_err(decode_error)?;
             }
@@ -598,14 +609,35 @@ impl ContentDecoder {
         Ok(())
     }
 
+    /// Hand out the decoded bytes produced so far and forget them.
+    ///
+    /// Use this after each [`ContentDecoder::push`] to process a large body
+    /// incrementally. Bytes taken here still count toward the `max_output`
+    /// cap, so the cap applies to the whole body. Only complete decoding is
+    /// meaningful: the stream is validated by [`ContentDecoder::finish`], and
+    /// until it returns `Ok` the bytes taken so far must not be treated as a
+    /// valid artifact.
+    ///
+    /// *Experimental.*
+    pub fn take_output(&mut self) -> Vec<u8> {
+        match &mut self.inner {
+            DecoderInner::Plain(output) => output.take(),
+            DecoderInner::Gzip(decoder) => decoder.get_mut().take(),
+            DecoderInner::Zlib(decoder) => decoder.output.take(),
+        }
+    }
+
     /// Finish the coding stream and return the decoded bytes.
+    ///
+    /// Bytes already handed out by [`ContentDecoder::take_output`] are not
+    /// returned again.
     ///
     /// # Errors
     ///
     /// Returns an error when the stream is truncated or the output cap is exceeded.
     pub fn finish(self) -> Result<Vec<u8>, ModelError> {
         let output = match self.inner {
-            DecoderInner::Plain(output) => output,
+            DecoderInner::Plain(output) => output.bytes,
             DecoderInner::Gzip(decoder) => decoder.finish().map_err(decode_error)?.bytes,
             DecoderInner::Zlib(decoder) => decoder.finish()?,
         };
@@ -738,6 +770,115 @@ mod tests {
         assert!(decode_content_coding(&gzip[..gzip.len() / 2], Some("gzip"), 1024).is_err());
         assert!(decode_content_coding(&zlib[..zlib.len() / 2], Some("deflate"), 1024).is_err());
         assert!(decode_content_coding(&zlib[..zlib.len() - 4], Some("deflate"), 1024).is_err());
+    }
+
+    fn stream_in_chunks(
+        coding: Option<&str>,
+        body: &[u8],
+        step: usize,
+        max: usize,
+    ) -> Result<Vec<u8>, ModelError> {
+        let mut decoder = ContentDecoder::new(coding, max)?;
+        let mut all = Vec::new();
+        for chunk in body.chunks(step) {
+            decoder.push(chunk)?;
+            all.extend(decoder.take_output());
+        }
+        all.extend(decoder.finish()?);
+        Ok(all)
+    }
+
+    #[test]
+    fn take_output_streams_every_coding_to_the_same_bytes() {
+        let raw: Vec<u8> = (0..200_000u32).map(|n| (n % 251) as u8).collect();
+        for (coding, body) in [
+            (None, raw.clone()),
+            (Some("identity"), raw.clone()),
+            (Some("gzip"), gzip_bytes(&raw)),
+            (Some("deflate"), zlib_bytes(&raw)),
+        ] {
+            let got = stream_in_chunks(coding, &body, 997, raw.len()).unwrap();
+            assert_eq!(got, raw, "coding {coding:?}");
+        }
+    }
+
+    #[test]
+    fn the_size_cap_covers_bytes_already_taken() {
+        let raw = vec![7u8; 1000];
+        for (coding, body) in [
+            (None, raw.clone()),
+            (Some("gzip"), gzip_bytes(&raw)),
+            (Some("deflate"), zlib_bytes(&raw)),
+        ] {
+            // Exactly the cap passes; one byte less must fail even though
+            // each take empties the buffer.
+            assert!(
+                stream_in_chunks(coding, &body, 10, 1000).is_ok(),
+                "{coding:?}"
+            );
+            assert!(
+                stream_in_chunks(coding, &body, 10, 999).is_err(),
+                "{coding:?}"
+            );
+        }
+    }
+
+    /// 20 pieces of 500 identical bytes, sync-flushed so the decoder emits
+    /// output piece by piece while the encoded body stays tiny.
+    fn flushed_pieces(coding: &str) -> (Vec<u8>, usize) {
+        let piece = vec![b'a'; 500];
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let mut zl = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        for _ in 0..20 {
+            if coding == "gzip" {
+                std::io::Write::write_all(&mut gz, &piece).unwrap();
+                std::io::Write::flush(&mut gz).unwrap();
+            } else {
+                std::io::Write::write_all(&mut zl, &piece).unwrap();
+                std::io::Write::flush(&mut zl).unwrap();
+            }
+        }
+        let body = if coding == "gzip" {
+            gz.finish().unwrap()
+        } else {
+            zl.finish().unwrap()
+        };
+        (body, 20 * 500)
+    }
+
+    #[test]
+    fn the_decoded_cap_covers_bytes_already_taken_when_output_arrives_gradually() {
+        for coding in ["gzip", "deflate"] {
+            let (body, decoded) = flushed_pieces(coding);
+            assert!(
+                body.len() < decoded / 4,
+                "{coding}: the body must compress well"
+            );
+            // Every piece is far below the cap; only the running total exceeds it.
+            assert!(
+                stream_in_chunks(Some(coding), &body, 1, decoded).is_ok(),
+                "{coding}"
+            );
+            assert!(
+                stream_in_chunks(Some(coding), &body, 1, decoded - 1).is_err(),
+                "{coding}: total output over the cap must fail even though each take emptied the buffer"
+            );
+        }
+    }
+
+    #[test]
+    fn a_truncated_stream_fails_at_finish_after_bytes_were_taken() {
+        let raw = vec![1u8; 5000];
+        for (coding, body) in [
+            (Some("gzip"), gzip_bytes(&raw)),
+            (Some("deflate"), zlib_bytes(&raw)),
+        ] {
+            let cut = &body[..body.len() - 3];
+            assert!(
+                stream_in_chunks(coding, cut, 16, 10_000).is_err(),
+                "{coding:?}"
+            );
+        }
     }
 
     fn gzip_bytes(raw: &[u8]) -> Vec<u8> {
