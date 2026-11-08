@@ -4,8 +4,9 @@
 #   make-sbom.sh <output-file>
 #
 # Needs `cargo-cyclonedx` on PATH (the release workflow installs a pinned
-# version) and python3. The tool is run for crates/tea-cli, whose tree contains
-# libtea-core and libtea-client. Normal and build dependencies are listed; dev
+# version) and python3. The tool is pointed at crates/tea-cli, whose tree contains
+# libtea-core and libtea-client; the SBOMs it also writes for the other workspace
+# members are removed. Normal and build dependencies are listed; dev
 # dependencies are not. The result is checked to be a CycloneDX JSON document
 # before it is moved to <output-file>.
 #
@@ -38,12 +39,18 @@ find "$ROOT/crates" -maxdepth 2 \( -name '*.cdx.json' -o -name '*bom*.json' \) >
 sort "$work/before" >"$work/before.s"
 sort "$work/after" >"$work/after.s"
 comm -13 "$work/before.s" "$work/after.s" >"$work/new"
-count="$(wc -l <"$work/new" | tr -d ' ')"
-[[ "$count" == "1" ]] || {
+
+# cargo-cyclonedx writes one SBOM per workspace member, next to each manifest,
+# whichever manifest it is pointed at. Keep the CLI's and remove the rest, which
+# this run created.
+generated="$ROOT/crates/tea-cli/libtea-cli.cdx.json"
+if ! grep -qxF "$generated" "$work/new"; then
   cat "$work/tool.log" >&2
-  die "expected exactly one new SBOM file, found $count"
-}
-generated="$(cat "$work/new")"
+  die "cargo cyclonedx did not write $generated"
+fi
+while IFS= read -r created; do
+  [[ "$created" == "$generated" ]] || rm -f -- "$created"
+done <"$work/new"
 
 python3 -I - "$generated" <<'PY' || die "the generated file is not a CycloneDX JSON document"
 import json, sys

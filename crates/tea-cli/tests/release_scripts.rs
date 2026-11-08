@@ -209,3 +209,69 @@ fn windows_gets_a_zip_with_an_exe_and_bad_arguments_are_refused() {
         "no output for a refused target"
     );
 }
+
+/// `cargo-cyclonedx` writes one SBOM per workspace member whichever manifest it
+/// is pointed at (seen with 0.5.10 on this workspace: four files). The script
+/// must keep the CLI's, remove the others, and leave nothing behind.
+#[test]
+fn make_sbom_keeps_the_cli_sbom_when_the_tool_writes_one_per_member() {
+    if python().is_none() {
+        return;
+    }
+    use std::os::unix::fs::PermissionsExt;
+    let dir = Dir::new("sbom");
+    let tree = dir.0.join("tree");
+    let bin = dir.0.join("bin");
+    std::fs::create_dir_all(tree.join("scripts")).unwrap();
+    std::fs::create_dir_all(&bin).unwrap();
+    for member in ["tea-cli", "tea-client", "tea-core", "tea-conformance"] {
+        std::fs::create_dir_all(tree.join("crates").join(member)).unwrap();
+    }
+    std::fs::copy(
+        root().join("scripts/make-sbom.sh"),
+        tree.join("scripts/make-sbom.sh"),
+    )
+    .unwrap();
+    let write_exec = |name: &str, body: &str| {
+        let path = bin.join(name);
+        std::fs::write(&path, body).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    write_exec("cargo-cyclonedx", "#!/bin/sh\nexit 0\n");
+    write_exec(
+        "cargo",
+        r#"#!/bin/sh
+[ "$1" = cyclonedx ] || exit 2
+for m in cli client core conformance; do
+  printf '{"bomFormat":"CycloneDX","specVersion":"1.5","metadata":{"component":{"name":"libtea-%s"}},"components":[{"name":"x"}]}' "$m" \
+    > "crates/tea-$m/libtea-$m.cdx.json"
+done
+"#,
+    );
+    let out = dir.0.join("out/sbom.json");
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let run = Command::new("bash")
+        .arg(tree.join("scripts/make-sbom.sh"))
+        .arg(&out)
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let text = std::fs::read_to_string(&out).unwrap();
+    assert!(text.contains("\"name\":\"libtea-cli\""), "{text}");
+    for member in ["tea-cli", "tea-client", "tea-core", "tea-conformance"] {
+        let left: Vec<_> = std::fs::read_dir(tree.join("crates").join(member))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert!(left.is_empty(), "{member}: left behind {left:?}");
+    }
+}

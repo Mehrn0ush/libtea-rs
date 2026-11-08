@@ -13,11 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      # LIBTEA_ALLOW_PIN_PLACEHOLDERS: development only. Lets the pin gate in
-      # crates/tea-cli/tests/pin_gate.rs pass while PIN_ME_* placeholders remain.
-      # docs/release-pins.md removes this line; a test fails if it stays.
-      LIBTEA_ALLOW_PIN_PLACEHOLDERS: "1"
     strategy:
       fail-fast: false
       matrix:

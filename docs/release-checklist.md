@@ -132,12 +132,12 @@ stolen tokens, not against the maintainer.
 **draft** GitHub release. It publishes nothing to crates.io, never publishes the
 GitHub release itself, and holds no secret. It has **not been run**; its first
 run is the real `v0.1.0` tag (step 6 above), so read `docs/release-pins.md`
-first: the placeholder pins block the run until they are replaced.
+first: it lists the pins and how to refresh them.
 
-1. Before tagging, fill in the pins (`docs/release-pins.md`). Then
+1. Before tagging, check the pins (`docs/release-pins.md`):
    `./scripts/check-pins.sh --release` must pass and `cargo test` must pass with
    `LIBTEA_ALLOW_PIN_PLACEHOLDERS` unset. The workflow runs the same script first
-   and fails the whole run if a placeholder remains.
+   and fails the whole run if a placeholder is present.
 2. After the tag is pushed, watch the run and approve the two deployments:
 
    ```sh

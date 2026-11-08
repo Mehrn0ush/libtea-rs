@@ -270,10 +270,21 @@ fn the_only_third_party_action_is_cache_and_it_is_pinned_or_a_placeholder() {
     for line in code_lines(&text) {
         if let Some(uses) = line.trim().strip_prefix("uses: ") {
             seen += 1;
-            let (name, reference) = uses.split_once('@').unwrap();
+            let (name, rest) = uses.split_once('@').unwrap();
             assert_eq!(name, "actions/cache");
+            // `<40-hex sha> # vX.Y.Z`: the comment says which release the SHA is.
+            let (reference, comment) = match rest.split_once(" # ") {
+                Some((reference, comment)) => (reference, Some(comment)),
+                None => (rest, None),
+            };
             let sha = reference.len() == 40 && reference.bytes().all(|b| b.is_ascii_hexdigit());
             assert!(sha || reference == "PIN_ME_ACTIONS_CACHE", "{reference}");
+            if sha {
+                assert!(
+                    comment.is_some_and(|c| c.starts_with('v')),
+                    "a pinned SHA needs a `# vX.Y.Z` comment: {uses}"
+                );
+            }
         }
     }
     assert_eq!(seen, 1);

@@ -266,6 +266,8 @@ fn unpinned_third_party_actions_are_exactly_the_known_debt() {
         for step in steps_of(&std::fs::read_to_string(&path).unwrap()) {
             if let Some(uses) = step.uses {
                 let (action, reference) = uses.split_once('@').expect("uses: owner/repo@ref");
+                // A pinned SHA is followed by a `# vX.Y.Z` comment.
+                let reference = reference.split(" # ").next().unwrap();
                 // PIN_ME_* placeholders are policed by the pin gate
                 // (pin_gate.rs, scripts/check-pins.sh), not listed here.
                 if !is_sha(reference) && !reference.starts_with("PIN_ME_") {

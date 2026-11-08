@@ -229,8 +229,6 @@ cargo build --workspace --locked
 cargo test --workspace --all-targets --locked
 ```
 
-Until the release pins are filled in ([docs/release-pins.md](docs/release-pins.md)), `cargo test` fails its pin gate unless `LIBTEA_ALLOW_PIN_PLACEHOLDERS=1` is set. CI sets it.
-
 ## Issues
 
 Report bugs and interoperability results as GitHub issues on [Mehrn0ush/libtea-rs](https://github.com/Mehrn0ush/libtea-rs). Do not post credentials or unfixed vulnerabilities.

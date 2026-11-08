@@ -185,6 +185,50 @@ fn the_release_workflow_runs_the_gate_first_and_never_sets_the_flag() {
     assert!(!text.contains(FLAG));
 }
 
+/// Turn the real, already-pinned files in `dir` back into the pre-pinning form,
+/// so the documented commands can be run against it: every pinned action
+/// reference and the SBOM tool version become placeholders again, and the CI
+/// development flag is put back.
+fn unpin(dir: &Path) {
+    fn rewrite(path: &Path, f: impl Fn(&str) -> String) {
+        let text = std::fs::read_to_string(path).unwrap();
+        let out: Vec<String> = text.lines().map(&f).collect();
+        std::fs::write(path, out.join("\n") + "\n").unwrap();
+    }
+    const ACTIONS: [(&str, &str); 4] = [
+        ("actions/upload-artifact@", "PIN_ME_UPLOAD_ARTIFACT"),
+        ("actions/download-artifact@", "PIN_ME_DOWNLOAD_ARTIFACT"),
+        (
+            "actions/attest-build-provenance@",
+            "PIN_ME_ATTEST_BUILD_PROVENANCE",
+        ),
+        ("actions/cache@", "PIN_ME_ACTIONS_CACHE"),
+    ];
+    for file in [".github/workflows/release.yml", "action.yml"] {
+        rewrite(&dir.join(file), |line| {
+            if line.trim_start().starts_with('#') {
+                return line.to_owned();
+            }
+            for (prefix, placeholder) in ACTIONS {
+                if let Some(at) = line.find(prefix) {
+                    return format!("{}{prefix}{placeholder}", &line[..at]);
+                }
+            }
+            if let Some(at) = line.find("CARGO_CYCLONEDX_VERSION:") {
+                return format!(
+                    "{}CARGO_CYCLONEDX_VERSION: PIN_ME_CARGO_CYCLONEDX_VERSION",
+                    &line[..at]
+                );
+            }
+            line.to_owned()
+        });
+    }
+    let ci = dir.join(".github/workflows/ci.yml");
+    let mut text = std::fs::read_to_string(&ci).unwrap();
+    text.push_str(&format!("# {FLAG}: development only\n  {FLAG}: \"1\"\n"));
+    std::fs::write(&ci, text).unwrap();
+}
+
 /// The commands in `docs/release-pins.md` (the `sh pins-apply` block) must
 /// really resolve every placeholder and retire the CI flag.
 #[test]
@@ -208,6 +252,11 @@ fn the_documented_commands_resolve_every_placeholder() {
     ] {
         std::fs::copy(root().join(file), dir.join(file)).unwrap();
     }
+    unpin(&dir);
+    assert!(
+        !placeholders_in(&dir).is_empty(),
+        "the scratch copy starts with placeholders, as the documented commands expect"
+    );
     let script = format!(
         "set -euo pipefail\n\
          UPLOAD_SHA=1111111111111111111111111111111111111111\n\
