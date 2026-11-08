@@ -746,8 +746,13 @@ mod tests {
         });
         assert!(swapped.is_err(), "the swapped-in link was followed");
         // And a plain replacement by another regular file is noticed too.
+        // The original stays alive under a second name, so the replacement
+        // cannot be given the same inode number (a freed inode is reused at
+        // once on Linux, which would make the two indistinguishable).
         let entry2 = dir.join("entry2");
+        let kept = dir.join("entry2-kept");
         std::fs::write(&entry2, b"first").unwrap();
+        std::fs::hard_link(&entry2, &kept).unwrap();
         let replaced = open_regular_with(&entry2, || {
             std::fs::remove_file(&entry2).unwrap();
             std::fs::write(&entry2, b"second").unwrap();
