@@ -919,3 +919,40 @@ fn the_name_check_runs_before_anything_is_checksummed_or_attested() {
         .iter()
         .any(|(k, v)| k == "VERSION" && v.contains("needs.meta.outputs.version")));
 }
+
+/// The manual interop workflow stops early, naming the accepted inputs, when
+/// nothing is selected to probe; and that step never sees the API key.
+#[test]
+fn the_interop_workflow_checks_that_something_is_selected_before_the_probe() {
+    let text = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/interop-manual.yml"),
+    )
+    .unwrap();
+    let check = text
+        .find("name: Check that something is selected to probe")
+        .expect("the check step exists");
+    let probe = text.find("name: Run probe").expect("the probe step exists");
+    assert!(check < probe, "the check runs before the probe");
+    let step = &text[check..probe];
+    assert!(
+        !step.contains("TEA_API_KEY"),
+        "the check never sees the key"
+    );
+    for needed in [
+        "::error::",
+        "TEA_TEI",
+        "TEA_PRODUCT_RELEASE",
+        "TEA_ARTIFACT_UUID",
+        "product_release",
+        "artifact_uuid",
+        "exit 1",
+    ] {
+        assert!(step.contains(needed), "check step lacks `{needed}`");
+    }
+    for line in step.lines().filter(|l| l.trim().starts_with("echo")) {
+        assert!(
+            !line.contains("${{"),
+            "no expression inside shell text: {line}"
+        );
+    }
+}

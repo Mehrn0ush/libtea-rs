@@ -173,6 +173,29 @@ set and `TEA_CLI_BIN` is not. Dispatch inputs are limited to two optional UUIDs
 (product release, artifact), which the CLI parses as UUIDs and appends to the
 fixed base URL.
 
+What the run probes comes from these, and at least one of the three must be
+set or the job stops early with an `::error::` that lists them:
+
+| What | Dispatch input | Environment variable |
+| --- | --- | --- |
+| TEI to discover | none (by design) | `TEA_TEI` |
+| Product release UUID | `product_release` | `TEA_PRODUCT_RELEASE` |
+| Artifact UUID | `artifact_uuid` | `TEA_ARTIFACT_UUID` |
+
+A dispatch input wins over the Environment variable of the same name. A TEI
+cannot be passed as an input (`gh workflow run -f tei=...` fails with HTTP 422,
+"Unexpected inputs"). Example, with `TEA_BASE_URL` set in `tea-interop`:
+
+```sh
+gh workflow run interop-manual.yml --repo Mehrn0ush/libtea-rs --ref main \
+  -f product_release=71286087-babf-5795-a6ce-4c350bc944b4
+gh run list --repo Mehrn0ush/libtea-rs --workflow interop-manual.yml --limit 1
+```
+
+Take the run id from that list, approve the `tea-interop` deployment in the
+GitHub UI, then `gh run watch <run-id> --exit-status` and
+`gh run download <run-id> --dir interop-run`.
+
 Required Environment settings (repository **Settings → Environments →
 `tea-interop`**):
 
