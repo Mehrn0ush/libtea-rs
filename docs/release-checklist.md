@@ -106,6 +106,74 @@ here is exercised by the test suite; check each item by hand.
    so that a published release's assets cannot be replaced later. The Action's
    `SHA256SUMS` check is only as strong as the release's assets are fixed.
 
+### Creating the rulesets
+
+Branch rules and rulesets are free on a **public** repository; a private
+repository on a free account cannot use them. Make the repository public first.
+The commands below create the two rulesets for the solo-maintainer settings
+below. They have not been run against GitHub, so read the result back:
+
+```sh
+REPO=Mehrn0ush/libtea-rs
+
+# main: pull request required (0 approvals), CI checks required, no force push
+# or deletion, nobody bypasses. Merge commits stay allowed (no linear history).
+gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "bypass_actors": [],
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "pull_request", "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false } },
+    { "type": "required_status_checks", "parameters": {
+        "strict_required_status_checks_policy": true,
+        "required_status_checks": [
+          { "context": "rust stable" },
+          { "context": "rust 1.89.0" },
+          { "context": "package" },
+          { "context": "cargo deny" },
+          { "context": "cargo semver-checks" },
+          { "context": "non_exhaustive guards" } ] } }
+  ]
+}
+JSON
+
+# v* tags: create, update, delete and force push blocked; repository admins bypass.
+gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
+{
+  "name": "release tags",
+  "target": "tag",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "bypass_actors": [ { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" } ],
+  "rules": [
+    { "type": "creation" }, { "type": "update" },
+    { "type": "deletion" }, { "type": "non_fast_forward" }
+  ]
+}
+JSON
+
+# Merge commits only, as the pull request says.
+gh api -X PATCH "repos/$REPO" -F allow_merge_commit=true -F allow_squash_merge=false -F allow_rebase_merge=false
+
+./scripts/check-repo-settings.sh "$REPO" main
+```
+
+`cargo audit` is not required because its job is `continue-on-error`. Add it if
+you want it to gate. `.github/workflows/repo-settings.yml` runs the same check
+on every push to `main` and weekly, and fails when a ruleset is missing or
+weakened. It reports; it cannot block anything, and someone with admin rights can
+change the rulesets or the workflow. The rulesets are the protection.
+
 ### Solo maintainer
 
 With one maintainer the settings above cannot all hold literally. These exact
