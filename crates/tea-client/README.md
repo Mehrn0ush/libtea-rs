@@ -12,8 +12,13 @@ Implemented against Transparency Exchange API commit
 This crate depends on `libtea-core` 0.1.0. It does not depend on the CLI or the conformance crate.
 
 ```toml
+[dependencies]
 libtea-client = "0.1.0"
+libtea-core = "0.1.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
+
+The snippet below also uses `libtea-core` (types such as `ListParams`) and `tokio` (`#[tokio::main]`); `libtea-client` does not re-export either.
 
 Edition 2021. MSRV 1.89. License Apache-2.0. TLS uses rustls. Certificate verification stays enabled. The default destination policy allows HTTPS to public addresses.
 

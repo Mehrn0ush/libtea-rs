@@ -34,8 +34,9 @@ feature branch and again on `main` before anything is tagged or published.
    `draft-release`), download the **draft** release, and verify it with
    `docs/installing.md`: checksums, `gh attestation verify` with
    `--source-ref refs/tags/v$VERSION`, run the binary, open the SBOM. Do not go
-   on until the checks succeed. Nothing has been published to crates.io yet.
-8. `cargo publish -p libtea-core --locked`.
+   on until the checks succeed. Nothing has been published to crates.io at this point.
+8. Publish `libtea-core` (see "Publishing with a token" below):
+   `cargo publish -p libtea-core --locked`.
 9. **Wait** until the index serves `libtea-core 0.1.0`, for example until
    `cargo info libtea-core@0.1.0` (or `cargo search libtea-core`) shows it.
 10. `cargo publish --dry-run -p libtea-client --locked` (this resolves
@@ -43,10 +44,7 @@ feature branch and again on `main` before anything is tagged or published.
 11. `cargo publish -p libtea-client --locked`.
 12. **Publish the GitHub draft: publish the release by hand** (the workflow
     never does).
-13. **Post-publish checks:** a fresh project depending on both crates from
-    crates.io builds and runs a `Tei::parse` / `Client::builder()` smoke;
-    docs.rs pages for both crates build and show the independence /
-    no-certification / checksum≠authenticity banners.
+13. **Post-publish checks:** the commands are in "Post-publish checks" below.
 
 **If something fails.** Before the first `cargo publish` (steps 5 to 7: the
 workflow, or the verification of the draft): the maintainer deletes the draft
@@ -56,6 +54,72 @@ the tag ruleset's bypass list), fixes the problem on a branch, merges it to
 After the first `cargo publish` succeeded, never move, delete or re-point a
 tag: the crates on crates.io are fixed, so bump the version instead and start
 again at step 1.
+
+## Publishing with a token
+
+Do not use `cargo login`: it echoes the token you paste. Create a short-lived
+token on crates.io with only the scopes `publish-new` and `publish-update`,
+then, in the terminal you publish from:
+
+```sh
+read -rs CARGO_REGISTRY_TOKEN
+export CARGO_REGISTRY_TOKEN
+cargo publish -p libtea-core --locked
+unset CARGO_REGISTRY_TOKEN
+```
+
+`read -rs` shows nothing as you paste. Publish `libtea-client` the same way
+after the index serves `libtea-core` (steps 9 to 11), then **revoke the token on
+crates.io**. Never paste a token into a chat, a ticket or a terminal log that is
+kept.
+
+## Lessons from the first release
+
+- **`gh` version.** `gh attestation verify --source-ref` needs a `gh` that has
+  that flag (verified with 2.103.3). `docs/installing.md` has the
+  `--cert-identity` form for older versions.
+- **Actions permissions.** Settings, Actions, General must be "Allow all
+  actions and reusable workflows". `local_only` makes every workflow fail with
+  `startup_failure` before any job starts.
+- **Redoing a release before the first `cargo publish`.**
+  `gh release delete vX.Y.Z --yes --cleanup-tag` removes the draft and the remote
+  tag (it needs the tag ruleset's bypass); `git tag -d vX.Y.Z` removes the local
+  one. Then fix on a branch, merge by pull request and tag the new `main`
+  commit.
+- **A tag push also starts CI**, so the newest run on the tag is not
+  necessarily the release run. Find it with
+  `gh run list --workflow release.yml --limit 3`, then `gh run watch <id>`.
+- **Shell blocks meant for pasting have no inline `# comments`.** An
+  interactive zsh does not treat `#` as a comment unless `interactive_comments`
+  is set, and the paste fails. Put the explanation above the block.
+
+## Post-publish checks
+
+Run these after step 12, from a directory outside the repository.
+
+```sh
+cargo info libtea-core@0.1.0
+cargo info libtea-client@0.1.0
+cargo new --bin smoke && cd smoke
+cargo add libtea-client@0.1.0 libtea-core@0.1.0
+cargo add tokio --features macros,rt-multi-thread
+```
+
+Replace `src/main.rs` with the library snippet from the client README, then:
+
+```sh
+cargo build
+cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.0 --locked libtea-cli
+libtea --version
+gh release view v0.1.0 --repo Mehrn0ush/libtea-rs --json isDraft,assets
+```
+
+Verify one archive as `docs/installing.md` describes. Then open
+https://docs.rs/libtea-core/0.1.0 and https://docs.rs/libtea-client/0.1.0 and
+check that both build and show the independence, no-certification and
+checksum-is-not-authenticity statements. The crates.io pages show the README
+packaged with the release; README changes made later appear there only with the
+next publish.
 
 ## Local preflight (does not replace CI)
 
@@ -67,7 +131,7 @@ cargo +1.89.0 test --workspace --all-targets --locked
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked
 cargo deny check
 cargo audit
-cargo package -p libtea-core --locked          # needs a clean tree
+cargo package -p libtea-core --locked
 cargo package -p libtea-client --locked --no-verify --list
 ```
 

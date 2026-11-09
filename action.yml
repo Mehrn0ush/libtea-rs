@@ -14,8 +14,7 @@
 # reach the scripts through `env:`, never through the shell text, and are not
 # echoed.
 #
-# No release has been published yet, and the pin of `actions/cache` below is a
-# placeholder (docs/release-pins.md). Documentation: docs/github-action.md.
+# Documentation: docs/github-action.md. Pins: docs/release-pins.md.
 
 name: libtea
 description: Install a verified libtea release binary and run a TEA command (sync, diff, discover, download, ...).
