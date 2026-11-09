@@ -61,6 +61,15 @@ struct Fixture {
 
 impl Fixture {
     fn new(tag: &str, branch: Option<Value>, tag_ruleset: Option<Value>) -> Self {
+        Self::with_actions(tag, branch, tag_ruleset, None)
+    }
+
+    fn with_actions(
+        tag: &str,
+        branch: Option<Value>,
+        tag_ruleset: Option<Value>,
+        actions: Option<Value>,
+    ) -> Self {
         let dir =
             std::env::temp_dir().join(format!("libtea-settings-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -71,6 +80,9 @@ impl Fixture {
         };
         if let Some(branch) = branch {
             data("repos_o_r_rules_branches_main", &branch);
+        }
+        if let Some(actions) = actions {
+            data("repos_o_r_actions_permissions", &actions);
         }
         let mut list = Vec::new();
         if let Some(ruleset) = tag_ruleset {
@@ -286,4 +298,76 @@ fn the_workflow_only_reads_and_uses_the_token_through_env() {
         assert!(!line.contains("${{"), "{line}");
     }
     assert!(text.contains("GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}"));
+}
+
+fn good(tag: &str, actions: Option<Value>) -> Fixture {
+    Fixture::with_actions(
+        tag,
+        Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
+        Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+        actions,
+    )
+}
+
+#[test]
+fn local_only_actions_is_a_problem_that_names_the_symptom() {
+    if !python_available() {
+        return;
+    }
+    let out = good(
+        "local",
+        Some(json!({"enabled": true, "allowed_actions": "local_only"})),
+    )
+    .run();
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    assert!(stderr(&out).contains("startup_failure"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("Allow all actions and reusable workflows"));
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("ok"));
+}
+
+#[test]
+fn all_actions_pass_and_say_the_setting_was_checked() {
+    if !python_available() {
+        return;
+    }
+    let out = good(
+        "allall",
+        Some(json!({"enabled": true, "allowed_actions": "all"})),
+    )
+    .run();
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "repository settings: ok"
+    );
+    assert!(!stderr(&out).contains("cannot check"));
+}
+
+#[test]
+fn unreadable_actions_permissions_are_reported_as_not_checked() {
+    if !python_available() {
+        return;
+    }
+    // No fixture: the stub answers HTTP 404, as a read-only token gets (403 or 404).
+    let out = good("noadmin", None).run();
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("cannot check the Actions permissions here"),
+        "{}",
+        stderr(&out)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(
+        stdout.contains("Actions permissions not verified"),
+        "{stdout}"
+    );
+    // Not a pass for that setting, and not a failure for the others: a real
+    // problem elsewhere still fails the run.
+    let broken = Fixture::new(
+        "noadmin-broken",
+        Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
+        None,
+    )
+    .run();
+    assert_eq!(broken.status.code(), Some(1));
 }

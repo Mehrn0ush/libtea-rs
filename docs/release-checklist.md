@@ -94,7 +94,8 @@ here is exercised by the test suite; check each item by hand.
    restrict deletions, block force pushes. Bypass list: only the maintainers who
    may release. Without it anyone with write access can create a `v*` tag.
 3. **Branch protection for `main`** (a branch ruleset works too): require a pull
-   request with at least one approval, require status checks (the CI jobs), block
+   request (0 approvals when you are the only maintainer, see
+   "Solo maintainer" below), require status checks (the CI jobs), block
    force pushes and deletion. The workflow refuses any tag whose commit is not on
    `main`; this makes "on main" mean "reviewed".
 4. **Private vulnerability reporting** (Settings, Code security): enable it and
@@ -102,6 +103,13 @@ here is exercised by the test suite; check each item by hand.
 5. **Actions settings** (Settings, Actions, General): "Workflow permissions" set
    to read-only by default; "Allow GitHub Actions to create and approve pull
    requests" off. The release workflow declares its own permissions per job.
+   Also set "Actions permissions" to **"Allow all actions and reusable
+   workflows"**. "Allow <owner>, and select non-<owner>, actions" works only if
+   every action the workflows use is on the list. "Disable Actions" and the
+   "local only" choice (`allowed_actions: local_only`) break every workflow: runs
+   fail with `startup_failure` before any job starts. `scripts/check-repo-settings.sh`
+   reports `local_only` when the token may read the setting (admin rights); the
+   scheduled workflow's `GITHUB_TOKEN` cannot, so it says "not verified".
 6. **Immutable releases** (Settings, General, if your plan offers it): turn it on
    so that a published release's assets cannot be replaced later. The Action's
    `SHA256SUMS` check is only as strong as the release's assets are fixed.
