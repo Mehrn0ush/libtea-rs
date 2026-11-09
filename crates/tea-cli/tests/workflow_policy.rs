@@ -252,8 +252,6 @@ fn unpinned_third_party_actions_are_exactly_the_known_debt() {
     const KNOWN_UNPINNED: &[(&str, &str)] = &[
         ("ci.yml", "taiki-e/install-action@cargo-audit"),
         ("ci.yml", "taiki-e/install-action@cargo-semver-checks"),
-        ("interop-manual.yml", "actions/upload-artifact@v4"),
-        ("spec-drift.yml", "actions/upload-artifact@v4"),
     ];
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows");
     let mut unpinned: Vec<(String, String)> = Vec::new();
@@ -287,6 +285,32 @@ fn unpinned_third_party_actions_are_exactly_the_known_debt() {
         .collect();
     known.sort();
     assert_eq!(unpinned, known);
+}
+
+/// The release binaries are built on named runner images, so the glibc baseline
+/// of the gnu archives is a decision and not whatever `-latest` points to.
+#[test]
+fn the_release_workflow_builds_on_named_runner_images() {
+    let text = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/release.yml"),
+    )
+    .unwrap();
+    let images: Vec<&str> = text
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim();
+            l.strip_prefix("runs-on: ")
+                .or_else(|| l.strip_prefix("os: "))
+        })
+        .collect();
+    assert!(images.len() >= 10, "{images:?}");
+    for image in &images {
+        assert!(
+            image.contains("matrix.os") || !image.contains("latest"),
+            "release.yml uses a floating runner image: {image}"
+        );
+    }
+    assert!(text.contains("os: ubuntu-24.04\n"), "gnu baseline image");
 }
 
 #[test]

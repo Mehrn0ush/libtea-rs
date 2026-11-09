@@ -11,6 +11,15 @@ the SBOM tool has an exact version. Pinned on 2026-11-08:
 | `actions/attest-build-provenance` | `release.yml` | `4d101475d8b20a2381f78447822ac1eab6504dd8` | v4.2.2 |
 | `cargo-cyclonedx` | `release.yml`, `sbom` job `env:` | `0.5.10` (`cargo install --locked`) | 0.5.10 |
 | `actions/cache` | `action.yml` | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` | v6.1.0 |
+| `actions/checkout` | every workflow (12 uses) | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1 |
+| `actions/upload-artifact` | `interop-manual.yml`, `spec-drift.yml` (as in `release.yml`) | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | v7.0.2 |
+| runner images | `release.yml` | `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15`, `windows-2022` | |
+
+On 2026-11-09 `actions/checkout` and `actions/upload-artifact` were moved to
+releases that run on Node 24 (`runs.using: node24`; the previous checkout pin
+produced a "Node.js 20 is deprecated" notice on every CI job). Each SHA was
+resolved from the tag two ways (`commits/<tag>` and `git/ref/tags/<tag>`) and
+the two agreed.
 
 Each SHA was resolved from the tag two ways (`gh api repos/<action>/commits/<tag>`
 and the tag ref `git/ref/tags/<tag>`, dereferenced if annotated) and the two
@@ -19,8 +28,8 @@ of each; they are not the same major version. `cargo install cargo-cyclonedx
 --version 0.5.10 --locked` was run in a scratch directory and `scripts/make-sbom.sh`
 was run with it (157 components for the CLI). None of this has run on GitHub.
 
-The `taiki-e/install-action` and `actions/upload-artifact@v4` uses in the other
-workflows are tag-pinned, not SHA-pinned. `unpinned_third_party_actions_are_exactly_the_known_debt`
+The `taiki-e/install-action` uses in `ci.yml` (`cargo-audit`,
+`cargo-semver-checks`) are tag-pinned, not SHA-pinned. `unpinned_third_party_actions_are_exactly_the_known_debt`
 in `crates/tea-cli/tests/workflow_policy.rs` lists them.
 
 ## The gate
