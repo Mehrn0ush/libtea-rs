@@ -4,7 +4,7 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
-## 0.1.0 — first release (not yet published)
+## 0.1.0 — 2026-11-09
 
 First public release. There is no earlier version to migrate from, so nothing below is a change to an existing behavior; it is what 0.1.0 contains.
 
@@ -37,6 +37,7 @@ Independent implementation of a consumer for the Transparency Exchange API (TEA)
 
 ### libtea-cli (`libtea`; not published to crates.io)
 
+- `libtea --version` (`-V`) prints `libtea <version>`.
 - Commands: `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, `collections`, `download`, `sync`, `diff`, `cache stat|clear`. `--json` is accepted by every command; with `--json` a failure is one JSON object on stderr. Shapes: `docs/cli-json.md`.
 - Exit statuses: 0 success, 1 failure, 2 usage, 3 authentication, 4 only weak (SHA-1) checksums matched, 5 not found, 6 integrity not established, 7 changes detected (`sync --check`, `diff`). See `docs/cli-exit-codes.md`.
 - `download`: `--output` streams through the client (create-new, `--force` to replace, a symbolic link at the final path component is refused, no file name is taken from server data, files are private); without `--output` the verified bytes go to stdout after the check. `--require-checksums`, `--allow-weak-checksums`, `--media-type`, `--revision`, `--json` (needs `--output`).
@@ -75,7 +76,7 @@ Independent implementation of a consumer for the Transparency Exchange API (TEA)
 - No cryptographic signature verification, publisher authenticity verification, or Sigstore trust-policy evaluation (`docs/design/signature-verification.md`).
 - Live interoperability evidence is limited to a local server (Oolong) and one public read-only server (Vulnetix; one probe run is committed as `docs/interop/vulnetix-2026-11-08.json`, earlier results are reported only); not universal compatibility, not certification.
 - No HTTPS SVCB lookup, OAuth beyond API-key `client_credentials`, full ECMA-428 CLE evaluation, `no_std`, or `Range` resume.
-- Not yet run on GitHub: the release workflow and the Action. Their third-party actions are pinned by commit SHA (`docs/release-pins.md`); older tag-pinned actions in `ci.yml` and two other workflows are listed there.
+- The release workflow has run on GitHub (draft release, attestations verified with `gh attestation verify`); the Action has not yet been exercised from a workflow. Their third-party actions are pinned by commit SHA (`docs/release-pins.md`); older tag-pinned actions in `ci.yml` and two other workflows are listed there.
 - CI runs on Linux only; macOS and Windows are not tested in CI, and the Unix-only directory checks of the cache do not exist on Windows.
 - The cache's pruning rescans its directory, and streaming copies in flight are not counted against its total (`docs/cache.md`).
 

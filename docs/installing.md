@@ -43,8 +43,26 @@ gh attestation verify "libtea-$VERSION-$TARGET.tar.gz" \
 
 tar -xzf "libtea-$VERSION-$TARGET.tar.gz"
 install -m 0755 "libtea-$VERSION-$TARGET/libtea" ~/.local/bin/libtea
-libtea --help
+libtea --version
 ```
+
+`libtea --version` prints `libtea X.Y.Z`; it should show the version you downloaded.
+
+The `gh attestation verify` command above was verified with gh 2.103.3 and needs
+a `gh` that has `--source-ref`. With an older `gh`, check the signing workflow
+and tag with `--cert-identity` instead (it cannot be combined with
+`--signer-workflow`, so use one or the other):
+
+```sh
+gh attestation verify "libtea-$VERSION-$TARGET.tar.gz" \
+  --repo Mehrn0ush/libtea-rs \
+  --cert-identity "https://github.com/Mehrn0ush/libtea-rs/.github/workflows/release.yml@refs/tags/v$VERSION"
+```
+
+On macOS, a binary downloaded through a browser may be quarantined and refused
+at first run. After verifying it, remove the flag with
+`xattr -d com.apple.quarantine <file>`. Files fetched with `curl` as above are
+not quarantined.
 
 On Windows, download the `.zip`, check it with
 `(Get-FileHash .\libtea-X.Y.Z-x86_64-pc-windows-msvc.zip).Hash` against

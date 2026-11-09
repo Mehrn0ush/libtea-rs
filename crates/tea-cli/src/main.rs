@@ -145,6 +145,7 @@ fn kind_for(status: u8) -> &'static str {
 #[derive(Debug, Parser)]
 #[command(
     name = "libtea",
+    version,
     about = "Transparency Exchange API consumer (libtea-rs)",
     after_help = "Credentials: prefer TEA_API_KEY_ID and TEA_API_KEY_SECRET. \
 CLI --api-key-secret is supported for compatibility but is insecure (process list / shell history). \

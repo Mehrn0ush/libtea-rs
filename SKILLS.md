@@ -16,6 +16,7 @@ vulnerabilities or decide whether a component is trustworthy.
 ## Calling the CLI without a terminal
 
 - Every command is non-interactive. It never prompts.
+- `libtea --version` prints `libtea <version>`; use it to check what is installed.
 - Add `--json` where the command accepts it. Output is then JSON on stdout.
   A failure is one JSON object on stderr: `{"error":{"exit_code":5,"kind":"not_found","message":"..."},"schema_version":1}`.
 - Field names and shapes are documented in `docs/cli-json.md`. The lock file
