@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- GitHub Action (`action.yml`, not part of any crate): first run from a workflow on GitHub-hosted runners (`ubuntu-24.04` gnu and musl, `ubuntu-24.04-arm`, `macos-15`) found two problems, fixed here. On Windows the SHA-256 check always failed, because Git Bash's `sha256sum` puts a backslash in front of its output when the path contains one; the hash is now read from standard input. In a minimal container such as Alpine the Action needs `python3`, `bash` and `curl` installed first; `docs/github-action.md` says so. Pin the fixed Action by commit once it is released.
+
 ## 0.1.1 — 2026-11-09
 
 Documentation-only release. **No library code changed** between 0.1.0 and 0.1.1: `crates/*/src` is identical to the `v0.1.0` tag (checked with `git diff v0.1.0..HEAD -- crates/*/src`); the versions in the `Cargo.toml` files and the packaged README files differ.

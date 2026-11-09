@@ -1032,3 +1032,47 @@ fn credentials_in_the_ambient_environment_stop_the_action() {
     );
     assert!(empty.status.success(), "{}", text(&empty.stderr));
 }
+
+#[test]
+fn a_hash_is_read_from_stdin_so_a_backslash_in_the_path_cannot_leak_into_it() {
+    // Git Bash on Windows: GNU sha256sum prefixes its line with `\` when the
+    // file name contains a backslash. A stub that does the same for any file
+    // argument, and stays plain for standard input, stands in for it.
+    let sandbox = Sandbox::new("sha");
+    let file = sandbox.path("file.bin");
+    fs::write(&file, b"libtea").unwrap();
+    let real = have("sha256sum").or_else(|| have("shasum")).unwrap();
+    let real_args = if real.ends_with("shasum") {
+        "-a 256"
+    } else {
+        ""
+    };
+    sandbox.write_exe(
+        "stubs/sha256sum",
+        &format!(
+            "#!/bin/sh\nif [ $# -gt 0 ]; then h=$({real} {real_args} \"$@\" | cut -d' ' -f1); printf '\\\\%s  %s\\n' \"$h\" \"$1\"; else {real} {real_args}; fi\n",
+            real = real.display()
+        ),
+    );
+    let out = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            ". {}; sha256_of {}",
+            script("common.sh").display(),
+            file.display()
+        ))
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                sandbox.path("stubs").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
+        .output()
+        .unwrap();
+    let got = text(&out.stdout);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(got.trim().len(), 64, "{got}");
+    assert!(got.trim().chars().all(|c| c.is_ascii_hexdigit()), "{got}");
+}
