@@ -35,7 +35,7 @@ lock file honest in CI:
 | `api-key-id`, `api-key-secret` | The API key, from secrets; see Credentials. Optional for servers that need no key. |
 | `extra-args` | More `libtea` arguments, **one per line**, passed as-is with no shell (so `--artifact`, UUID, `--output`, `--allow-origin`, `--json`, ...). |
 | `working-directory` | Directory to run in. |
-| `libc` | Linux only: `gnu` (default) or `musl`. |
+| `libc` | Linux only: `gnu` (default) or `musl`. The action does not detect the distribution: on a runner or container with glibc older than 2.34 (for example Ubuntu 20.04) or without glibc (Alpine) set `musl`. See `docs/installing.md`. |
 | `repository` | Whose releases to use; default `Mehrn0ush/libtea-rs`. |
 | `attestation` | `auto` (default: verify when `gh` is installed), `required` (fail without `gh`), `skip`. |
 | `cache` | `"true"` (default) caches the archive between runs. |
