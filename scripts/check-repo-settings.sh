@@ -10,6 +10,12 @@
 #   * the repository rulesets: an active tag ruleset covering `v*` that blocks
 #     creation by others, updates, deletion and force pushes.
 #
+# A third read, repos/OWNER/REPO/actions/permissions, needs admin rights. When
+# the token may not read it (HTTP 403 or 404, as with the workflow's
+# GITHUB_TOKEN) the script says so and goes on: that setting is neither passed
+# nor failed. If it can be read, "local_only" is a problem, because it makes every
+# workflow fail with startup_failure before any job starts.
+#
 # It reports every problem it finds and exits 1 if there is any. It cannot
 # protect anything itself: it only says whether the settings are there. Rules
 # and rulesets are only available to private repositories on a paid plan; on a
@@ -41,6 +47,15 @@ gh api "repos/$repo/rules/branches/$branch" >"$work/branch.json" ||
   die "cannot read the rules for $branch (is the repository public, and may the token read it?)"
 gh api "repos/$repo/rulesets" >"$work/rulesets.json" ||
   die "cannot list the repository rulesets"
+
+if gh api "repos/$repo/actions/permissions" >"$work/actions.json" 2>"$work/actions.err"; then
+  :
+elif grep -Eq 'HTTP (403|404)' "$work/actions.err"; then
+  rm -f "$work/actions.json"
+  printf 'note: cannot check the Actions permissions here (reading them needs admin rights); not verified\n' >&2
+else
+  die "cannot read the Actions permissions: $(head -c 200 "$work/actions.err")"
+fi
 
 python3 -I - "$work/rulesets.json" >"$work/tag-ids" <<'PY'
 import json, sys
@@ -82,6 +97,18 @@ missing = sorted(required - contexts)
 if missing and "required_status_checks" in types:
     problems.append("required status checks are missing: " + ", ".join(missing))
 
+actions_checked = os.path.exists(os.path.join(work, "actions.json"))
+if actions_checked:
+    allowed = json.load(open(os.path.join(work, "actions.json"), encoding="utf-8")).get(
+        "allowed_actions"
+    )
+    if allowed == "local_only":
+        problems.append(
+            'Actions allow only "local_only" (this repository\'s own actions and workflows): '
+            "every workflow fails with startup_failure before any job starts. "
+            'Set Settings, Actions, General to "Allow all actions and reusable workflows"'
+        )
+
 need_tag_rules = {"creation", "update", "deletion", "non_fast_forward"}
 good_tag_ruleset = False
 for path in glob.glob(os.path.join(work, "tag-*.json")):
@@ -100,5 +127,5 @@ if problems:
     for problem in problems:
         print(f"PROBLEM: {problem}", file=sys.stderr)
     sys.exit(1)
-print("repository settings: ok")
+print("repository settings: ok" if actions_checked else "repository settings: ok (Actions permissions not verified)")
 PY
