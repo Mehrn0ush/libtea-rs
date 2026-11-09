@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- Documentation: the dependency blocks in the READMEs list every crate the example uses (`libtea-core` and `tokio` next to `libtea-client`); the release checklist gained the token handling, redo path and post-publish checks learned from the first release; `CONTRIBUTING.md` and issue and pull-request templates. The READMEs shown on crates.io change only with the next publish.
+
 ## 0.1.0 — 2026-11-09
 
 First public release. There is no earlier version to migrate from, so nothing below is a change to an existing behavior; it is what 0.1.0 contains.

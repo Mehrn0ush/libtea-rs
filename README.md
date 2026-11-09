@@ -1,8 +1,15 @@
 # libtea-rs
 
+[![crates.io: libtea-core](https://img.shields.io/crates/v/libtea-core?label=libtea-core)](https://crates.io/crates/libtea-core)
+[![crates.io: libtea-client](https://img.shields.io/crates/v/libtea-client?label=libtea-client)](https://crates.io/crates/libtea-client)
+[![docs.rs: libtea-core](https://img.shields.io/docsrs/libtea-core?label=docs.rs%20core)](https://docs.rs/libtea-core)
+[![docs.rs: libtea-client](https://img.shields.io/docsrs/libtea-client?label=docs.rs%20client)](https://docs.rs/libtea-client)
+[![CI](https://github.com/Mehrn0ush/libtea-rs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mehrn0ush/libtea-rs/actions/workflows/ci.yml?query=branch%3Amain)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 Independent Rust client libraries and a command-line tool for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 
-**Status:** 0.1.0, first release, not yet published. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
+**Status:** 0.1.0, the first release. `libtea-core` and `libtea-client` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
 
 ## What it is, and what it is not
 
@@ -19,21 +26,26 @@ It is not a TEA server, does not sign or publish anything, does not scan for vul
 
 ## Install
 
-**Release binaries.** Each release has archives for seven targets (Linux gnu and musl on x86_64 and aarch64, macOS on x86_64 and aarch64, Windows x86_64), a `SHA256SUMS` file, a CycloneDX SBOM and a build-provenance attestation. No release has been published yet. [docs/installing.md](docs/installing.md) gives the verification commands.
+**Release binaries.** Each release has archives for seven targets (Linux gnu and musl on x86_64 and aarch64, macOS on x86_64 and aarch64, Windows x86_64), a `SHA256SUMS` file, a CycloneDX SBOM and a build-provenance attestation. Download from the [releases page](https://github.com/Mehrn0ush/libtea-rs/releases); [docs/installing.md](docs/installing.md) gives the checksum and attestation commands, which you should run before installing. Then `libtea --version` shows what you have.
 
 **From source** (needs Rust 1.89 or later):
 
 ```sh
-cargo install --git https://github.com/Mehrn0ush/libtea-rs --locked libtea-cli
+cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.0 --locked libtea-cli
 ```
 
-This builds the `libtea` binary at the default branch. Add `--tag v0.1.0` for a release. No checksum or attestation check is involved in this route.
+This builds the `libtea` binary at the tagged release. Without `--tag` it builds the default branch. No checksum or attestation check is involved in this route. `libtea-cli` is not published to crates.io, so `cargo install libtea-cli` does not work.
 
-**Libraries**, once `libtea-core` and `libtea-client` are on crates.io:
+**Libraries** from crates.io. The library example below uses `libtea-client`, `libtea-core` and `tokio`, so a project that runs it needs all three:
 
-```sh
-cargo add libtea-client
+```toml
+[dependencies]
+libtea-client = "0.1.0"
+libtea-core = "0.1.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
+
+or `cargo add libtea-client libtea-core && cargo add tokio --features macros,rt-multi-thread`.
 
 ## Quick start
 
