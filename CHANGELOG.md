@@ -4,9 +4,12 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
-## Unreleased
+## 0.1.2 — 2026-11-10
 
-- GitHub Action (`action.yml`, not part of any crate): first run from a workflow on GitHub-hosted runners (`ubuntu-24.04` gnu and musl, `ubuntu-24.04-arm`, `macos-15`) found two problems, fixed here. On Windows the SHA-256 check always failed, because Git Bash's `sha256sum` puts a backslash in front of its output when the path contains one; the hash is now read from standard input. In a minimal container such as Alpine the Action needs `python3`, `bash` and `curl` installed first; `docs/github-action.md` says so. Pin the fixed Action by commit once it is released.
+No library code changed: `crates/*/src` is identical to the `v0.1.1` tag (checked with `git diff v0.1.1..HEAD -- crates/*/src`). The crate versions are bumped so the Action can be pinned to a release tag that contains the fix below.
+
+- GitHub Action (`action.yml` and `scripts/action/`, not part of any crate): the first run from a workflow on GitHub-hosted runners found two problems. **On Windows the SHA-256 check always failed**, because Git Bash's `sha256sum` puts a backslash in front of its output when the path contains one; the hash is now read from standard input, with a test that fails without the change. **In a minimal container such as Alpine** the Action needs `bash`, `curl`, `tar` and `python3` installed first; `docs/github-action.md` says so. After the fix the Action ran successfully on `ubuntu-24.04` (gnu and musl), `ubuntu-24.04-arm`, `macos-15`, `windows-2022` and an `alpine:3.20` container. **Use 0.1.2 or later of the Action;** the `v0.1.0` and `v0.1.1` tags fail the checksum check on Windows.
+- `fuzz/Cargo.lock` follows the workspace version; the fuzz corpora were minimized (`cargo fuzz cmin`).
 
 ## 0.1.1 — 2026-11-09
 
