@@ -220,7 +220,9 @@ jobs:
 
 - The scripts are exercised against stubs on a Linux runner in CI. The Action
   itself was run from a workflow on GitHub-hosted `ubuntu-24.04` (gnu and
-  musl), `ubuntu-24.04-arm`, `macos-15` and `windows-2022` runners.
+  musl), `ubuntu-24.04-arm` and `macos-15` runners. Windows and Alpine
+  containers failed in that first run (fixed here) and have not been
+  re-run yet.
 - Runners: Linux, macOS and Windows (x86_64 and arm64 where the release has a
   build).
 - The cache holds only the archive, keyed by version and target. It is
