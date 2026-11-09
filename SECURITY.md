@@ -4,7 +4,7 @@
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x | Yes (once published) |
+| 0.1.x | Yes |
 | unreleased `main` | Best effort |
 
 ## Reporting a vulnerability

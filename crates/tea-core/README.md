@@ -11,8 +11,11 @@ Implemented against Transparency Exchange API commit
 `962a0228af1bfcc1232ac3f79239317ff33fdb04`. The TEA specification is still beta.
 
 ```toml
+[dependencies]
 libtea-core = "0.1.0"
 ```
+
+The snippet below needs nothing else. For the async client add `libtea-client` (its README lists the dependencies its example needs).
 
 Edition 2021. MSRV 1.89. License Apache-2.0.
 
