@@ -287,6 +287,8 @@ fn the_workflow_only_reads_and_uses_the_token_through_env() {
         .collect();
     assert_eq!(uses.len(), 1, "{uses:?}");
     let (action, sha) = uses[0].split_once('@').unwrap();
+    // A pinned SHA is followed by a `# vX.Y.Z` comment.
+    let sha = sha.split(" # ").next().unwrap();
     assert_eq!(action, "actions/checkout");
     assert!(
         sha.len() == 40 && sha.bytes().all(|b| b.is_ascii_hexdigit()),

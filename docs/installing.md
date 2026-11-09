@@ -17,8 +17,19 @@
 Targets: `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-gnu`, `aarch64-unknown-linux-musl`,
 `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`
-(`.zip`). The musl builds are for minimal containers; use gnu elsewhere. The
-macOS x86_64 binary is cross-compiled and is not run by the release smoke test.
+(`.zip`). The macOS x86_64 binary is cross-compiled and is not run by the
+release smoke test.
+
+**Linux: gnu or musl.** The gnu archives are built on `ubuntu-24.04` and link
+the system glibc. Measured on the v0.1.0 archives, both gnu archives need
+**glibc 2.34 or newer** (the highest `GLIBC_x.y` version they reference is
+2.34; found by scanning the binary's version strings, as `readelf` was not
+available). That covers Ubuntu 22.04 and later, Debian 12 and later, and
+RHEL 9 and later; it does not cover Ubuntu 20.04, Debian 11 or RHEL 8. The musl
+archives are statically linked and are the portable choice: use them on older
+distributions, on Alpine, and in minimal containers. The baseline is the runner
+image named in `release.yml`; a later release may raise it and will say so in
+the changelog.
 
 Every file is also covered by a GitHub build-provenance attestation. A release
 is created as a **draft** by the workflow and published by a maintainer by hand
