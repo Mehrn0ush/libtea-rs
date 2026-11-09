@@ -4,9 +4,14 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
-## Unreleased
+## 0.1.1 — 2026-11-09
 
-- Documentation: the dependency blocks in the READMEs list every crate the example uses (`libtea-core` and `tokio` next to `libtea-client`); the release checklist gained the token handling, redo path and post-publish checks learned from the first release; `CONTRIBUTING.md` and issue and pull-request templates. The READMEs shown on crates.io change only with the next publish.
+Documentation-only release. **No library code changed** between 0.1.0 and 0.1.1: `crates/*/src` is identical to the `v0.1.0` tag (checked with `git diff v0.1.0..HEAD -- crates/*/src`); the versions in the `Cargo.toml` files and the packaged README files differ.
+
+- Corrected the dependency blocks in the READMEs of `libtea-core` and `libtea-client` and in the root README: the examples use `libtea-core` and `tokio`, which the blocks did not list. The README shown on crates.io is the one packaged with a release, so this fix reaches crates.io with 0.1.1.
+- README (install section for crates.io, release binaries and `cargo install --git --tag`; badges), `docs/installing.md` (checksum and attestation commands, glibc baseline of the gnu archives and when to use musl, macOS quarantine note), `docs/release-checklist.md` (token handling, redo path, post-publish checks), `docs/interoperability.md` (dispatch inputs of the manual interop workflow).
+- `CONTRIBUTING.md`, a pull-request template and a bug-report issue template.
+- Workflows (not part of any crate): `actions/checkout` and `actions/upload-artifact` moved to Node 24 releases, pinned by SHA; the release workflow names its runner images; the manual interop run stops early, listing the accepted inputs, when nothing is selected to probe; `scripts/check-repo-settings.sh` reports Actions set to `local_only`; four unused license allowances removed from `deny.toml`.
 
 ## 0.1.0 — 2026-11-09
 
