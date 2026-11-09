@@ -391,3 +391,14 @@ fn help_documents_every_exit_status() {
         );
     }
 }
+
+#[test]
+fn version_flags_print_the_crate_version_and_exit_zero() {
+    let expected = format!("libtea {}\n", env!("CARGO_PKG_VERSION"));
+    for flag in ["--version", "-V"] {
+        let out = libtea(&[flag]);
+        assert_eq!(out.status.code(), Some(0), "{flag}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), expected, "{flag}");
+        assert!(out.stderr.is_empty(), "{flag}");
+    }
+}

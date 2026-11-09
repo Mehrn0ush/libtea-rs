@@ -39,7 +39,7 @@ cargo add libtea-client
 
 These runs used a local test server on `127.0.0.1`. `--allow-origin` is needed only for that: by default the CLI refuses anything but HTTPS to public addresses.
 
-Offline commands:
+Offline commands (`libtea --version` prints the installed version):
 
 ```sh
 libtea spec
