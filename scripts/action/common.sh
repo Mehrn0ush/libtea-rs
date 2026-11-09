@@ -27,12 +27,14 @@ valid_repo() {
   [[ "$owner" != "." && "$owner" != ".." && "$name" != "." && "$name" != ".." ]]
 }
 
-# Print the lowercase SHA-256 of a file.
+# Print the lowercase SHA-256 of a file. The file is read from standard input:
+# GNU sha256sum starts its output line with a backslash when the file name
+# contains one (every Windows path does), which is not part of the hash.
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum -- "$1" | awk '{print $1}'
+    sha256sum <"$1" | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 -- "$1" | awk '{print $1}'
+    shasum -a 256 <"$1" | awk '{print $1}'
   else
     python3 -I -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"
   fi

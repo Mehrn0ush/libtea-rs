@@ -218,13 +218,19 @@ jobs:
 
 ## Notes and limits
 
-- Tested only on Linux. The scripts are exercised against stubs on a Linux
-  runner in CI (and on macOS by hand); there is no macOS or Windows runner test
-  of the Action, and Windows path handling is untested.
+- The scripts are exercised against stubs on a Linux runner in CI. The Action
+  itself was run from a workflow on GitHub-hosted `ubuntu-24.04` (gnu and
+  musl), `ubuntu-24.04-arm` and `macos-15` runners. Windows and Alpine
+  containers failed in that first run (fixed here) and have not been
+  re-run yet.
 - Runners: Linux, macOS and Windows (x86_64 and arm64 where the release has a
-  build). Windows path handling in the scripts is untested.
+  build).
 - The cache holds only the archive, keyed by version and target. It is
   re-verified on every run, so it saves a download, not a check.
-- A self-hosted runner needs `bash`, `curl` and `python3`.
+- A self-hosted runner, or a job container, needs `bash`, `curl`, `tar` and
+  `python3`. A minimal image such as Alpine has none of `bash` and `python3`:
+  install them first (`apk add --no-cache bash curl tar python3`) and use
+  `libc: musl`. Without `python3` the action stops with "python is needed to
+  unpack the archive". `gh` is needed only for the attestation check.
 - The action never installs anything from a package registry and never builds
   from source.
