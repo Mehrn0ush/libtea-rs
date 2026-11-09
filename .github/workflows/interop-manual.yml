@@ -56,6 +56,19 @@ jobs:
             "") echo "::error::Environment variable TEA_BASE_URL is not set in tea-interop."; exit 1 ;;
             *) echo "::error::TEA_BASE_URL must be an https:// URL."; exit 1 ;;
           esac
+      # Fail early, with the accepted inputs, instead of letting the probe report
+      # that nothing was probed. Values arrive through env, never in shell text.
+      - name: Check that something is selected to probe
+        env:
+          TEA_TEI: ${{ vars.TEA_TEI }}
+          TEA_PRODUCT_RELEASE: ${{ inputs.product_release || vars.TEA_PRODUCT_RELEASE }}
+          TEA_ARTIFACT_UUID: ${{ inputs.artifact_uuid || vars.TEA_ARTIFACT_UUID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TEA_TEI}" && -z "${TEA_PRODUCT_RELEASE}" && -z "${TEA_ARTIFACT_UUID}" ]]; then
+            echo "::error::Nothing to probe. Set at least one of: Environment variable TEA_TEI (tei://...), or a product release UUID (dispatch input product_release, or Environment variable TEA_PRODUCT_RELEASE), or an artifact UUID (dispatch input artifact_uuid, or Environment variable TEA_ARTIFACT_UUID). There is no dispatch input for the TEI. See docs/interoperability.md, 'Manual interop workflow'."
+            exit 1
+          fi
       # The only step that sees the API key. It runs the prebuilt binary
       # (TEA_CLI_BIN) and never invokes a build tool or package manager.
       - name: Run probe
