@@ -12,14 +12,14 @@ Implemented against Transparency Exchange API commit
 
 ```toml
 [dependencies]
-libtea-core = "0.1.2"
+libtea-core = "0.1.3"
 ```
 
 The snippet below needs nothing else. For the async client add `libtea-client` (its README lists the dependencies its example needs).
 
 Edition 2021. MSRV 1.89. License Apache-2.0.
 
-**MSRV.** The minimum supported Rust version is 1.89 for 0.1.2. Policy: the latest stable release minus about four releases; it is raised only in minor releases, and every raise is listed in the `CHANGELOG.md`. Dependencies use plain caret ranges and `Cargo.lock` is committed, so MSRV is verified with the committed lock file (`cargo +1.89.0 test --workspace --all-targets --locked`).
+**MSRV.** The minimum supported Rust version is 1.89 for 0.1.3. Policy: the latest stable release minus about four releases; it is raised only in minor releases, and every raise is listed in the `CHANGELOG.md`. Dependencies use plain caret ranges and `Cargo.lock` is committed, so MSRV is verified with the committed lock file (`cargo +1.89.0 test --workspace --all-targets --locked`).
 
 This snippet is compiled as a doctest. Another example that builds is `examples/parse_tei.rs`.
 

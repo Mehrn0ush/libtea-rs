@@ -19,6 +19,11 @@
 name: libtea
 description: Install a verified libtea release binary and run a TEA command (sync, diff, discover, download, ...).
 
+# Required for a GitHub Marketplace listing (icon: a Feather icon name).
+branding:
+  icon: shield
+  color: blue
+
 inputs:
   version:
     description: libtea version to install, for example 0.1.0 (no leading v). Required; there is no "latest".

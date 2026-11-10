@@ -9,7 +9,7 @@
 
 Independent Rust client libraries and a command-line tool for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 
-**Status:** 0.1.2, a documentation-and-Action follow-up to the first release (0.1.0); no library code changed between them. `libtea-core` and `libtea-client` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
+**Status:** 0.1.3, a documentation-and-Action follow-up to the first release (0.1.0); no library code changed between them. `libtea-core` and `libtea-client` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
 
 ## What it is, and what it is not
 
@@ -31,7 +31,7 @@ It is not a TEA server, does not sign or publish anything, does not scan for vul
 **From source** (needs Rust 1.89 or later):
 
 ```sh
-cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.2 --locked libtea-cli
+cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.3 --locked libtea-cli
 ```
 
 This builds the `libtea` binary at the tagged release. Without `--tag` it builds the default branch. No checksum or attestation check is involved in this route. `libtea-cli` is not published to crates.io, so `cargo install libtea-cli` does not work.
@@ -40,8 +40,8 @@ This builds the `libtea` binary at the tagged release. Without `--tag` it builds
 
 ```toml
 [dependencies]
-libtea-client = "0.1.2"
-libtea-core = "0.1.2"
+libtea-client = "0.1.3"
+libtea-core = "0.1.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -196,7 +196,7 @@ The repository has a composite action that downloads a release of `libtea`, veri
 ```yaml
 - uses: Mehrn0ush/libtea-rs@<commit-sha-of-a-release-tag>
   with:
-    version: "0.1.2"
+    version: "0.1.3"
     command: sync
     check: "true"
     tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
