@@ -1,6 +1,6 @@
 [package]
 name = "libtea-core"
-version = "0.1.3"
+version = "0.1.4"
 description = "Independent Rust types and protocol rules for the CycloneDX Transparency Exchange API. No network I/O."
 readme = "README.md"
 keywords = ["cyclonedx", "sbom", "tei", "transparency", "bom"]

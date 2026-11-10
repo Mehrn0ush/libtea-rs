@@ -4,6 +4,12 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## 0.1.4 — 2026-11-10
+
+No library code changed: `crates/*/src` is identical to the `v0.1.3` tag (checked with `git diff v0.1.3..HEAD -- crates/*/src`).
+
+- GitHub Action (`action.yml`, not part of any crate): the action is now named `libtea-rs`. The Marketplace refused `libtea`, because a GitHub user of that name exists. The `uses: Mehrn0ush/libtea-rs@...` line in workflows is unchanged; only the display name changed. The policy test checks the new name.
+
 ## 0.1.3 — 2026-11-10
 
 No library code changed: `crates/*/src` is identical to the `v0.1.2` tag (checked with `git diff v0.1.2..HEAD -- crates/*/src`). The crate versions are bumped so a release tag contains the metadata below.
