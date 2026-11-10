@@ -479,7 +479,7 @@ fn the_action_has_what_a_marketplace_listing_needs() {
             .find_map(|l| l.strip_prefix(key))
             .map(|v| v.trim().trim_matches('"').to_owned())
     };
-    assert_eq!(top("name:").as_deref(), Some("libtea"));
+    assert_eq!(top("name:").as_deref(), Some("libtea-rs"));
     let description = top("description:").expect("a top-level description");
     assert!(
         !description.is_empty() && description.len() <= 125,

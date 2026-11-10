@@ -16,10 +16,12 @@
 #
 # Documentation: docs/github-action.md. Pins: docs/release-pins.md.
 
-name: libtea
+name: libtea-rs
 description: Install a verified libtea release binary and run a TEA command (sync, diff, discover, download, ...).
 
-# Required for a GitHub Marketplace listing (icon: a Feather icon name).
+# Required for a GitHub Marketplace listing (icon: a Feather icon name). The name
+# must be unique among Marketplace actions, users and organizations; "libtea" is
+# taken by a user, so the action is called libtea-rs.
 branding:
   icon: shield
   color: blue
