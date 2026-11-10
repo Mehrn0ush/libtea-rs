@@ -21,13 +21,15 @@ fn python_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-const CHECKS: [&str; 6] = [
+const CHECKS: [&str; 8] = [
     "rust stable",
     "rust 1.89.0",
     "package",
     "cargo deny",
     "cargo semver-checks",
     "non_exhaustive guards",
+    "tests on windows-2022",
+    "tests on macos-15",
 ];
 
 fn branch_rules(types: &[&str], checks: &[&str]) -> Value {
@@ -177,7 +179,7 @@ fn each_missing_setting_is_reported() {
             "somechecks",
             Some(branch_rules(&GOOD_BRANCH, &["rust stable", "package"])),
             Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
-            "required status checks are missing: cargo deny, cargo semver-checks, non_exhaustive guards, rust 1.89.0",
+            "required status checks are missing: cargo deny, cargo semver-checks, non_exhaustive guards, rust 1.89.0, tests on macos-15, tests on windows-2022",
         ),
         (
             "noforce",
@@ -268,6 +270,9 @@ fn the_required_checks_are_the_jobs_ci_defines() {
         if let Some(version) = check.strip_prefix("rust ") {
             assert!(ci.contains("name: rust ${{ matrix.rust }}"));
             assert!(ci.contains(&format!("\"{version}\"")), "{check}");
+        } else if let Some(os) = check.strip_prefix("tests on ") {
+            assert!(ci.contains("name: tests on ${{ matrix.os }}"));
+            assert!(ci.contains(os), "{check}");
         } else {
             assert!(ci.contains(&format!("name: {check}\n")), "{check}");
         }

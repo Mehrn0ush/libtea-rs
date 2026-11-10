@@ -214,7 +214,9 @@ gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
           { "context": "package" },
           { "context": "cargo deny" },
           { "context": "cargo semver-checks" },
-          { "context": "non_exhaustive guards" } ] } }
+          { "context": "non_exhaustive guards" },
+          { "context": "tests on windows-2022" },
+          { "context": "tests on macos-15" } ] } }
   ]
 }
 JSON
@@ -238,6 +240,17 @@ JSON
 gh api -X PATCH "repos/$REPO" -F allow_merge_commit=true -F allow_squash_merge=false -F allow_rebase_merge=false
 
 ./scripts/check-repo-settings.sh "$REPO" main
+```
+
+The required checks include `tests on windows-2022` and `tests on macos-15`
+(the `test-os` job in `ci.yml`). To add them to an existing `main` ruleset, read
+it, append the two contexts and write it back (the ruleset id is in
+`gh api repos/$REPO/rulesets`):
+
+```sh
+gh api "repos/$REPO/rulesets/$ID" >ruleset.json
+jq '{name,target,enforcement,conditions,bypass_actors,rules: (.rules | map(if .type=="required_status_checks" then .parameters.required_status_checks += [{"context":"tests on windows-2022"},{"context":"tests on macos-15"}] else . end))}' ruleset.json >ruleset-new.json
+gh api -X PUT "repos/$REPO/rulesets/$ID" --input ruleset-new.json
 ```
 
 `cargo audit` is not required because its job is `continue-on-error`. Add it if
