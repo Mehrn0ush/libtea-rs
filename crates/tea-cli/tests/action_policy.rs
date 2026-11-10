@@ -468,3 +468,58 @@ fn the_installation_docs_pin_the_attestation_to_the_tag() {
         );
     }
 }
+
+#[test]
+fn the_action_has_what_a_marketplace_listing_needs() {
+    let text = action();
+    let lines = code_lines(&text);
+    let top = |key: &str| {
+        lines
+            .iter()
+            .find_map(|l| l.strip_prefix(key))
+            .map(|v| v.trim().trim_matches('"').to_owned())
+    };
+    assert_eq!(top("name:").as_deref(), Some("libtea"));
+    let description = top("description:").expect("a top-level description");
+    assert!(
+        !description.is_empty() && description.len() <= 125,
+        "the Marketplace shows at most 125 characters of the description: {description:?}"
+    );
+
+    let at = lines
+        .iter()
+        .position(|l| *l == "branding:")
+        .expect("a top-level branding: block");
+    let block: Vec<&str> = lines[at + 1..]
+        .iter()
+        .take_while(|l| indent(l) > 0)
+        .copied()
+        .collect();
+    let field = |key: &str| {
+        block
+            .iter()
+            .find_map(|l| l.trim().strip_prefix(key))
+            .map(|v| v.trim().to_owned())
+    };
+    let icon = field("icon:").expect("branding.icon");
+    assert!(
+        !icon.is_empty() && icon.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
+        "branding.icon must be a Feather icon name, got {icon:?}"
+    );
+    let color = field("color:").expect("branding.color");
+    assert!(
+        [
+            "white",
+            "black",
+            "yellow",
+            "blue",
+            "green",
+            "orange",
+            "red",
+            "purple",
+            "gray-dark"
+        ]
+        .contains(&color.as_str()),
+        "branding.color must be one GitHub accepts, got {color:?}"
+    );
+}

@@ -4,6 +4,12 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## 0.1.3 — 2026-11-10
+
+No library code changed: `crates/*/src` is identical to the `v0.1.2` tag (checked with `git diff v0.1.2..HEAD -- crates/*/src`). The crate versions are bumped so a release tag contains the metadata below.
+
+- GitHub Action (`action.yml`, not part of any crate): added the `branding` block (icon `shield`, colour `blue`) that a GitHub Marketplace listing requires. Nothing else in the Action changed; a policy test now fails if the block, the name `libtea` or a description of at most 125 characters is missing.
+
 ## 0.1.2 — 2026-11-10
 
 No library code changed: `crates/*/src` is identical to the `v0.1.1` tag (checked with `git diff v0.1.1..HEAD -- crates/*/src`). The crate versions are bumped so the Action can be pinned to a release tag that contains the fix below.
