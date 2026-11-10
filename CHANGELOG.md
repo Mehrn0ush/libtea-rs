@@ -4,33 +4,35 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
-## Unreleased
+## 0.1.5 — 2026-11-11
 
-- `libtea-client`: **added** `libtea_client::core`, a re-export of the whole `libtea-core` crate (`pub use libtea_core as core;`). A project that only uses the client no longer needs its own `libtea-core` dependency; the types are the same ones `libtea-core` exports. Additive: nothing was removed or renamed. The READMEs' dependency blocks and examples use it. A breaking release of `libtea-core` is now also a breaking release of `libtea-client`, which the two crates' common version already implied.
+- `libtea-client`: **added** `libtea_client::core`, a re-export of the whole `libtea-core` crate (`pub use libtea_core as core;`). A project that only uses the client no longer needs its own `libtea-core` dependency; the types are the same ones `libtea-core` exports. Additive: nothing was removed or renamed (`cargo semver-checks` reports no update required). The READMEs' dependency blocks and examples use it. A breaking release of `libtea-core` is now also a breaking release of `libtea-client`, which the two crates' common version already implied.
+- `libtea-core`: no change besides the version number. Against `v0.1.4` the only source change in the workspace is `crates/tea-client/src/lib.rs` (`git diff --stat v0.1.4 v0.1.5 -- crates/tea-core/src crates/tea-client/src crates/tea-cli/src crates/tea-conformance/src`).
+- Corrected the changelog entries of 0.1.1 to 0.1.4: the command they gave for checking that the library sources did not change used a path pattern that git does not expand, so it printed nothing whatever had changed. The claims themselves were re-checked with explicit directories and hold.
 - CI (not part of any crate): the tests also run on `windows-2022` and `macos-15`. A `.gitattributes` keeps LF line endings in every checkout, because tests compare lines of `action.yml` and the workflows. Tests that run bash snippets or need Unix file permissions are Unix-only and are skipped on Windows. `scripts/check-repo-settings.sh` expects the two OS jobs among the required checks of `main`.
 
 ## 0.1.4 — 2026-11-10
 
-No library code changed: `crates/*/src` is identical to the `v0.1.3` tag (checked with `git diff v0.1.3..HEAD -- crates/*/src`).
+No library code changed: `crates/*/src` is identical to the `v0.1.3` tag (checked with `git diff --stat v0.1.3 v0.1.4 -- crates/tea-core/src crates/tea-client/src crates/tea-cli/src crates/tea-conformance/src`).
 
 - GitHub Action (`action.yml`, not part of any crate): the action is now named `libtea-rs`. The Marketplace refused `libtea`, because a GitHub user of that name exists. The `uses: Mehrn0ush/libtea-rs@...` line in workflows is unchanged; only the display name changed. The policy test checks the new name.
 
 ## 0.1.3 — 2026-11-10
 
-No library code changed: `crates/*/src` is identical to the `v0.1.2` tag (checked with `git diff v0.1.2..HEAD -- crates/*/src`). The crate versions are bumped so a release tag contains the metadata below.
+No library code changed: `crates/*/src` is identical to the `v0.1.2` tag (checked with `git diff --stat v0.1.2 v0.1.3 -- crates/tea-core/src crates/tea-client/src crates/tea-cli/src crates/tea-conformance/src`). The crate versions are bumped so a release tag contains the metadata below.
 
 - GitHub Action (`action.yml`, not part of any crate): added the `branding` block (icon `shield`, colour `blue`) that a GitHub Marketplace listing requires. Nothing else in the Action changed; a policy test now fails if the block, the name `libtea` or a description of at most 125 characters is missing.
 
 ## 0.1.2 — 2026-11-10
 
-No library code changed: `crates/*/src` is identical to the `v0.1.1` tag (checked with `git diff v0.1.1..HEAD -- crates/*/src`). The crate versions are bumped so the Action can be pinned to a release tag that contains the fix below.
+No library code changed: `crates/*/src` is identical to the `v0.1.1` tag (checked with `git diff --stat v0.1.1 v0.1.2 -- crates/tea-core/src crates/tea-client/src crates/tea-cli/src crates/tea-conformance/src`). The crate versions are bumped so the Action can be pinned to a release tag that contains the fix below.
 
 - GitHub Action (`action.yml` and `scripts/action/`, not part of any crate): the first run from a workflow on GitHub-hosted runners found two problems. **On Windows the SHA-256 check always failed**, because Git Bash's `sha256sum` puts a backslash in front of its output when the path contains one; the hash is now read from standard input, with a test that fails without the change. **In a minimal container such as Alpine** the Action needs `bash`, `curl`, `tar` and `python3` installed first; `docs/github-action.md` says so. After the fix the Action ran successfully on `ubuntu-24.04` (gnu and musl), `ubuntu-24.04-arm`, `macos-15`, `windows-2022` and an `alpine:3.20` container. **Use 0.1.2 or later of the Action;** the `v0.1.0` and `v0.1.1` tags fail the checksum check on Windows.
 - `fuzz/Cargo.lock` follows the workspace version; the fuzz corpora were minimized (`cargo fuzz cmin`).
 
 ## 0.1.1 — 2026-11-09
 
-Documentation-only release. **No library code changed** between 0.1.0 and 0.1.1: `crates/*/src` is identical to the `v0.1.0` tag (checked with `git diff v0.1.0..HEAD -- crates/*/src`); the versions in the `Cargo.toml` files and the packaged README files differ.
+Documentation-only release. **No library code changed** between 0.1.0 and 0.1.1: `crates/*/src` is identical to the `v0.1.0` tag (checked with `git diff --stat v0.1.0 v0.1.1 -- crates/tea-core/src crates/tea-client/src crates/tea-cli/src crates/tea-conformance/src`); the versions in the `Cargo.toml` files and the packaged README files differ.
 
 - Corrected the dependency blocks in the READMEs of `libtea-core` and `libtea-client` and in the root README: the examples use `libtea-core` and `tokio`, which the blocks did not list. The README shown on crates.io is the one packaged with a release, so this fix reaches crates.io with 0.1.1.
 - README (install section for crates.io, release binaries and `cargo install --git --tag`; badges), `docs/installing.md` (checksum and attestation commands, glibc baseline of the gnu archives and when to use musl, macOS quarantine note), `docs/release-checklist.md` (token handling, redo path, post-publish checks), `docs/interoperability.md` (dispatch inputs of the manual interop workflow).

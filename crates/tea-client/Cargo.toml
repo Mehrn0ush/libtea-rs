@@ -1,6 +1,6 @@
 [package]
 name = "libtea-client"
-version = "0.1.4"
+version = "0.1.5"
 description = "Independent async Rust client for the CycloneDX Transparency Exchange API."
 readme = "README.md"
 keywords = ["cyclonedx", "sbom", "tei", "transparency", "bom"]
