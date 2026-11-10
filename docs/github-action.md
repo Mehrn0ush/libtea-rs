@@ -1,11 +1,12 @@
 # GitHub Action
 
-> **Status.** Written for 0.1.x, tested against stubs, **not yet exercised from a
-> workflow on GitHub**. It installs a released `libtea` binary
-> (`docs/installing.md`).
-> Its one third-party dependency, `actions/cache`, is pinned by commit SHA
-> (`docs/release-pins.md`). Treat the examples as the intended use,
-> not as something exercised end to end.
+> **Status.** Written for 0.1.x. The scripts are tested against stubs in CI, and
+> the Action was run from a workflow on GitHub-hosted runners (see Notes and
+> limits). Use 0.1.2 or later: the 0.1.0 and 0.1.1 tags have a SHA-256 check
+> that fails on Windows. The Action installs a released `libtea` binary
+> (`docs/installing.md`). Its one third-party dependency, `actions/cache`, is
+> pinned by commit SHA (`docs/release-pins.md`). The examples use `parse-tei`
+> in the test runs; the commands that talk to a server were not part of them.
 
 The action (`action.yml` at the repository root) downloads the `libtea` release
 for the runner, checks it, caches it, and runs one command. Use it to keep a
@@ -14,7 +15,7 @@ lock file honest in CI:
 ```yaml
 - uses: Mehrn0ush/libtea-rs@<commit-sha-of-a-release-tag>
   with:
-    version: "0.1.1"
+    version: "0.1.2"
     command: sync
     tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
     lock-file: tea.lock
@@ -25,7 +26,7 @@ lock file honest in CI:
 
 | Input | Meaning |
 | --- | --- |
-| `version` (required) | The libtea version to install, for example `0.1.1`. There is no `latest`: pin it. |
+| `version` (required) | The libtea version to install, for example `0.1.2`. There is no `latest`: pin it. |
 | `command` (required) | `sync`, `diff`, `discover`, `download`, `product-release`, `collections`, `parse-tei`, `spec` or `conformance`. |
 | `tei` | A `tei://` identifier, for `sync`, `discover`, `parse-tei`. |
 | `lock-file` | Lock path for `sync`; the old lock for `diff`. |
@@ -119,7 +120,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.1"
+          version: "0.1.2"
           command: sync
           check: "true"
           tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
@@ -147,7 +148,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.1"
+          version: "0.1.2"
           command: sync
           check: "true"
           tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
@@ -176,7 +177,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.1"
+          version: "0.1.2"
           command: sync
           tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
           lock-file: tea.lock
@@ -201,7 +202,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.1"
+          version: "0.1.2"
           command: download
           base-url: https://api.example.com
           extra-args: |
@@ -220,9 +221,11 @@ jobs:
 
 - The scripts are exercised against stubs on a Linux runner in CI. The Action
   itself was run from a workflow on GitHub-hosted `ubuntu-24.04` (gnu and
-  musl), `ubuntu-24.04-arm` and `macos-15` runners. Windows and Alpine
-  containers failed in that first run (fixed here) and have not been
-  re-run yet.
+  musl), `ubuntu-24.04-arm`, `macos-15` and `windows-2022` runners, and in an
+  `alpine:3.20` container with `libc: musl`, each with `parse-tei` and the
+  attestation check set to `required` (skipped in the container, which has no
+  `gh`). A job that sets `TEA_API_KEY_ID` in `env:` was refused as intended.
+  The first run failed on Windows and in Alpine; both were fixed in 0.1.2.
 - Runners: Linux, macOS and Windows (x86_64 and arm64 where the release has a
   build).
 - The cache holds only the archive, keyed by version and target. It is

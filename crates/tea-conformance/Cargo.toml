@@ -1,6 +1,6 @@
 [package]
 name = "libtea-conformance"
-version = "0.1.1"
+version = "0.1.2"
 description = "Specification-derived TEA consumer checks and reports"
 edition.workspace = true
 license.workspace = true
