@@ -49,6 +49,23 @@ mod transport;
 // `url::Url` appears in `ClientBuilder::well_known_fetch_url`; see the semver note in `libtea-core`.
 pub use url;
 
+/// The whole of `libtea-core` (types such as `Tei`, `ListParams`,
+/// `DestinationPolicy`), so a project that only uses this client needs no direct
+/// `libtea-core` dependency. It is the same crate: a type here is the type
+/// `libtea-core` exports, and this crate always uses the same `libtea-core`
+/// version as its own. A breaking release of `libtea-core` is a breaking release
+/// of this crate.
+///
+/// ```
+/// use libtea_client::core::Tei;
+///
+/// let tei = Tei::parse("tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d").unwrap();
+/// // The same type `libtea-core` exports.
+/// let same: &libtea_core::Tei = &tei;
+/// assert_eq!(same, &tei);
+/// ```
+pub use libtea_core as core;
+
 pub use cache::{cache_clear, cache_stat, CacheConfig, CacheStats};
 pub use download::{FileDownload, FileDownloadOptions, StreamedDownload};
 pub use error::ClientError;

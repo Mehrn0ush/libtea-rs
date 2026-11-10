@@ -6,6 +6,7 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-client`: **added** `libtea_client::core`, a re-export of the whole `libtea-core` crate (`pub use libtea_core as core;`). A project that only uses the client no longer needs its own `libtea-core` dependency; the types are the same ones `libtea-core` exports. Additive: nothing was removed or renamed. The READMEs' dependency blocks and examples use it. A breaking release of `libtea-core` is now also a breaking release of `libtea-client`, which the two crates' common version already implied.
 - CI (not part of any crate): the tests also run on `windows-2022` and `macos-15`. A `.gitattributes` keeps LF line endings in every checkout, because tests compare lines of `action.yml` and the workflows. Tests that run bash snippets or need Unix file permissions are Unix-only and are skipped on Windows. `scripts/check-repo-settings.sh` expects the two OS jobs among the required checks of `main`.
 
 ## 0.1.4 — 2026-11-10

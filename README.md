@@ -36,16 +36,15 @@ cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.4 --locked
 
 This builds the `libtea` binary at the tagged release. Without `--tag` it builds the default branch. No checksum or attestation check is involved in this route. `libtea-cli` is not published to crates.io, so `cargo install libtea-cli` does not work.
 
-**Libraries** from crates.io. The library example below uses `libtea-client`, `libtea-core` and `tokio`, so a project that runs it needs all three:
+**Libraries** from crates.io. The library example below uses `libtea-client` and `tokio`; the `libtea-core` types come through `libtea_client::core` (from 0.1.5; with 0.1.4 or older, also depend on `libtea-core`):
 
 ```toml
 [dependencies]
 libtea-client = "0.1.4"
-libtea-core = "0.1.4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-or `cargo add libtea-client libtea-core && cargo add tokio --features macros,rt-multi-thread`.
+or `cargo add libtea-client && cargo add tokio --features macros,rt-multi-thread`.
 
 ## Quick start
 
@@ -150,7 +149,7 @@ A library call that resolves a TEI, downloads a format and checks the result. It
 
 ```rust,no_run
 use libtea_client::{ArtifactFetch, Client};
-use libtea_core::{IntegrityOutcome, Tei};
+use libtea_client::core::{IntegrityOutcome, Tei};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

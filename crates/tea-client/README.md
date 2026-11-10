@@ -14,11 +14,10 @@ This crate depends on `libtea-core` 0.1.4. It does not depend on the CLI or the 
 ```toml
 [dependencies]
 libtea-client = "0.1.4"
-libtea-core = "0.1.4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-The snippet below also uses `libtea-core` (types such as `ListParams`) and `tokio` (`#[tokio::main]`); `libtea-client` does not re-export either.
+The snippet below uses `libtea-core` types such as `ListParams`, which `libtea-client` re-exports as `libtea_client::core` (from 0.1.5; before that, add `libtea-core` to your dependencies), and `tokio` (`#[tokio::main]`), which it does not re-export.
 
 Edition 2021. MSRV 1.89. License Apache-2.0. TLS uses rustls. Certificate verification stays enabled. The default destination policy allows HTTPS to public addresses.
 
@@ -28,8 +27,8 @@ This snippet is compiled as a doctest but marked `no_run`, because it would cont
 
 ```rust,no_run
 use libtea_client::Client;
-use libtea_core::enums::IdentifierType;
-use libtea_core::ListParams;
+use libtea_client::core::enums::IdentifierType;
+use libtea_client::core::ListParams;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
