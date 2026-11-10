@@ -1,0 +1,13 @@
+# Tests read these files and compare their lines, and the shell scripts must
+# have LF endings; keep LF in every checkout, including on Windows.
+*.rs        text eol=lf
+*.md        text eol=lf
+*.sh        text eol=lf
+*.py        text eol=lf
+*.toml      text eol=lf
+*.lock      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.sha256    text eol=lf
+LICENSE     text eol=lf
