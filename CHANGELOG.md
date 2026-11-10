@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- CI (not part of any crate): the tests also run on `windows-2022` and `macos-15`. A `.gitattributes` keeps LF line endings in every checkout, because tests compare lines of `action.yml` and the workflows. Tests that run bash snippets or need Unix file permissions are Unix-only and are skipped on Windows.
+
 ## 0.1.4 — 2026-11-10
 
 No library code changed: `crates/*/src` is identical to the `v0.1.3` tag (checked with `git diff v0.1.3..HEAD -- crates/*/src`).

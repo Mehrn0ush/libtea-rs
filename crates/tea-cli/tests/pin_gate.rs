@@ -84,6 +84,8 @@ fn ci_sets_the_flag_exactly_while_placeholders_remain() {
     assert!(!read("action.yml").contains(FLAG));
 }
 
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 fn check_pins(root: &Path, args: &[&str], flag: Option<&str>) -> Output {
     let mut command = Command::new("bash");
     command
@@ -97,6 +99,8 @@ fn check_pins(root: &Path, args: &[&str], flag: Option<&str>) -> Output {
     command.output().unwrap()
 }
 
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 fn temp_root(tag: &str, release: &str, action: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("libtea-pins-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -106,6 +110,8 @@ fn temp_root(tag: &str, release: &str, action: &str) -> PathBuf {
     dir
 }
 
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 #[test]
 fn the_script_blocks_a_release_even_with_the_development_flag() {
     let with = temp_root(
@@ -189,6 +195,8 @@ fn the_release_workflow_runs_the_gate_first_and_never_sets_the_flag() {
 /// so the documented commands can be run against it: every pinned action
 /// reference and the SBOM tool version become placeholders again, and the CI
 /// development flag is put back.
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 fn unpin(dir: &Path) {
     fn rewrite(path: &Path, f: impl Fn(&str) -> String) {
         let text = std::fs::read_to_string(path).unwrap();
@@ -231,6 +239,8 @@ fn unpin(dir: &Path) {
 
 /// The commands in `docs/release-pins.md` (the `sh pins-apply` block) must
 /// really resolve every placeholder and retire the CI flag.
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 #[test]
 fn the_documented_commands_resolve_every_placeholder() {
     let docs = read("docs/release-pins.md");

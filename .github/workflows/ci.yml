@@ -42,6 +42,31 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --locked
 
+  # The code is portable and the release ships Windows and macOS binaries, so the
+  # tests run there too. Tests that need a Unix shell or Unix file permissions
+  # are `#[cfg(unix)]` and are skipped on Windows. Stable only: the MSRV and the
+  # lints are checked on Linux.
+  test-os:
+    name: tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: stable
+      - name: Test all targets
+        run: cargo test --workspace --all-targets --all-features --locked --no-fail-fast
+      - name: Doctests
+        run: cargo test --workspace --doc --all-features --locked
+
   # Mutation check: strips every #[non_exhaustive] in a scratch copy and requires
   # every compile_fail guard to fail there, so a guard cannot pass for another
   # reason. See crates/*/src/non_exhaustive_guards.rs.

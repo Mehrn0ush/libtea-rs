@@ -803,6 +803,8 @@ fn release_never_publishes_the_github_release() {
     assert_eq!(creates, 1, "exactly one step creates the release");
 }
 
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 fn run_name_check(version: &str, files: &[String]) -> std::process::Output {
     let jobs = jobs_of(&release());
     let attest = steps_of(&job(&jobs, "attest").raw);
@@ -832,6 +834,8 @@ fn run_name_check(version: &str, files: &[String]) -> std::process::Output {
     output
 }
 
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 fn expected_release_files(version: &str) -> Vec<String> {
     let mut files: Vec<String> = [
         "aarch64-apple-darwin",
@@ -849,6 +853,8 @@ fn expected_release_files(version: &str) -> Vec<String> {
     files
 }
 
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 #[test]
 fn the_attest_job_accepts_exactly_the_expected_file_names() {
     for version in ["0.1.0", "0.1.0-dryrun.1"] {
@@ -861,6 +867,8 @@ fn the_attest_job_accepts_exactly_the_expected_file_names() {
     }
 }
 
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
 #[test]
 fn the_attest_job_rejects_any_other_set_of_files() {
     let good = expected_release_files("0.1.0");
