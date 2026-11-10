@@ -38,7 +38,7 @@ branch="${2:-main}"
 command -v gh >/dev/null 2>&1 || die "gh is required"
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
 
-REQUIRED_CHECKS="rust stable|rust 1.89.0|package|cargo deny|cargo semver-checks|non_exhaustive guards"
+REQUIRED_CHECKS="rust stable|rust 1.89.0|package|cargo deny|cargo semver-checks|non_exhaustive guards|tests on windows-2022|tests on macos-15"
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/libtea-settings.XXXXXX")"
 trap 'rm -rf "$work"' EXIT

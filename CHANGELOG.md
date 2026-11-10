@@ -6,7 +6,7 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
-- CI (not part of any crate): the tests also run on `windows-2022` and `macos-15`. A `.gitattributes` keeps LF line endings in every checkout, because tests compare lines of `action.yml` and the workflows. Tests that run bash snippets or need Unix file permissions are Unix-only and are skipped on Windows.
+- CI (not part of any crate): the tests also run on `windows-2022` and `macos-15`. A `.gitattributes` keeps LF line endings in every checkout, because tests compare lines of `action.yml` and the workflows. Tests that run bash snippets or need Unix file permissions are Unix-only and are skipped on Windows. `scripts/check-repo-settings.sh` expects the two OS jobs among the required checks of `main`.
 
 ## 0.1.4 — 2026-11-10
 
