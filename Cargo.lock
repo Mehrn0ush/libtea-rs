@@ -864,7 +864,7 @@ name = "libtea-cli"
 version = "0.1.5"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "libtea-client",
  "libtea-conformance",
@@ -880,7 +880,7 @@ dependencies = [
 name = "libtea-client"
 version = "0.1.5"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "flate2",
  "futures-util",
@@ -911,7 +911,7 @@ dependencies = [
 name = "libtea-core"
 version = "0.1.5"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "blake2",
  "blake3",
  "digest",
