@@ -74,9 +74,9 @@ most sensitive file in the repository.
 Once `libtea-cli` is on crates.io (issue #14), adding
 `[package.metadata.binstall]` with the release-archive URL pattern lets
 `cargo binstall libtea-cli` download the release archive instead of building.
-No new repository, no new workflow permission; `cargo-binstall` checks the
-crate's published metadata and can verify the archive's checksum. It depends on
-#14.
+No new repository, no new workflow permission. What `cargo-binstall` verifies
+about the downloaded archive (checksum, signature) was not checked for this
+note and must be before relying on it. It depends on #14.
 
 ## Recommendation
 
