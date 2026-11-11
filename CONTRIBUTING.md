@@ -19,8 +19,9 @@ cargo deny check
 ```
 
 If you changed a workflow or a shell script, also run `actionlint` and
-`shellcheck scripts/*.sh scripts/action/*.sh`. `cargo audit` runs in CI but does
-not gate.
+`shellcheck scripts/*.sh scripts/action/*.sh`. CI also runs `cargo audit`, which
+gates; run it locally (`cargo install cargo-audit --locked`) when you change
+dependencies.
 
 Do not lower a check, skip or ignore a test, or loosen a policy test to get a
 green result. If a test is wrong, say so in the pull request and fix the test

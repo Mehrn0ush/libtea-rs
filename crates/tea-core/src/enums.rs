@@ -20,11 +20,17 @@ pub enum EnumKnowledge {
 }
 
 macro_rules! wire_enum {
-    ($name:ident { $($var:ident => $wire:literal),+ $(,)? }) => {
+    ($(#[$meta:meta])* $name:ident { $($var:ident => $wire:literal),+ $(,)? }) => {
+        $(#[$meta])*
+        ///
+        /// Unknown wire values are kept in [`Self::Other`].
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         #[non_exhaustive]
         pub enum $name {
-            $($var,)+
+            $(
+                #[doc = concat!("The `\"", $wire, "\"` wire value.")]
+                $var,
+            )+
             /// A value this client does not recognize.
             Other(String),
         }
@@ -79,14 +85,18 @@ macro_rules! wire_enum {
     };
 }
 
-wire_enum!(IdentifierType {
+wire_enum!(
+    /// `identifier-type`: the kind of an identifier (CPE, TEI, PURL, compliance document).
+    IdentifierType {
     Cpe => "CPE",
     Tei => "TEI",
     Purl => "PURL",
     ComplianceDocument => "COMPLIANCE_DOCUMENT",
 });
 
-wire_enum!(ComplianceDocumentType {
+wire_enum!(
+    /// `compliance-document-type`: the framework a compliance document belongs to.
+    ComplianceDocumentType {
     Soc2TypeI => "SOC_2_TYPE_I",
     Soc2TypeIi => "SOC_2_TYPE_II",
     Soc3 => "SOC_3",
@@ -110,7 +120,9 @@ wire_enum!(ComplianceDocumentType {
     EuDeclarationOfConformity => "EU_DECLARATION_OF_CONFORMITY",
 });
 
-wire_enum!(ArtifactType {
+wire_enum!(
+    /// `artifact-type`: what an artifact is (BOM, vulnerabilities, attestation, ...).
+    ArtifactType {
     Attestation => "ATTESTATION",
     Bom => "BOM",
     BuildMeta => "BUILD_META",
@@ -124,7 +136,9 @@ wire_enum!(ArtifactType {
     OtherArtifact => "OTHER",
 });
 
-wire_enum!(CollectionUpdateReasonType {
+wire_enum!(
+    /// `collection-update-reason-type`: why a collection version was published.
+    CollectionUpdateReasonType {
     InitialRelease => "INITIAL_RELEASE",
     VexUpdated => "VEX_UPDATED",
     ArtifactUpdated => "ARTIFACT_UPDATED",
@@ -132,12 +146,16 @@ wire_enum!(CollectionUpdateReasonType {
     ArtifactRemoved => "ARTIFACT_REMOVED",
 });
 
-wire_enum!(CollectionOwner {
+wire_enum!(
+    /// `collection-belongs-to-type`: whether a collection belongs to a component release or a product release.
+    CollectionOwner {
     ComponentRelease => "COMPONENT_RELEASE",
     ProductRelease => "PRODUCT_RELEASE",
 });
 
-wire_enum!(CleEventType {
+wire_enum!(
+    /// `cle-event-type`: a Common Lifecycle Enumeration (CLE) event.
+    CleEventType {
     Released => "released",
     EndOfDevelopment => "endOfDevelopment",
     EndOfSupport => "endOfSupport",
@@ -149,7 +167,9 @@ wire_enum!(CleEventType {
     Withdrawn => "withdrawn",
 });
 
-wire_enum!(TeaErrorCode {
+wire_enum!(
+    /// `unknown-error-type`: the `error` value of a TEA `error-response`.
+    TeaErrorCode {
     ObjectUnknown => "OBJECT_UNKNOWN",
     NotImplemented => "NOT_IMPLEMENTED",
     NoAcceptableFormat => "NO_ACCEPTABLE_FORMAT",
@@ -158,7 +178,9 @@ wire_enum!(TeaErrorCode {
     InvalidPageToken => "INVALID_PAGE_TOKEN",
 });
 
-wire_enum!(ChecksumAlgorithm {
+wire_enum!(
+    /// `checksum-type`: the algorithm of a declared checksum.
+    ChecksumAlgorithm {
     Sha1 => "SHA-1",
     Sha256 => "SHA-256",
     Sha384 => "SHA-384",

@@ -169,7 +169,8 @@ pub fn parse_retry_after(value: &str, now_epoch_secs: u64) -> Option<u64> {
 fn parse_imf_fixdate(value: &str) -> Option<u64> {
     // "Sun, 06 Nov 1994 08:49:37 GMT"
     let b = value.as_bytes();
-    if b.len() != 29 || &b[3..5] != b", " || &b[25..] != b" GMT" {
+    // ASCII only, so every byte offset below is a char boundary for `&value[..]`.
+    if b.len() != 29 || !value.is_ascii() || &b[3..5] != b", " || &b[25..] != b" GMT" {
         return None;
     }
     let day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
