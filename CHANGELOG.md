@@ -4,6 +4,12 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- `libtea-core`: **fixed** a panic in `http_cache::parse_retry_after` for a 29-byte, date-shaped value with a multi-byte character where an ASCII separator belongs (for example `"Sun, 06\u{e9}No 1994 08:49:37 GMT"`): the date parser sliced the string at fixed byte offsets before checking that they were ASCII. Non-ASCII input is now rejected (`None`) before any slicing. `libtea-client` was not affected, because it passes `Retry-After` only after `HeaderValue::to_str`, which accepts visible ASCII only; direct callers of the public function were.
+- `libtea-core`: the enums generated for wire values (`IdentifierType`, `ArtifactType`, `ChecksumAlgorithm`, ...) and their variants are documented, and both publishable crates now `warn(missing_docs)`, which CI turns into an error.
+- `libtea-conformance` (unpublished): integration tests for the report: case identifiers are unique and listed in the requirements matrix of `docs/interoperability.md`, the JSON shape is stable, and the strict lints ignore shapes they do not lint.
+
 ## 0.1.5 — 2026-11-11
 
 - `libtea-client`: **added** `libtea_client::core`, a re-export of the whole `libtea-core` crate (`pub use libtea_core as core;`). A project that only uses the client no longer needs its own `libtea-core` dependency; the types are the same ones `libtea-core` exports. Additive: nothing was removed or renamed (`cargo semver-checks` reports no update required). The READMEs' dependency blocks and examples use it. A breaking release of `libtea-core` is now also a breaking release of `libtea-client`, which the two crates' common version already implied.
