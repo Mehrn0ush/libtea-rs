@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- Documentation: new `docs/compatibility.md` (TEA and Rust versions, platforms, and which of them the release smoke test, CI and the GitHub Action cover), linked from the README. Statements that were true before the first release and are not now were corrected: the release workflow and the rulesets "had not been run" (they have, for every tag from `v0.1.0` to `v0.1.5`), and several "in 0.1.0" limits now say 0.1.x. `docs/cli-json.md` states that the CLI's JSON contract is unchanged since 0.1.0 (the CLI sources are identical between `v0.1.0` and `v0.1.5`).
+
 ## 0.1.5 — 2026-11-11
 
 - `libtea-client`: **added** `libtea_client::core`, a re-export of the whole `libtea-core` crate (`pub use libtea_core as core;`). A project that only uses the client no longer needs its own `libtea-core` dependency; the types are the same ones `libtea-core` exports. Additive: nothing was removed or renamed (`cargo semver-checks` reports no update required). The READMEs' dependency blocks and examples use it. A breaking release of `libtea-core` is now also a breaking release of `libtea-client`, which the two crates' common version already implied.

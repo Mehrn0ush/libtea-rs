@@ -183,7 +183,9 @@ here is exercised by the test suite; check each item by hand.
 Branch rules and rulesets are free on a **public** repository; a private
 repository on a free account cannot use them. Make the repository public first.
 The commands below create the two rulesets for the solo-maintainer settings
-below. They have not been run against GitHub, so read the result back:
+below. This repository's rulesets (`main` and `release tags`) were set up to
+match them, and `scripts/check-repo-settings.sh` checks the result; on a new
+repository, read the result back:
 
 ```sh
 REPO=Mehrn0ush/libtea-rs
@@ -283,9 +285,9 @@ stolen tokens, not against the maintainer.
 `.github/workflows/release.yml` builds the CLI for seven targets, writes
 `SHA256SUMS` and a CycloneDX SBOM, attests build provenance, and creates a
 **draft** GitHub release. It publishes nothing to crates.io, never publishes the
-GitHub release itself, and holds no secret. It has **not been run**; its first
-run is the real `v0.1.0` tag (step 6 above), so read `docs/release-pins.md`
-first: it lists the pins and how to refresh them.
+GitHub release itself, and holds no secret. It has run for every tag from `v0.1.0` to
+`v0.1.5`, all successfully. Read `docs/release-pins.md` before changing it: it
+lists the pins and how to refresh them.
 
 1. Before tagging, check the pins (`docs/release-pins.md`):
    `./scripts/check-pins.sh --release` must pass and `cargo test` must pass with
@@ -311,7 +313,7 @@ first: it lists the pins and how to refresh them.
 
 ## How the CLI is distributed, and what folding conformance in would involve
 
-`libtea-cli` and `libtea-conformance` stay `publish = false` for 0.1.0. The CLI
+`libtea-cli` and `libtea-conformance` stay `publish = false` in 0.1.x. The CLI
 ships two ways: the release binaries from the workflow above, and
 `cargo install --git https://github.com/Mehrn0ush/libtea-rs --locked libtea-cli`
 (builds from source at the ref you give with `--tag`; no checksum or attestation

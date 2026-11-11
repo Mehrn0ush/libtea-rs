@@ -20,5 +20,5 @@ Do **not** open a public issue for unfixed vulnerabilities.
 
 - Checksum verification is **not** publisher authenticity.
 - Signature bytes may be downloaded; cryptographic verification is not provided
-  in 0.1.0.
+  in 0.1.x (see `docs/design/signature-verification.md`).
 - TLS certificate verification cannot be disabled in `libtea-client`.

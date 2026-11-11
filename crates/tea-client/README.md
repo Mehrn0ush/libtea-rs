@@ -51,6 +51,6 @@ A match on SHA-1 checksums only is `IntegrityOutcome::Weak`, not `Verified`, and
 
 By default the client requires an advertised API version equal to a supported one (1.0.0). `ClientBuilder::lenient_versions(true)` also accepts `1` / `1.0` and any *stable* version with the same major (pre-releases only on an exact match), for servers that advertise those forms; exact matches are always tried before same-major ones. **Risk:** the models were checked against the 1.0.0 schemas only, so a server that matches on version may still send responses this client misreads. Leave it off unless you need it.
 
-Checksum `IntegrityOutcome::Verified` covers decoded artifact bytes only. It does not establish publisher authenticity. Detached signature and Sigstore verification are not implemented in 0.1.0; signature downloads are not cryptographically interpreted.
+Checksum `IntegrityOutcome::Verified` covers decoded artifact bytes only. It does not establish publisher authenticity. Detached signature and Sigstore verification are not implemented in 0.1.x; signature downloads are not cryptographically interpreted.
 
 The workspace guide is at <https://github.com/Mehrn0ush/libtea-rs>.
