@@ -106,3 +106,24 @@ proptest! {
         let _ = parse_retry_after(&junk, now);
     }
 }
+
+/// A date-shaped value (29 bytes, `", "` at 3 and `" GMT"` at the end) with a
+/// multi-byte character where an ASCII separator belongs is rejected, not a
+/// char-boundary panic. `parse_retry_after` is public and takes any `&str`.
+#[test]
+fn retry_after_with_non_ascii_in_a_date_shaped_value_is_rejected_without_panicking() {
+    let now = 1_700_000_000;
+    // Each value is exactly 29 bytes; the two-byte character straddles a slice
+    // boundary (byte 8, 12, 17 or 20, and so on).
+    for value in [
+        "Sun, 06\u{e9}No 1994 08:49:37 GMT",
+        "Sun, 06 Nov\u{e9}994 08:49:37 GMT",
+        "Sun, 06 Nov 1994\u{e9}8:49:37 GMT",
+        "Sun, 06 Nov 1994 08\u{e9}9:37 GMT",
+        "Sun, 06 Nov 1994 08:49\u{e9}7 GMT",
+        "Sun, 0\u{e9}Nov 1994 08:49:37 GMT",
+    ] {
+        assert_eq!(value.len(), 29, "{value:?}");
+        assert_eq!(parse_retry_after(value, now), None, "{value:?}");
+    }
+}

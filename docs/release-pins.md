@@ -29,9 +29,16 @@ of each; they are not the same major version. `cargo install cargo-cyclonedx
 was run with it (157 components for the CLI). Since then the release workflow
 has run with these pins for every tag from `v0.1.0` to `v0.1.5`.
 
-The `taiki-e/install-action` uses in `ci.yml` (`cargo-audit`,
-`cargo-semver-checks`) are tag-pinned, not SHA-pinned. `unpinned_third_party_actions_are_exactly_the_known_debt`
-in `crates/tea-cli/tests/workflow_policy.rs` lists them.
+Every third-party action is pinned by SHA. `taiki-e/install-action` (in
+`ci.yml`, for `cargo-audit` and `cargo-semver-checks`) is pinned to v2.87.32
+(`5488ac5a951645ce95062214902ac4b6bc1a1037`, released 2026-10-26; the commit and
+tag lookups agreed), with the tool named in `with: tool:`. The newest release at
+the time, v2.90.3, was three days old and was not used. `dtolnay/rust-toolchain`
+has no release tags; it is pinned to a `master` commit and the comment gives its
+date. `every_sha_pin_names_its_release` in
+`crates/tea-cli/tests/workflow_policy.rs` requires the comment on every pin, and
+`unpinned_third_party_actions_are_exactly_the_known_debt` fails on a new
+unpinned action.
 
 ## The gate
 
