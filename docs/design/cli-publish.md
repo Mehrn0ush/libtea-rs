@@ -82,7 +82,10 @@ any of them is a new minor version while 0.x.
 3. One version for everything (CLI 0.2.0 forces the libraries to 0.2.0, a
    no-change major-ish bump for them) or independent versions (tags then need a
    crate prefix, for example `cli-v0.2.0`, and the release workflow and
-   `check-release-tag.sh` change). Recommendation: one version, bump everything
-   to 0.2.0 together, because the release tooling assumes it and the libraries
-   are pre-1.0 anyway; say clearly in the changelog that 0.2.0 has no library
-   change.
+   `check-release-tag.sh` change). Trade-off: under Cargo's 0.x rules 0.1 → 0.2
+   is a breaking version, so library users on `libtea-client = "0.1"` would not
+   get 0.2.0 without editing their manifest, even though nothing in the
+   libraries changed. Recommendation: independent versions are the honest option
+   for the libraries but cost a change to the release tooling; if that is not
+   worth it now, keep one version and defer publishing the CLI until the
+   libraries have a real 0.2 change to ship with it.
