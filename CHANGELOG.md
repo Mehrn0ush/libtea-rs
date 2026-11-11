@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- CI (not part of any crate): `cargo audit` gates (it ran with `continue-on-error`) and is expected among the required checks of `main` by `scripts/check-repo-settings.sh`. Every third-party action is now pinned by SHA: `taiki-e/install-action` moved from the `@cargo-audit` / `@cargo-semver-checks` tags to v2.87.32 with `with: tool:`; the known-debt list of unpinned actions is empty. A new policy test requires a `# vX.Y.Z` comment on every SHA pin (`cargo-deny-action` gained `# v2.1.1`; `dtolnay/rust-toolchain`, which has no release tags, names its `master` commit date). Weekly Dependabot updates for Cargo (workspace and `fuzz/`) and GitHub Actions.
+
 ## 0.1.5 — 2026-11-11
 
 - `libtea-client`: **added** `libtea_client::core`, a re-export of the whole `libtea-core` crate (`pub use libtea_core as core;`). A project that only uses the client no longer needs its own `libtea-core` dependency; the types are the same ones `libtea-core` exports. Additive: nothing was removed or renamed (`cargo semver-checks` reports no update required). The READMEs' dependency blocks and examples use it. A breaking release of `libtea-core` is now also a breaking release of `libtea-client`, which the two crates' common version already implied.

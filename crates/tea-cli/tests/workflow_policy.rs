@@ -3,7 +3,7 @@
 //! The workflow hands repository secrets to the probe, so the target URL must
 //! come from the protected Environment, not from whoever dispatches it.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn workflow() -> String {
     let path =
@@ -244,15 +244,13 @@ fn the_cli_is_built_before_the_secrets_step_without_secrets() {
     }
 }
 
-/// Third-party actions should be pinned to a full commit SHA. The ones below
-/// are not yet; the list is the explicit debt. The test fails if a new
-/// unpinned action appears, or when an entry is pinned and should be removed.
+/// Third-party actions should be pinned to a full commit SHA. The list below
+/// is the explicit debt (empty since every action is pinned). The test fails if
+/// a new unpinned action appears, or when an entry is pinned and should be
+/// removed.
 #[test]
 fn unpinned_third_party_actions_are_exactly_the_known_debt() {
-    const KNOWN_UNPINNED: &[(&str, &str)] = &[
-        ("ci.yml", "taiki-e/install-action@cargo-audit"),
-        ("ci.yml", "taiki-e/install-action@cargo-semver-checks"),
-    ];
+    const KNOWN_UNPINNED: &[(&str, &str)] = &[];
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows");
     let mut unpinned: Vec<(String, String)> = Vec::new();
     for entry in std::fs::read_dir(dir).unwrap() {
@@ -963,4 +961,52 @@ fn the_interop_workflow_checks_that_something_is_selected_before_the_probe() {
             "no expression inside shell text: {line}"
         );
     }
+}
+
+/// Every SHA pin says what it is, so a reviewer (and a Dependabot update) can
+/// check it: `# vX.Y.Z` for an action with release tags. `dtolnay/rust-toolchain`
+/// has no release tags and is pinned to a `master` commit, named with its date.
+#[test]
+fn every_sha_pin_names_its_release() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows");
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("yml"))
+        .collect();
+    files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../action.yml"));
+    let mut checked = 0;
+    for path in files {
+        let text = std::fs::read_to_string(&path).unwrap();
+        for line in text.lines() {
+            let Some(uses) = line
+                .trim()
+                .strip_prefix("uses: ")
+                .or_else(|| line.trim().strip_prefix("- uses: "))
+            else {
+                continue;
+            };
+            let Some((action, rest)) = uses.split_once('@') else {
+                continue;
+            };
+            let (reference, comment) = rest.split_once(" # ").unwrap_or((rest, ""));
+            if !is_sha(reference) {
+                continue;
+            }
+            checked += 1;
+            let ok = if action == "dtolnay/rust-toolchain" {
+                comment.starts_with("master ")
+            } else {
+                comment.starts_with('v')
+                    && comment[1..]
+                        .split('.')
+                        .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+            };
+            assert!(ok, "{}: {uses} needs a `# vX.Y.Z` comment", path.display());
+        }
+    }
+    assert!(
+        checked > 10,
+        "only {checked} SHA pins found; the parser is wrong"
+    );
 }
