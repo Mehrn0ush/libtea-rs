@@ -26,7 +26,8 @@ and the tag ref `git/ref/tags/<tag>`, dereferenced if annotated) and the two
 agreed. `upload-artifact` v7 and `download-artifact` v8 are the current releases
 of each; they are not the same major version. `cargo install cargo-cyclonedx
 --version 0.5.10 --locked` was run in a scratch directory and `scripts/make-sbom.sh`
-was run with it (157 components for the CLI). None of this has run on GitHub.
+was run with it (157 components for the CLI). Since then the release workflow
+has run with these pins for every tag from `v0.1.0` to `v0.1.5`.
 
 Every third-party action is pinned by SHA. `taiki-e/install-action` (in
 `ci.yml`, for `cargo-audit` and `cargo-semver-checks`) is pinned to v2.87.32
