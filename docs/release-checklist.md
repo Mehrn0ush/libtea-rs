@@ -11,12 +11,10 @@ feature branch and again on `main` before anything is tagged or published.
    that was reviewed.
 2. **CI green on the feature branch** at that SHA: `test` (stable and MSRV
    1.89.0, including the `cargo doc` step with `RUSTDOCFLAGS=-D warnings`),
-   `package`, and `cargo deny` (which gates on RustSec advisories).
-   `cargo audit` runs with `continue-on-error`; read its log, but it does not
-   gate. `cargo semver-checks` skips each crate only while crates.io returns
-   404 for it (first release). It fails on any other lookup error. From the
-   release after 0.1.0 it runs against the latest published version; make it
-   a required check then.
+   `package`, `cargo deny` and `cargo audit` (both gate on RustSec advisories),
+   and the Windows and macOS test jobs. `cargo semver-checks` skips each crate only while crates.io returns
+   404 for it (first release). It fails on any other lookup error. Since 0.1.0
+   was published it runs against the latest published version and is required.
 3. **Merge to `main` without squashing** (merge commit or fast-forward), so
    the reviewed commits land unchanged (check that each builds with
    `git rebase -x 'cargo check --workspace --all-targets --locked' <base>` on a
@@ -213,6 +211,7 @@ gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
           { "context": "rust 1.89.0" },
           { "context": "package" },
           { "context": "cargo deny" },
+          { "context": "cargo audit" },
           { "context": "cargo semver-checks" },
           { "context": "non_exhaustive guards" },
           { "context": "tests on windows-2022" },
@@ -253,8 +252,11 @@ jq '{name,target,enforcement,conditions,bypass_actors,rules: (.rules | map(if .t
 gh api -X PUT "repos/$REPO/rulesets/$ID" --input ruleset-new.json
 ```
 
-`cargo audit` is not required because its job is `continue-on-error`. Add it if
-you want it to gate. `.github/workflows/repo-settings.yml` runs the same check
+`cargo audit` is required as well; it reads the same RustSec database as
+`cargo deny` and is a second opinion on it. A new advisory against a
+dependency then blocks every pull request until the dependency is updated or
+the advisory is assessed; do not silence it in `deny.toml` or `audit.toml`
+without a written reason. `.github/workflows/repo-settings.yml` runs the same check
 on every push to `main` and weekly, and fails when a ruleset is missing or
 weakened. It reports; it cannot block anything, and someone with admin rights can
 change the rulesets or the workflow. The rulesets are the protection.
