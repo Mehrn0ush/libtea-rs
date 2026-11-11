@@ -21,11 +21,12 @@ fn python_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-const CHECKS: [&str; 8] = [
+const CHECKS: [&str; 9] = [
     "rust stable",
     "rust 1.89.0",
     "package",
     "cargo deny",
+    "cargo audit",
     "cargo semver-checks",
     "non_exhaustive guards",
     "tests on windows-2022",
@@ -179,7 +180,7 @@ fn each_missing_setting_is_reported() {
             "somechecks",
             Some(branch_rules(&GOOD_BRANCH, &["rust stable", "package"])),
             Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
-            "required status checks are missing: cargo deny, cargo semver-checks, non_exhaustive guards, rust 1.89.0, tests on macos-15, tests on windows-2022",
+            "required status checks are missing: cargo audit, cargo deny, cargo semver-checks, non_exhaustive guards, rust 1.89.0, tests on macos-15, tests on windows-2022",
         ),
         (
             "noforce",
