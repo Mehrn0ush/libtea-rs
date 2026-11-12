@@ -13,6 +13,9 @@ the SBOM tool has an exact version. Pinned on 2026-11-08:
 | `actions/cache` | `action.yml` | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` | v6.1.0 |
 | `actions/checkout` | every workflow (12 uses) | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1 |
 | `actions/upload-artifact` | `interop-manual.yml`, `spec-drift.yml` (as in `release.yml`) | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | v7.0.2 |
+| `EmbarkStudios/cargo-deny-action` | `ci.yml` | `3c6349835b2b7b196a839186cb8b78e02f7b5f25` | v2.1.1 |
+| `taiki-e/install-action` | `ci.yml` (2 uses, `with: tool:`) | `5488ac5a951645ce95062214902ac4b6bc1a1037` | v2.87.32 |
+| `dtolnay/rust-toolchain` | every workflow that builds (8 uses) | `683b588c487a69d01f6c6ddf40f036ff682cc2c8` | v1 |
 | runner images | `release.yml` | `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15`, `windows-2022` | |
 
 On 2026-11-09 `actions/checkout` and `actions/upload-artifact` were moved to
@@ -33,10 +36,26 @@ Every third-party action is pinned by SHA. `taiki-e/install-action` (in
 `ci.yml`, for `cargo-audit` and `cargo-semver-checks`) is pinned to v2.87.32
 (`5488ac5a951645ce95062214902ac4b6bc1a1037`, released 2026-10-26; the commit and
 tag lookups agreed), with the tool named in `with: tool:`. The newest release at
-the time, v2.90.3, was three days old and was not used. `dtolnay/rust-toolchain`
-has no release tags; it is pinned to a `master` commit and the comment gives its
-date. `every_sha_pin_names_its_release` in
-`crates/tea-cli/tests/workflow_policy.rs` requires the comment on every pin, and
+the time, v2.90.3, was three days old and was not used.
+
+`dtolnay/rust-toolchain` has one release tag, `v1`, which moves with `master`.
+It is pinned to the commit `v1` pointed to on 2026-11-12
+(`683b588c487a69d01f6c6ddf40f036ff682cc2c8`, committed 2026-10-16, "Add 1.99.1
+patch release"; it was also the `master` tip), and the comment gives that date:
+`# v1 2026-10-16`. (Until 2026-11-12 the pin was a `master` commit whose comment
+said "no release tags"; that was wrong, the `v1` tag existed.)
+
+**Two-week rule.** A new pin is a release (or, for `rust-toolchain`, a commit)
+at least 14 days old, so that a compromised or broken release has had time to
+be noticed. Dependabot proposes the newest release regardless; such a pull
+request waits until the release is old enough.
+
+**Dependabot bumps must update this file.** Every SHA pin must appear in the
+table above with its release, and the release in the `uses:` comment must match
+the table. `every_sha_pin_names_its_release` in
+`crates/tea-cli/tests/workflow_policy.rs` checks the comment format and the
+table, so a Dependabot pull request that changes a SHA fails CI until the table
+here is updated by hand (and the two-week rule checked).
 `unpinned_third_party_actions_are_exactly_the_known_debt` fails on a new
 unpinned action.
 
