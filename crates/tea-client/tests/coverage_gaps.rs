@@ -154,7 +154,12 @@ async fn download_latest_artifact_and_signature_aliases() {
     let body = b"latest-bytes";
     let mut hasher = Sha256::new();
     Digest::update(&mut hasher, body);
-    let digest = format!("{:x}", hasher.finalize());
+    // digest 0.11 output is a byte array without `LowerHex`.
+    let digest: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     Mock::given(method("GET"))
         .and(path(format!("/v1.0.0/artifact/{ID}/latest/download")))
         .respond_with(ResponseTemplate::new(200).set_body_raw(body.as_slice(), "application/json"))
