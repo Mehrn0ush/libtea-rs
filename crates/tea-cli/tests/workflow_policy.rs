@@ -963,18 +963,57 @@ fn the_interop_workflow_checks_that_something_is_selected_before_the_probe() {
     }
 }
 
-/// Every SHA pin says what it is, so a reviewer (and a Dependabot update) can
-/// check it: `# vX.Y.Z` for an action with release tags. `dtolnay/rust-toolchain`
-/// has no release tags and is pinned to a `master` commit, named with its date.
+/// Every SHA pin says what it is, and `docs/release-pins.md` records it.
+///
+/// The comment is `# vX.Y.Z` for an action with release tags. For
+/// `dtolnay/rust-toolchain`, whose only tag `v1` moves with `master`, it is
+/// `# v1 YYYY-MM-DD` or `# master YYYY-MM-DD` (the commit date). Every SHA must
+/// also be a row of the pin table in `docs/release-pins.md`, with the release
+/// in the comment's first word, so a bump (by hand or by Dependabot) that
+/// changes the SHA or leaves a stale comment fails here until the table is
+/// updated.
 #[test]
 fn every_sha_pin_names_its_release() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows");
-    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let pins_doc = std::fs::read_to_string(root.join("docs/release-pins.md")).unwrap();
+    // `| <what> | <where> | `<sha>` | <release> |` rows of the pin table.
+    let table: Vec<(String, String)> = pins_doc
+        .lines()
+        .filter_map(|line| {
+            let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+            if cells.len() < 6 {
+                return None;
+            }
+            let sha = cells[3].trim_matches('`');
+            is_sha(sha).then(|| (sha.to_owned(), cells[4].to_owned()))
+        })
+        .collect();
+    assert!(
+        table.len() >= 8,
+        "pin table not found in docs/release-pins.md"
+    );
+
+    let mut files: Vec<PathBuf> = std::fs::read_dir(root.join(".github/workflows"))
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("yml"))
         .collect();
-    files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../action.yml"));
+    files.push(root.join("action.yml"));
+    let is_date = |text: &str| {
+        let b = text.as_bytes();
+        b.len() == 10
+            && b[4] == b'-'
+            && b[7] == b'-'
+            && b.iter()
+                .enumerate()
+                .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+    };
+    let is_version = |text: &str| {
+        text.strip_prefix('v').is_some_and(|rest| {
+            rest.split('.')
+                .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+        })
+    };
     let mut checked = 0;
     for path in files {
         let text = std::fs::read_to_string(&path).unwrap();
@@ -994,15 +1033,27 @@ fn every_sha_pin_names_its_release() {
                 continue;
             }
             checked += 1;
+            let words: Vec<&str> = comment.split_whitespace().collect();
             let ok = if action == "dtolnay/rust-toolchain" {
-                comment.starts_with("master ")
+                words.len() == 2
+                    && (words[0] == "master" || is_version(words[0]))
+                    && is_date(words[1])
             } else {
-                comment.starts_with('v')
-                    && comment[1..]
-                        .split('.')
-                        .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+                words.len() == 1 && is_version(words[0])
             };
-            assert!(ok, "{}: {uses} needs a `# vX.Y.Z` comment", path.display());
+            assert!(
+                ok,
+                "{}: {uses} needs a `# vX.Y.Z` comment (rust-toolchain: `# v1 YYYY-MM-DD` or `# master YYYY-MM-DD`)",
+                path.display()
+            );
+            let release = words[0];
+            assert!(
+                table
+                    .iter()
+                    .any(|(sha, recorded)| sha == reference && recorded == release),
+                "{}: {action}@{reference} ({release}) is not a row of the pin table in docs/release-pins.md",
+                path.display()
+            );
         }
     }
     assert!(
