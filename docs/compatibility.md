@@ -1,7 +1,7 @@
 # Compatibility
 
 What this repository supports, and how each claim is checked. Last reviewed for
-0.1.5 (2026-11-11).
+0.1.6 (2026-11-12).
 
 ## TEA specification
 
@@ -40,8 +40,11 @@ server; see `docs/interoperability.md` for the servers it has been run against.
 
 "GitHub Action run" means the Action installed that archive and ran
 `parse-tei` from a workflow (scratch-repository run 42771741525 for 0.1.2;
-`docs/github-action.md`). Commands that contact a server have not run through
-the Action.
+`docs/github-action.md`). Commands that contact a server (`discover`,
+`product-release`, `sync`, `sync --check`) ran through the Action `v0.1.5` on
+`ubuntu-24.04`, `macos-15` and `windows-2022` against two public servers
+(scratch-repository run 43160787117; `docs/interoperability.md`). Not with
+credentials, and not on the arm64 Linux runner or in a container.
 
 **Linux libc.** The gnu archives need glibc 2.34 or newer (Ubuntu 22.04+,
 Debian 12+, RHEL 9+), measured on the v0.1.0 archives; they are built on
