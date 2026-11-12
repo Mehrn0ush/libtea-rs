@@ -15,7 +15,7 @@ lock file honest in CI:
 ```yaml
 - uses: Mehrn0ush/libtea-rs@<commit-sha-of-a-release-tag>
   with:
-    version: "0.1.5"
+    version: "0.1.6"
     command: sync
     tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
     lock-file: tea.lock
@@ -26,7 +26,7 @@ lock file honest in CI:
 
 | Input | Meaning |
 | --- | --- |
-| `version` (required) | The libtea version to install, for example `0.1.5`. There is no `latest`: pin it. |
+| `version` (required) | The libtea version to install, for example `0.1.6`. There is no `latest`: pin it. |
 | `command` (required) | `sync`, `diff`, `discover`, `download`, `product-release`, `collections`, `parse-tei`, `spec` or `conformance`. |
 | `tei` | A `tei://` identifier, for `sync`, `discover`, `parse-tei`. |
 | `lock-file` | Lock path for `sync`; the old lock for `diff`. |
@@ -120,7 +120,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.5"
+          version: "0.1.6"
           command: sync
           check: "true"
           tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
@@ -148,7 +148,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.5"
+          version: "0.1.6"
           command: sync
           check: "true"
           tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
@@ -177,7 +177,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.5"
+          version: "0.1.6"
           command: sync
           tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
           lock-file: tea.lock
@@ -202,7 +202,7 @@ jobs:
         with:
           api-key-id: ${{ secrets.TEA_API_KEY_ID }}
           api-key-secret: ${{ secrets.TEA_API_KEY_SECRET }}
-          version: "0.1.5"
+          version: "0.1.6"
           command: download
           base-url: https://api.example.com
           extra-args: |

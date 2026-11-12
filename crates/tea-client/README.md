@@ -9,11 +9,11 @@ certification. No cryptographic signature verification. Checksum
 Implemented against Transparency Exchange API commit
 `962a0228af1bfcc1232ac3f79239317ff33fdb04`. The TEA specification is still beta.
 
-This crate depends on `libtea-core` 0.1.5. It does not depend on the CLI or the conformance crate.
+This crate depends on `libtea-core` 0.1.6. It does not depend on the CLI or the conformance crate.
 
 ```toml
 [dependencies]
-libtea-client = "0.1.5"
+libtea-client = "0.1.6"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -21,7 +21,7 @@ The snippet below uses `libtea-core` types such as `ListParams`, which `libtea-c
 
 Edition 2021. MSRV 1.89. License Apache-2.0. TLS uses rustls. Certificate verification stays enabled. The default destination policy allows HTTPS to public addresses.
 
-**MSRV.** The minimum supported Rust version is 1.89 for 0.1.5. Policy: the latest stable release minus about four releases; it is raised only in minor releases, and every raise is listed in the `CHANGELOG.md`. Dependencies use plain caret ranges and `Cargo.lock` is committed, so MSRV is verified with the committed lock file (`cargo +1.89.0 test --workspace --all-targets --locked`).
+**MSRV.** The minimum supported Rust version is 1.89 for 0.1.6. Policy: the latest stable release minus about four releases; it is raised only in minor releases, and every raise is listed in the `CHANGELOG.md`. Dependencies use plain caret ranges and `Cargo.lock` is committed, so MSRV is verified with the committed lock file (`cargo +1.89.0 test --workspace --all-targets --locked`).
 
 This snippet is compiled as a doctest but marked `no_run`, because it would contact a network host. Other examples that build are `examples/filter_by_identifier_type.rs` and `examples/paginate_components.rs`.
 
