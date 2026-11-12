@@ -1,9 +1,9 @@
 # Installing and verifying the `libtea` CLI
 
 > **Status.** Releases are published on GitHub Releases (0.1.0 was the first;
-> 0.1.1 to 0.1.5 follow it). This page describes what `.github/workflows/release.yml`
+> 0.1.1 to 0.1.6 follow it). This page describes what `.github/workflows/release.yml`
 > produces. The verification commands below were run against each release from
-> 0.1.0 to 0.1.5 with gh 2.103.3.
+> 0.1.0 to 0.1.6 with gh 2.103.3.
 
 `libtea` is distributed as a GitHub release, not on crates.io (`libtea-cli` is
 `publish = false`). Each release carries, for version `X.Y.Z`:

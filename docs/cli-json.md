@@ -9,8 +9,8 @@ consumers should ignore unknown fields.
 Newer objects (`sync`, `diff`, `download` status, `cache`) carry `schema_version`
 (currently `1`). The first group of outputs (`spec`, `parse-tei`, `discover`,
 `product-release`, `collections`, `conformance`) has no version field. All of
-this is the contract since 0.1.0; it has not changed through 0.1.5 (the CLI's
-sources are identical between the `v0.1.0` and `v0.1.5` tags).
+this is the contract since 0.1.0; it has not changed through 0.1.6 (the CLI's
+sources are identical between the `v0.1.0` and `v0.1.6` tags).
 
 ## `spec --json`
 

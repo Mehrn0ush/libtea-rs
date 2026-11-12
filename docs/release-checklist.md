@@ -288,7 +288,7 @@ stolen tokens, not against the maintainer.
 `SHA256SUMS` and a CycloneDX SBOM, attests build provenance, and creates a
 **draft** GitHub release. It publishes nothing to crates.io, never publishes the
 GitHub release itself, and holds no secret. It has run for every tag from `v0.1.0` to
-`v0.1.5`, all successfully. Read `docs/release-pins.md` before changing it: it
+`v0.1.6`, all successfully (`v0.1.6`: run 43182817134). Read `docs/release-pins.md` before changing it: it
 lists the pins and how to refresh them.
 
 1. Before tagging, check the pins (`docs/release-pins.md`):

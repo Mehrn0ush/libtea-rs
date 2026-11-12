@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- Documentation: the GitHub Action was run against two public TEA servers (scratch-repository run 43160787117, Action `v0.1.5`): `discover`, `product-release`, `sync` and `sync --check` against Vulnetix on Linux, macOS and Windows, and `discover` and `sync` against the ReARM demo. Recorded in `docs/interoperability.md`, `docs/github-action.md`, `docs/compatibility.md` and the new `docs/interop/rearm-2026-11-12.md`. The release workflow ran for `v0.1.6` (run 43182817134); the docs that list the tags it has run for now include it.
+
 ## 0.1.6 — 2026-11-12
 
 Library source changes against `v0.1.5` are the first two `libtea-core` items below (`http_cache.rs`, `enums.rs`, and `warn(missing_docs)` in both crates' `lib.rs`); the CLI and conformance sources are unchanged (`git diff --stat v0.1.5 v0.1.6 -- crates/tea-core/src crates/tea-client/src crates/tea-cli/src crates/tea-conformance/src`). `cargo semver-checks` against 0.1.5 reports no update required for either publishable crate.

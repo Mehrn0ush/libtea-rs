@@ -1,6 +1,6 @@
 # Interoperability
 
-A server that answers this SDK is not, by that fact, a conforming TEA server. This SDK is not a conformance certificate. Results below are evidence for **two named deployments** (Oolong local fixture, Vulnetix public) only. They are **not** ecosystem-wide TEA compatibility.
+A server that answers this SDK is not, by that fact, a conforming TEA server. This SDK is not a conformance certificate. Results below are evidence for **three named deployments** (Oolong local fixture, Vulnetix public, ReARM public demo) only. They are **not** ecosystem-wide TEA compatibility.
 
 Pinned contract: CycloneDX/transparency-exchange-api commit `962a0228af1bfcc1232ac3f79239317ff33fdb04`, OpenAPI `1.0.0` (`spec/PINNED.md`).
 
@@ -131,13 +131,24 @@ Downloading a `provenance.sigstore.json` (or similar) and verifying its checksum
 
 The file records no response timings, headers, byte counts or other endpoints, so none are claimed from it.
 
+## GitHub Action runs against public servers (2026-11-12)
+
+The GitHub Action (`v0.1.5`, `attestation: required`) was run from a workflow in a scratch repository (run 43160787117 of `Mehrn0ush/libtea-action-test`). Read-only and anonymous.
+
+| Server | Runners | Commands | Result |
+| --- | --- | --- | --- |
+| Vulnetix (`https://www.vulnetix.com/tea`), TEI `tei://vulnetix.com/uuid/71286087-babf-5795-a6ce-4c350bc944b4` | `ubuntu-24.04`, `macos-15`, `windows-2022` | `discover`; `product-release --uuid`; `sync` (wrote a lock); `sync --check` against that lock | All passed on all three. `discover` printed the product release UUID; the lock holds collection 4 with 4 artifact formats; `sync --check` printed "lock is up to date" and exited 0 |
+| ReARM demo (`https://demo.rearmhq.com/tea`), TEI `tei://demo.rearmhq.com/uuid/b9f115fb-6688-4a3f-a262-3acc04e1fc9e` | `ubuntu-24.04` | `discover --json`; `sync --json` (wrote a lock) | Both passed; one artifact, SHA-256 verified. Details: [`docs/interop/rearm-2026-11-12.md`](interop/rearm-2026-11-12.md) |
+
+No result file other than the ReARM record is committed for this run; the run's log on GitHub is the source, and it expires with the repository's log retention.
+
 ## Implementations named by the specification
 
 | Name | Role described there | What this repository verified |
 | --- | --- | --- |
 | py-libtea | Python library | Not executed |
 | pypi-tea | Service in front of PyPI | Not executed |
-| ReARM CLI / server | Client / server | Not executed |
+| ReARM CLI / server | Client / server | Server: `discover` and `sync` against the public demo, once, through the GitHub Action ([`docs/interop/rearm-2026-11-12.md`](interop/rearm-2026-11-12.md)). CLI: not executed |
 | Vulnetix | Client named in the specification's implementations list; public API root above | Public Consumer probes as above (TEA 1.0.0 paths) |
 | Oolong | Server | Local fixture profile |
 | sbomify | Server | Not executed |
@@ -366,3 +377,4 @@ No other consumer paths are implemented. Publisher operations are out of scope.
 - Signature download tests assert bytes / absence only — not authenticity.
 - Oolong CLE and `/token` live results are server limitations, not SDK defects.
 - Vulnetix evidence is for that named deployment only.
+- ReARM evidence is one run against the public demo deployment, for one product release; it says nothing about other ReARM deployments.
