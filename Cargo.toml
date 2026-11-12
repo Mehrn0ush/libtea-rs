@@ -26,12 +26,12 @@ thiserror = "2"
 url = "2"
 uuid = { version = "1", features = ["serde"] }
 semver = "1"
-sha1 = "0.10"
-sha2 = "0.10"
-sha3 = "0.10"
-blake2 = "0.10"
+sha1 = "0.11"
+sha2 = "0.11"
+sha3 = "0.12"
+blake2 = "0.11"
 blake3 = "1"
-digest = "0.10"
+digest = "0.11"
 base64 = "0.23"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync", "fs"] }
