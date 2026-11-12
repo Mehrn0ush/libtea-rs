@@ -16,6 +16,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # The RustCrypto crates share the `digest` traits and only compile when
+      # they move together, so every bump of them (major included) is one PR.
+      rustcrypto:
+        patterns: [digest, sha1, sha2, sha3, blake2, blake3]
       cargo-minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: cargo
@@ -24,6 +28,8 @@ updates:
       interval: weekly
     open-pull-requests-limit: 2
     groups:
+      fuzz-rustcrypto:
+        patterns: [digest, sha1, sha2, sha3, blake2, blake3]
       fuzz-minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: github-actions
