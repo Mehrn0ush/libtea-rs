@@ -11,6 +11,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 libtea-core = { path = "../crates/tea-core" }
+semver = "1"
 
 [[bin]]
 name = "tei_parse"
@@ -72,6 +73,13 @@ bench = false
 [[bin]]
 name = "http_cache_headers"
 path = "fuzz_targets/http_cache_headers.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vers_range"
+path = "fuzz_targets/vers_range.rs"
 test = false
 doc = false
 bench = false

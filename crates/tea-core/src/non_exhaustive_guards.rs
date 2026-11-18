@@ -1371,3 +1371,212 @@ pub(crate) struct GuardEntryError;
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlEntryError;
+
+/// `VersError` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::vers::VersError) -> u8 {
+///     match x {
+///         libtea_core::vers::VersError::TooLong => 0,
+///         libtea_core::vers::VersError::Scheme => 0,
+///         libtea_core::vers::VersError::Type => 0,
+///         libtea_core::vers::VersError::Empty => 0,
+///         libtea_core::vers::VersError::Whitespace => 0,
+///         libtea_core::vers::VersError::EmptyConstraint => 0,
+///         libtea_core::vers::VersError::LeadingEquals => 0,
+///         libtea_core::vers::VersError::EmptyVersion => 0,
+///         libtea_core::vers::VersError::Asterisk => 0,
+///         libtea_core::vers::VersError::Encoding => 0,
+///         libtea_core::vers::VersError::UnsupportedType => 0,
+///         libtea_core::vers::VersError::NotSemver => 0,
+///         libtea_core::vers::VersError::Order => 0,
+///         libtea_core::vers::VersError::Sequence => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardVersError;
+
+/// Control for `GuardVersError`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::vers::VersError) -> u8 {
+///     match x {
+///         libtea_core::vers::VersError::TooLong => 0,
+///         libtea_core::vers::VersError::Scheme => 0,
+///         libtea_core::vers::VersError::Type => 0,
+///         libtea_core::vers::VersError::Empty => 0,
+///         libtea_core::vers::VersError::Whitespace => 0,
+///         libtea_core::vers::VersError::EmptyConstraint => 0,
+///         libtea_core::vers::VersError::LeadingEquals => 0,
+///         libtea_core::vers::VersError::EmptyVersion => 0,
+///         libtea_core::vers::VersError::Asterisk => 0,
+///         libtea_core::vers::VersError::Encoding => 0,
+///         libtea_core::vers::VersError::UnsupportedType => 0,
+///         libtea_core::vers::VersError::NotSemver => 0,
+///         libtea_core::vers::VersError::Order => 0,
+///         libtea_core::vers::VersError::Sequence => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlVersError;
+
+/// `Comparator` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::vers::Comparator) -> u8 {
+///     match x {
+///         libtea_core::vers::Comparator::Equal => 0,
+///         libtea_core::vers::Comparator::NotEqual => 0,
+///         libtea_core::vers::Comparator::Less => 0,
+///         libtea_core::vers::Comparator::LessOrEqual => 0,
+///         libtea_core::vers::Comparator::Greater => 0,
+///         libtea_core::vers::Comparator::GreaterOrEqual => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardComparator;
+
+/// Control for `GuardComparator`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::vers::Comparator) -> u8 {
+///     match x {
+///         libtea_core::vers::Comparator::Equal => 0,
+///         libtea_core::vers::Comparator::NotEqual => 0,
+///         libtea_core::vers::Comparator::Less => 0,
+///         libtea_core::vers::Comparator::LessOrEqual => 0,
+///         libtea_core::vers::Comparator::Greater => 0,
+///         libtea_core::vers::Comparator::GreaterOrEqual => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlComparator;
+
+/// `Unevaluated` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::Unevaluated) -> u8 {
+///     match x {
+///         libtea_core::Unevaluated::UnsupportedScheme { .. } => 0,
+///         libtea_core::Unevaluated::Malformed { .. } => 0,
+///         libtea_core::Unevaluated::UnknownEventType { .. } => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardUnevaluated;
+
+/// Control for `GuardUnevaluated`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::Unevaluated) -> u8 {
+///     match x {
+///         libtea_core::Unevaluated::UnsupportedScheme { .. } => 0,
+///         libtea_core::Unevaluated::Malformed { .. } => 0,
+///         libtea_core::Unevaluated::UnknownEventType { .. } => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlUnevaluated;
+
+/// `libtea_core::Unevaluated::UnsupportedScheme` is a `#[non_exhaustive]` variant: a literal with every field must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f() {
+///     let event_id = 1_i64;
+///     let scheme = String::new();
+///     let _ = libtea_core::Unevaluated::UnsupportedScheme { event_id, scheme };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardUnevaluatedUnsupportedScheme;
+
+/// Control for `GuardUnevaluatedUnsupportedScheme`: a pattern with `..` compiles.
+///
+/// ```
+/// fn f(x: libtea_core::Unevaluated) {
+///     if let libtea_core::Unevaluated::UnsupportedScheme { event_id, scheme, .. } = x {
+///         let _ = (event_id, scheme);
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlUnevaluatedUnsupportedScheme;
+
+/// `libtea_core::Unevaluated::Malformed` is a `#[non_exhaustive]` variant: a literal with every field must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f() {
+///     let event_id = 1_i64;
+///     let detail = String::new();
+///     let _ = libtea_core::Unevaluated::Malformed { event_id, detail };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardUnevaluatedMalformed;
+
+/// Control for `GuardUnevaluatedMalformed`: a pattern with `..` compiles.
+///
+/// ```
+/// fn f(x: libtea_core::Unevaluated) {
+///     if let libtea_core::Unevaluated::Malformed { event_id, detail, .. } = x {
+///         let _ = (event_id, detail);
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlUnevaluatedMalformed;
+
+/// `libtea_core::Unevaluated::UnknownEventType` is a `#[non_exhaustive]` variant: a literal with every field must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f() {
+///     let event_id = 1_i64;
+///     let event_type = String::new();
+///     let _ = libtea_core::Unevaluated::UnknownEventType { event_id, event_type };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardUnevaluatedUnknownEventType;
+
+/// Control for `GuardUnevaluatedUnknownEventType`: a pattern with `..` compiles.
+///
+/// ```
+/// fn f(x: libtea_core::Unevaluated) {
+///     if let libtea_core::Unevaluated::UnknownEventType { event_id, event_type, .. } = x {
+///         let _ = (event_id, event_type);
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlUnevaluatedUnknownEventType;
+
+/// `LifecycleStatus` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_core::LifecycleStatus) {
+///     let _ = libtea_core::LifecycleStatus { released: base.released.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardLifecycleStatus;
+
+/// Control for `GuardLifecycleStatus`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_core::LifecycleStatus) {
+///     let kept = base.released.clone();
+///     let libtea_core::LifecycleStatus { released, .. } = base;
+///     let _ = (kept, released);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlLifecycleStatus;

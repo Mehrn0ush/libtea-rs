@@ -1,7 +1,8 @@
 # CLE evaluation (ECMA-428), `vers` semver only: design
 
-**Status:** proposal for issue #11. Nothing here is implemented. Review before
-any code is written.
+**Status:** stage 1 implemented after 0.1.6 (issue #11): `libtea_core::vers`
+and `Cle::status_for_semver`. The proposal below is kept as written; "What was
+built" at the end says where the implementation differs.
 
 ## What exists
 
@@ -106,3 +107,51 @@ not be evaluated" stay distinct.
 The ECMA-428 text is not vendored here. The rules above are from the pinned
 OpenAPI descriptions and the `vers` specification as I know it; checking them
 against ECMA-428 is the first task of the implementation PR.
+
+## What was built
+
+Decisions taken: library only (no CLI command yet); a general `vers` parser
+with SemVer comparison only; additive and Experimental.
+
+- `libtea_core::vers::{VersRange, Constraint, Comparator, VersError,
+  MAX_VERS_BYTES}`. `VersRange::parse` checks the syntax of any type;
+  `contains_semver` validates and evaluates.
+- `Cle::status_for_semver(&semver::Version) -> LifecycleStatus` instead of
+  `status_for(&str, VersScheme)`: the version is already parsed, so a
+  non-SemVer input cannot reach the evaluator, and a future scheme gets its
+  own method rather than a parameter that rejects most values.
+  `Unevaluated` has `UnsupportedScheme`, `Malformed` and, instead of
+  `SchemeUnknown` (impossible when the caller supplies the scheme),
+  `UnknownEventType` for event types this SDK does not know.
+- SemVer types: `semver` and `npm`. The proposal said `semver` only, but the
+  OpenAPI's own example is `vers:npm/...`, and the registered npm `vers` type
+  uses node-semver versions, whose precedence for plain versions is SemVer
+  2.0. Everything else, including `pypi`, is `UnsupportedScheme`.
+- `componentRenamed` does not change a version's status and is ignored;
+  `supersededBy` without `supersededByVersion` is `Malformed`.
+
+**Checked against the `vers` specification** (vers-spec `v1.2.1`, vendored
+tests under `spec/vers/`, `spec/vers/PINNED.md`):
+
+- Section 5.4 and how-to-parse are stricter than the proposal: constraints
+  must be sorted by version with each version once; `*` stands alone; outside
+  `!=` the comparators alternate between lower and upper bounds; a bare
+  version may not follow a lower bound or precede an upper bound; a leading
+  `=` is an error; whitespace is an error, also after decoding (`%09`), except
+  an encoded space. An invalid range is an error, never corrected.
+- Containment is interval-based (a range is a sequence of intervals, not an
+  OR of comparisons). The how-to-parse procedure, read literally, never puts
+  a version inside a range with a single bound such as `>=1.0.0`, because
+  its pairwise loop has no pair; the implementation treats a lone bound as
+  open to the other side, which is what upstream's PyPI containment tests
+  expect (`vers:pypi/>0.0.2` contains `0.0.3`; that file is not vendored,
+  because PyPI versions are not evaluated here).
+- 15 of the suite's parse cases pass, the npm containment case passes, and
+  three `datetime` cases are listed in `crates/tea-core/tests/vers_spec_suite.rs`
+  as type rules this SDK does not evaluate.
+- The registered npm type's example `vers:npm/>=2.0.0|<2.1.0|>=2.1.0|<2.2.0`
+  repeats `2.1.0`, which section 5.4 forbids; this implementation rejects it.
+  Not reported upstream yet.
+- The ECMA-428 text itself is still not vendored, and no CLE document from a
+  real server has been evaluated: the tests use the OpenAPI examples and
+  hand-built events.

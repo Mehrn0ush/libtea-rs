@@ -6,6 +6,9 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-core`: **added** `vers` (**Experimental**): `VersRange::parse` for `vers` version ranges of any type, and `contains_semver` for the `semver` and `npm` types, which validates the range first (sorted, unique versions, valid comparator sequence) and reports an invalid one as an error. Checked against the vers-spec v1.2.1 tests, vendored under `spec/vers/`. Additive.
+- `libtea-core`: **added** `Cle::status_for_semver` and `lifecycle::{LifecycleStatus, Unevaluated}` (**Experimental**): the lifecycle dates of one version from CLE events (withdrawn events cancel what they name; the highest `id` of a type wins). An event that cannot be evaluated, such as a `vers:pypi` range, is listed in `unevaluated` rather than treated as not applying. Dates are reported, not compared with the clock. Additive. Issue #11, stage 1 (`docs/design/cle.md`).
+- Fuzzing: new target `vers_range`.
 - Documentation: the GitHub Action was run against two public TEA servers (scratch-repository run 43160787117, Action `v0.1.5`): `discover`, `product-release`, `sync` and `sync --check` against Vulnetix on Linux, macOS and Windows, and `discover` and `sync` against the ReARM demo. Recorded in `docs/interoperability.md`, `docs/github-action.md`, `docs/compatibility.md` and the new `docs/interop/rearm-2026-11-12.md`. The release workflow ran for `v0.1.6` (run 43182817134); the docs that list the tags it has run for now include it.
 
 ## 0.1.6 — 2026-11-12
