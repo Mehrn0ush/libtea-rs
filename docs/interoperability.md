@@ -356,7 +356,7 @@ interoperability.
 | GET | `/artifact/{uuid}/latest/signature/download` | `downloadLatestArtifactSignature` | `Service::download_latest_signature` | Implemented. Mock / unit. Oolong (bytes only) | `download_latest_artifact_and_signature_aliases` — **not** cryptographic verification |
 | GET | `/artifact/{uuid}/{artifactVersion}` | `getArtifactByVersion` | `Service::get_artifact` | Implemented. Mock / unit. Oolong. Vulnetix | `artifact_latest_versus_revision_and_media_type` |
 | GET | `/artifact/{uuid}/{artifactVersion}/download` | `downloadArtifactByVersion` | `Service::download_artifact`, `download_format` | Implemented. Mock / unit. Oolong. Vulnetix | `zlib_deflate_is_decoded_before_the_checksum` (200 on the API path); `artifact_checksum_covers_decoded_bytes_and_not_a_redirect_with_credentials` (API path answers 302; 200 after redirect); `conditional_get_304_is_not_a_checksum_and_has_no_body`; `redirect_limit_and_gzip_expansion_limit_are_enforced` |
-| GET | `/artifact/{uuid}/{artifactVersion}/signature/download` | `downloadArtifactSignatureByVersion` | `Service::download_signature` | Implemented. Mock / unit. Oolong (bytes). Vulnetix (`NotPublished` for probed revision) | `signature_absence_is_not_verification_and_unknown_is_an_error`; `signature_bytes_are_not_reported_as_verified` — **not** cryptographic verification |
+| GET | `/artifact/{uuid}/{artifactVersion}/signature/download` | `downloadArtifactSignatureByVersion` | `Service::download_signature` | Implemented. Mock / unit. Oolong (bytes). Vulnetix (`NotPublished` for probed revision) | `signature_absence_is_not_verification_and_unknown_is_an_error`; `signature_bytes_are_not_reported_as_verified`; CLI `download --signature`: `present_signature_is_named_and_not_verified`, `not_published_signature_is_reported_and_exits_zero` — format detection only (`detect_signature_format`), **not** cryptographic verification |
 | POST | `/token` | `requestToken` | Internal token exchange | Implemented. Mock / unit | `client_credentials_uses_basic_and_a_form_body`; `rejected_bearer_is_dropped_after_one_retry`; `concurrent_n32_challenges_one_token_exchange`; `token_error_text_omits_the_secret`; `hanging_token_endpoint_times_out_without_the_secret`; `hanging_token_origin_does_not_stall_waiters_or_other_origins`; `zero_lifetime_is_not_presented`; `short_lifetime_is_still_presented`; unit `expiry_margin_does_not_consume_a_short_lifetime` |
 | HEAD | download paths | (not separately named) | `Service::head_artifact` | Implemented. Mock / unit. Oolong | `head_ignores_representation_content_length`; `head_without_content_length_returns_metadata`; `head_bearer_challenge_is_an_authentication_error` |
 
@@ -374,7 +374,7 @@ No other consumer paths are implemented. Publisher operations are out of scope.
 
 #### Remaining caveats (still true)
 
-- Signature download tests assert bytes / absence only — not authenticity.
+- Signature download tests assert bytes / absence only — not authenticity. `detect_signature_format` names a container (OpenPGP, CMS, Sigstore bundle) from hand-built fixtures; no signature from a real publisher has been inspected, because no server in `docs/interop/` serves one.
 - Oolong CLE and `/token` live results are server limitations, not SDK defects.
 - Vulnetix evidence is for that named deployment only.
 - ReARM evidence is one run against the public demo deployment, for one product release; it says nothing about other ReARM deployments.
