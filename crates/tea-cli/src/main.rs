@@ -279,6 +279,12 @@ enum Command {
         /// every declared checksum matched the decoded bytes.
         #[arg(long)]
         require_checksums: bool,
+        /// After the artifact, also fetch the detached signature published for
+        /// the selected format and report which container it looks like
+        /// (OpenPGP, CMS, Sigstore bundle). The signature is NOT verified: this
+        /// tool checks no signature, key or signer. The bytes are not saved.
+        #[arg(long)]
+        signature: bool,
         /// Print one JSON object describing the download on stdout. Requires
         /// --output, so that stdout carries only the JSON.
         #[arg(long, requires = "output")]
@@ -658,6 +664,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             force,
             allow_weak_checksums,
             require_checksums,
+            signature,
             json,
             credentials,
             allow_origin,
@@ -708,11 +715,17 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                     download.strong_etag,
                     download.bytes_written,
                 );
+                let signature = if signature {
+                    Some(fetch_signature(&service, &metadata, &selected).await?)
+                } else {
+                    None
+                };
                 if json {
-                    out!(
-                        "{}",
-                        download_json(&artifact, revision, &selected, &path, download,)
-                    );
+                    let mut value = download_json(&artifact, revision, &selected, &path, download);
+                    if let Some(report) = &signature {
+                        value["signature"] = report.json();
+                    }
+                    out!("{value}");
                 }
             } else {
                 // Stdout cannot take bytes back, so this path holds the whole
@@ -726,6 +739,9 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                 };
                 note_integrity(&body.integrity, body.strong_etag, body.bytes.len() as u64);
                 std::io::stdout().write_all(&body.bytes)?;
+                if signature {
+                    fetch_signature(&service, &metadata, &selected).await?;
+                }
             }
         }
         Command::Sync {
@@ -825,6 +841,83 @@ fn redact_url(url: &str) -> String {
         }
         Err(_) => "(unparseable url)".to_owned(),
     }
+}
+
+/// What `download --signature` found. Nothing in it is a verification result.
+enum SignatureReport {
+    Present {
+        format: libtea_client::SignatureFormat,
+        bytes: usize,
+        content_type: Option<String>,
+        final_url: String,
+    },
+    NotPublished,
+}
+
+impl SignatureReport {
+    /// The `signature` member of `download --json` (`docs/cli-json.md`).
+    fn json(&self) -> serde_json::Value {
+        match self {
+            Self::Present {
+                format,
+                bytes,
+                content_type,
+                final_url,
+            } => serde_json::json!({
+                "status": "present",
+                "format": format.as_str(),
+                "bytes": bytes,
+                "content_type": content_type,
+                "final_url": redact_url(final_url),
+                "verified": false,
+            }),
+            Self::NotPublished => serde_json::json!({
+                "status": "not_published",
+                "format": null,
+                "bytes": null,
+                "content_type": null,
+                "final_url": null,
+                "verified": false,
+            }),
+        }
+    }
+}
+
+/// Fetch the signature for one format, say on stderr what was found, and
+/// return it for `--json`.
+async fn fetch_signature(
+    service: &libtea_client::Service,
+    metadata: &libtea_core::Artifact,
+    media_type: &str,
+) -> anyhow::Result<SignatureReport> {
+    let report = match service
+        .download_signature_for_format(metadata, media_type, None)
+        .await?
+    {
+        libtea_client::SignatureFetch::Present(body) => SignatureReport::Present {
+            format: libtea_client::detect_signature_format(&body.bytes),
+            bytes: body.bytes.len(),
+            content_type: body.content_type.clone(),
+            final_url: body.final_url.clone(),
+        },
+        libtea_client::SignatureFetch::NotPublished => SignatureReport::NotPublished,
+        _ => {
+            return Err(coded(
+                exit::FAILURE,
+                "unexpected signature response (not modified)",
+            ))
+        }
+    };
+    match &report {
+        SignatureReport::Present { format, bytes, .. } => err!(
+            "signature present\tformat {}\tbytes {bytes}\tnot verified (this tool checks no signature, key or signer)",
+            format.as_str()
+        ),
+        SignatureReport::NotPublished => {
+            err!("signature not published for this format");
+        }
+    }
+    Ok(report)
 }
 
 /// The `download --json` object. Fields are documented in `docs/cli-json.md`.
