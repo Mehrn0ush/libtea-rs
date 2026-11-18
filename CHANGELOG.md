@@ -6,6 +6,10 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-core`: **added** `signature_format::{SignatureFormat, detect_signature_format, MAX_SIGNATURE_INSPECT_BYTES}` (**Experimental**): names the container a detached signature appears to use (OpenPGP armored or binary, CMS `SignedData`, Sigstore bundle) from its bytes alone. It verifies nothing. Additive.
+- `libtea-client`: **added** `signature::FormatOnlyVerifier` (**Experimental**), a `SignatureVerifier` that returns `MissingSignature` for empty bytes and `Unsupported` otherwise, never `Verified`; and re-exports of the detection items. The `SignatureVerifier` trait is unchanged. Additive.
+- `libtea-cli` (unpublished): `download --signature` fetches the signature published for the selected format after the artifact and reports its detected format and that it was not verified, on stderr and as a new optional `signature` member of `download --json`. Exit codes are unchanged. Issue #12, stage 1 (`docs/design/signature-verification.md`).
+- Fuzzing: new target `signature_format` with a seed corpus.
 - Documentation: the GitHub Action was run against two public TEA servers (scratch-repository run 43160787117, Action `v0.1.5`): `discover`, `product-release`, `sync` and `sync --check` against Vulnetix on Linux, macOS and Windows, and `discover` and `sync` against the ReARM demo. Recorded in `docs/interoperability.md`, `docs/github-action.md`, `docs/compatibility.md` and the new `docs/interop/rearm-2026-11-12.md`. The release workflow ran for `v0.1.6` (run 43182817134); the docs that list the tags it has run for now include it.
 
 ## 0.1.6 — 2026-11-12

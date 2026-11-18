@@ -10,7 +10,9 @@ Newer objects (`sync`, `diff`, `download` status, `cache`) carry `schema_version
 (currently `1`). The first group of outputs (`spec`, `parse-tei`, `discover`,
 `product-release`, `collections`, `conformance`) has no version field. All of
 this is the contract since 0.1.0; it has not changed through 0.1.6 (the CLI's
-sources are identical between the `v0.1.0` and `v0.1.6` tags).
+sources are identical between the `v0.1.0` and `v0.1.6` tags). After 0.1.6,
+`download --json` gained an optional `signature` member (below); nothing
+was renamed or removed.
 
 ## `spec --json`
 
@@ -84,6 +86,33 @@ after the checksum check) and `--json` is rejected with exit status 2.
 - `Verified` is integrity of the decoded bytes. It is not publisher
   authenticity and no signature is checked.
 - `etag` is a validator, not a checksum.
+
+With `--signature` (added after 0.1.6), the object also has a `signature`
+member. Without the flag the member is absent and no signature request is
+made.
+
+```json
+"signature": {
+  "status": "present",
+  "format": "openpgp_armored",
+  "bytes": 228,
+  "content_type": "application/pgp-signature",
+  "final_url": "https://host/path",
+  "verified": false
+}
+```
+
+- `status` is `present` or `not_published` (the server answered
+  `SIGNATURE_NOT_FOUND`). For `not_published`, the other members are `null`
+  except `verified`. Any other failure on the signature request is an error
+  with the usual exit status; the artifact was already written by then.
+- `format` is what the bytes look like, from
+  `libtea_core::detect_signature_format`: `openpgp_armored`, `openpgp_binary`,
+  `cms`, `sigstore_bundle`, `empty`, `too_large` (over 1 MiB, not inspected) or
+  `unknown`. The server's `Content-Type` is reported but does not affect it.
+- `verified` is always `false`. The CLI checks no signature, key or signer; a
+  recognized format says nothing about whether the signature is valid.
+- The signature bytes are not saved.
 
 ## Errors (`--json` given)
 

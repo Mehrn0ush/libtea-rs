@@ -75,3 +75,10 @@ path = "fuzz_targets/http_cache_headers.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "signature_format"
+path = "fuzz_targets/signature_format.rs"
+test = false
+doc = false
+bench = false

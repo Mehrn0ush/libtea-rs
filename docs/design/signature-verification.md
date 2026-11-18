@@ -67,7 +67,8 @@ tests.
 
 ## Stage 1: open questions and a proposed first slice (issue #12)
 
-*Added 2026-11-11 for review. Not implemented.*
+*Added 2026-11-11 for review. The "Proposed first slice" below is implemented
+after 0.1.6 (issue #12), with the differences listed under "What was built".*
 
 ### What the pinned specification says
 
@@ -125,6 +126,36 @@ Small, honest, and useful without choosing a cryptographic library:
 
 What it deliberately does not do: verify anything, fetch keys, or return
 `Verified`. The ship rule at the top of this document stands.
+
+### What was built
+
+- `libtea_core::signature_format::{SignatureFormat, detect_signature_format,
+  MAX_SIGNATURE_INSPECT_BYTES}`, re-exported from `libtea_client::signature`
+  and the `libtea_client` root. It lives in `libtea-core` rather than the
+  client because it is a pure function, and so that the `signature_format`
+  fuzz target, like the others, depends on `libtea-core` only.
+- `detect_signature_format(bytes)` takes no `content_type`. A hint that cannot
+  change the answer is not worth a parameter, and one that can would let a
+  server's label decide what the bytes are. The CLI reports the header next to
+  the detected format instead.
+- Two variants the slice did not list: `Empty` and `TooLarge` (over 1 MiB, not
+  inspected), so neither is folded into `Unknown`.
+- Detection: armor line `-----BEGIN PGP SIGNATURE-----` after optional ASCII
+  whitespace; an OpenPGP packet header (legacy or new format) with tag 2, a
+  length that fits the input and a version octet of 3 to 6 (RFC 9580 section
+  4.2); a DER `SEQUENCE` of definite length that fits the input and starts
+  with the `id-signedData` OID; a JSON object whose `mediaType` starts with
+  `application/vnd.dev.sigstore.bundle`. PEM-wrapped CMS is `Unknown`.
+- `libtea_client::signature::FormatOnlyVerifier` as proposed:
+  `MissingSignature` for empty bytes, `Unsupported` otherwise.
+- CLI: `download --signature` (text on stderr, a `signature` member in
+  `--json`, `docs/cli-json.md`). It does not save the signature bytes; that
+  can be added with an output path and the same safety checks as `--output`
+  if someone needs it.
+- The `SignatureVerifier` trait is unchanged (decision 2 below stays open).
+- Fixtures are hand-built byte strings in the unit and CLI tests, not files
+  from a real publisher; no public TEA server in `docs/interop/` serves
+  signatures yet, so question 1 is still unanswered.
 
 ### Decisions for you
 

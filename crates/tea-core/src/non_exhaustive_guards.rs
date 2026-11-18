@@ -1371,3 +1371,40 @@ pub(crate) struct GuardEntryError;
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlEntryError;
+
+/// `SignatureFormat` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::SignatureFormat) -> u8 {
+///     match x {
+///         libtea_core::SignatureFormat::OpenPgpArmored => 0,
+///         libtea_core::SignatureFormat::OpenPgpBinary => 0,
+///         libtea_core::SignatureFormat::Cms => 0,
+///         libtea_core::SignatureFormat::SigstoreBundle => 0,
+///         libtea_core::SignatureFormat::Empty => 0,
+///         libtea_core::SignatureFormat::TooLarge => 0,
+///         libtea_core::SignatureFormat::Unknown => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardSignatureFormat;
+
+/// Control for `GuardSignatureFormat`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::SignatureFormat) -> u8 {
+///     match x {
+///         libtea_core::SignatureFormat::OpenPgpArmored => 0,
+///         libtea_core::SignatureFormat::OpenPgpBinary => 0,
+///         libtea_core::SignatureFormat::Cms => 0,
+///         libtea_core::SignatureFormat::SigstoreBundle => 0,
+///         libtea_core::SignatureFormat::Empty => 0,
+///         libtea_core::SignatureFormat::TooLarge => 0,
+///         libtea_core::SignatureFormat::Unknown => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlSignatureFormat;

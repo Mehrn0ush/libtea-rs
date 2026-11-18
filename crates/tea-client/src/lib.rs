@@ -72,7 +72,10 @@ pub use download::{FileDownload, FileDownloadOptions, StreamedDownload};
 pub use error::ClientError;
 pub use page_stream::{follow_pages, FollowedPage, PageFollowLimits, PageFollowStop};
 pub use service::{ArtifactFetch, CleFetch, DownloadedArtifact, Service, SignatureFetch};
-pub use signature::{SignatureVerifier, SignatureVerifyOutcome};
+pub use signature::{
+    detect_signature_format, FormatOnlyVerifier, SignatureFormat, SignatureVerifier,
+    SignatureVerifyOutcome,
+};
 pub use transport::{ApiKey, Client, ClientBuilder, Limits};
 
 use libtea_core::{tea_error_code, DiscoveryInfo, ProductReleaseId, Tei, WellKnownDocument};
