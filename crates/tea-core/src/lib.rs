@@ -27,6 +27,7 @@ pub mod ids;
 pub mod lock;
 pub mod model;
 pub mod policy;
+pub mod purl;
 pub mod tei;
 pub mod version;
 
@@ -59,6 +60,7 @@ pub use model::{
     ProductReleaseWithCollection, TeaErrorBody, TokenResponse,
 };
 pub use policy::{classify_ip, origin_key, parse_api_base, DestinationPolicy, IpClass};
+pub use purl::{same_package_url, CanonicalPurl, Purl, PurlError, PurlRules};
 pub use tei::{encode_query_component, Tei};
 pub use version::{
     select_endpoints, versioned_api_prefix, ApiVersion, SelectedEndpoint, SupportedApi,

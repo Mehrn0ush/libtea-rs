@@ -1,7 +1,8 @@
 # PURL canonicalization (ECMA-427): design
 
-**Status:** proposal for issue #10. Nothing here is implemented. Review before
-any code is written.
+**Status:** stage 1 implemented after 0.1.6 (issue #10): `libtea_core::purl`.
+The proposal below is kept as written; "What was built" at the end says where
+the implementation differs and which statements in it turned out to be wrong.
 
 ## What the pinned specification allows
 
@@ -117,3 +118,52 @@ panic.
   output parses. Seed corpus from the test-suite file.
 - A test that `Tei::parse` of a `purl` TEI followed by `as_str()` returns the
   input byte for byte, whatever the PURL's canonical form.
+
+## What was built
+
+Decisions taken: own implementation (no new dependency), generic rules only
+(stage 2 later, type by type), additive and Experimental.
+
+- `libtea_core::purl::{Purl, CanonicalPurl, PurlRules, PurlError,
+  same_package_url, MAX_PURL_BYTES}`, also at the crate root. `Purl` has
+  accessors for every component (`package_type`, `namespace`, `name`,
+  `version`, `qualifiers`/`qualifier`, `subpath`) besides `as_str` and
+  `canonical`. `Tei::purl()` and `Identifier::purl()` as proposed; a `purl`
+  TEI whose identifier does not decode is `PurlError::TeiIdentifier`.
+- No builder from components: the suite's 177 `build` cases are skipped.
+- Test data: the purl-spec `v1.1.1` test suite, vendored under `spec/purl/`
+  with SHA-256 digests (`spec/purl/PINNED.md`, checked by a test). 374 parse
+  and round-trip cases pass. 41 need a type-specific rule or are contradicted
+  elsewhere in the suite; each is listed in
+  `crates/tea-core/tests/purl_spec_suite.rs` with its reason, and the test
+  fails if one starts passing.
+- The 4 KiB limit also applies to the canonical form, which can be three
+  times longer than the input (each escaped octet is `%XX`). Without that,
+  a valid input's canonical form could fail to parse; the `purl_parse` fuzz
+  target found this before the change.
+- An unencoded `@` that starts a namespace segment (`pkg:npm/@babel/core`)
+  is not a version separator: the version is split from the last path
+  segment only. The suite has this case; how-to-parse, read literally, would
+  take `babel/core` as the version.
+
+**Corrections to the proposal above**, from ECMA-427 clause 5 and the type
+definitions at the pinned commit:
+
+- The type allows ASCII letters, digits, `.` and `-` and must start with a
+  letter. `+` is not allowed (the proposal listed `[a-z0-9.+-]`).
+- Empty, `.` and `..` subpath segments are discarded when parsing, not
+  rejected.
+- Qualifier keys must start with a letter and must be unique; a repeated key
+  is an error.
+- `:` is never percent-encoded; every octet other than ASCII alphanumerics,
+  `.-_~` and `:` is, with uppercase hex.
+- npm namespaces and names are **case-sensitive** (`npm-definition.json`);
+  the stage 2 list above was wrong to lowercase them. The type definitions
+  carry `case_sensitive` flags per component, which stage 2 can use.
+
+**Where the suite disagrees with itself or with how-to-parse.** For
+`pkg:gem/jruby-launcher@1.1.2?Platform=java` the `validate` case expects
+`platform=java` while the `parse` case for the same input expects a failure;
+`rpm` has the same pair, and maven's `repositorY_url` is expected to parse.
+This implementation lowercases keys, as how-to-parse says, and lists the two
+`parse` cases. Not reported upstream yet.

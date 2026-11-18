@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-core`: **added** `purl` (**Experimental**): `Purl::parse` for Package URLs (ECMA-427), keeping the original text, and `Purl::canonical` / `same_package_url` for comparing two spellings under the rules ECMA-427 gives for every type (no type-specific rules yet, and `CanonicalPurl::rules` says so). Also `Tei::purl` and `Identifier::purl`. Nothing that is sent, stored, locked or printed is rewritten. Checked against the purl-spec v1.1.1 test suite, vendored under `spec/purl/`. Additive. Issue #10, stage 1 (`docs/design/purl.md`).
+- Fuzzing: new target `purl_parse`, seeded from the test suite.
 - Documentation: the GitHub Action was run against two public TEA servers (scratch-repository run 43160787117, Action `v0.1.5`): `discover`, `product-release`, `sync` and `sync --check` against Vulnetix on Linux, macOS and Windows, and `discover` and `sync` against the ReARM demo. Recorded in `docs/interoperability.md`, `docs/github-action.md`, `docs/compatibility.md` and the new `docs/interop/rearm-2026-11-12.md`. The release workflow ran for `v0.1.6` (run 43182817134); the docs that list the tags it has run for now include it.
 
 ## 0.1.6 — 2026-11-12
