@@ -4,7 +4,9 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
-## Unreleased
+## 0.1.7 — 2026-11-19
+
+Library source changes against `v0.1.6`: the new `libtea-core` modules `purl`, `vers`, `lifecycle` and `signature_format` with `Tei::purl` and `Identifier::purl`, the new `libtea-client` `signature::FormatOnlyVerifier`, and the cache fix (`git diff --stat v0.1.6 v0.1.7 -- crates/tea-core/src crates/tea-client/src`). All additions are additive; `cargo semver-checks` against 0.1.6 reports no update required for either publishable crate.
 
 - `libtea-client`: **fixed** cache entries lost when several clients in one process share a cache directory. Each client numbered its temporary files from zero, so concurrent stores used the same temporary name; the store that lost `create_new` then removed the other's temporary file, and both renames failed. Temporary files are now numbered per process, and a store removes a temporary file only if it created it. Seen as an intermittent Windows failure of `concurrent_clients_never_leave_a_corrupt_entry`. No API change.
 - `libtea-core`: **added** `signature_format::{SignatureFormat, detect_signature_format, MAX_SIGNATURE_INSPECT_BYTES}` (**Experimental**): names the container a detached signature appears to use (OpenPGP armored or binary, CMS `SignedData`, Sigstore bundle) from its bytes alone. It verifies nothing. Additive.
