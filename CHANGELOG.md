@@ -4,7 +4,9 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
-## Unreleased
+## 0.1.8 — 2026-11-19
+
+Library source changes against `v0.1.7`: `libtea-client` only (`Service::discover_purl`, and `Client::discover`'s server selection moved into a shared helper with no change in behaviour); `libtea-core` has no source change and is released at 0.1.8 to keep the crates on one version (`git diff --stat v0.1.7 v0.1.8 -- crates/tea-core/src crates/tea-client/src`). All changes are additive; `cargo semver-checks` against 0.1.7 reports no update required for either publishable crate.
 
 - `libtea-cli` (unpublished): new command `inspect <tei>` resolves a TEI and summarizes its product, product release, components, collection (latest, or `--collection-version`) and artifact formats, as text or `--json` (`docs/cli-json.md`). It downloads nothing and checks no checksum; `sync` remains the command that fetches and verifies a TEI's latest collection. Artifact and signature URLs are not printed.
 - `libtea-cli` (unpublished): new command `search products|product-releases|components|component-releases --base <url>` with `--id-type` (`CPE`, `TEI`, `PURL`, `COMPLIANCE_DOCUMENT`, also alone), `--id-value`, `--sort-field`, `--sort-order`, `--page-size` and `--page-token` (`docs/cli-json.md`). A PURL or TEI value is checked locally and sent as given. The CLI now depends on `serde` (already in the workspace).
