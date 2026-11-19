@@ -6,14 +6,14 @@ are asserted by `crates/tea-cli/tests/json_and_exit_codes.rs`; renaming one
 fails a test. Fields are snake_case. New fields may be added in a minor release;
 consumers should ignore unknown fields.
 
-Newer objects (`sync`, `diff`, `download` status, `cache`, `cle`) carry `schema_version`
+Newer objects (`sync`, `diff`, `download` status, `cache`, `cle`, `inspect`) carry `schema_version`
 (currently `1`). The first group of outputs (`spec`, `parse-tei`, `discover`,
 `product-release`, `collections`, `conformance`) has no version field. All of
 this is the contract since 0.1.0; it did not change through 0.1.6 (the CLI's
 sources are identical between the `v0.1.0` and `v0.1.6` tags). In 0.1.7,
 `download --json` gained an optional `signature` member (below); nothing
 was renamed or removed. After 0.1.7, `discover --purl` (same array as
-`discover <tei>`), `cle` and `search` were added.
+`discover <tei>`), `cle`, `search` and `inspect` were added.
 
 ## `spec --json`
 
@@ -121,6 +121,47 @@ line per result: `uuid<TAB>name` for products and components,
 `uuid<TAB>version<TAB>product<TAB>product_name` for product releases and
 `uuid<TAB>version<TAB>component<TAB>component_name` for component releases
 (`-` when the name is absent).
+
+## `inspect <tei> [--product-release <uuid>] [--collection-version N] --json`
+
+A read-only summary: the TEI is resolved as for `sync` (several product releases
+need `--product-release`, exit status 2 otherwise), then the product release,
+its product and the latest collection (or `--collection-version`) are fetched.
+No artifact is downloaded and no checksum is checked; to fetch and verify the
+latest collection's artifacts and record them, use `sync`.
+
+```json
+{
+  "schema_version": 1,
+  "tei": "<tei as given>",
+  "server": {"root_url": "https://api.example.com/", "api_version": "1.0.0"},
+  "product": {"uuid": "...", "name": "Acme App",
+              "identifiers": [{"type": "PURL", "value": "pkg:npm/acme-app"}]},
+  "product_release": {"uuid": "...", "version": "2.1.0",
+                      "created_date": "2024-01-01T00:00:00Z",
+                      "release_date": "2024-01-15T00:00:00Z",
+                      "components": [{"uuid": "...", "release": "..." }]},
+  "collection": {"uuid": "...", "version": 3,
+                 "created_date": "2024-02-01T00:00:00Z",
+                 "update_reason": "ARTIFACT_ADDED",
+                 "artifacts": [{"uuid": "...", "version": 2, "name": "SBOM", "type": "BOM",
+                                "formats": [{"media_type": "application/vnd.cyclonedx+json",
+                                             "checksum_algorithms": ["SHA-256"],
+                                             "has_url": true, "has_signature": true}]}]}
+}
+```
+
+- `server.root_url` has userinfo, query and fragment removed, as in a lock file.
+- Artifact and signature URLs are not printed, because they can carry signed
+  queries; `has_url` and `has_signature` say whether the format declares one.
+  `has_signature` means a signature URL is published, not that anything was
+  verified.
+- `release_date`, a component's `release` and an artifact's `name` are `null`
+  when absent.
+
+Without `--json`: one tab-separated line per object, each starting with its
+kind (`server`, `product`, `identifier`, `product_release`, `component`,
+`collection`, `artifact`, `format`).
 
 ## `download ... --output FILE --json`
 

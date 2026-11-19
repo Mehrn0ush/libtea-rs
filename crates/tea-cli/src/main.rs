@@ -36,6 +36,7 @@ macro_rules! err {
     };
 }
 
+mod inspect;
 mod sync;
 
 const ENV_API_KEY_ID: &str = "TEA_API_KEY_ID";
@@ -421,6 +422,33 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Resolve a TEI and summarize its product, product release, collection
+    /// and artifacts. Read-only: nothing is downloaded or checked (to fetch
+    /// and verify the artifacts, use `sync`).
+    Inspect {
+        tei: String,
+        /// Product release UUID, when the TEI resolves to several.
+        #[arg(long)]
+        product_release: Option<String>,
+        /// Summarize this collection version instead of the latest.
+        #[arg(long)]
+        collection_version: Option<u64>,
+        /// Send the API key to token endpoints learned from discovery.
+        #[arg(long)]
+        allow_discovered_credentials: bool,
+        /// Fetch the well-known document from this URL instead of the TEI domain.
+        #[arg(long)]
+        well_known_url: Option<Url>,
+        /// Allow HTTP and non-public addresses for this origin only.
+        #[arg(long)]
+        allow_origin: Option<Url>,
+        #[command(flatten)]
+        credentials: CredentialArgs,
+        #[command(flatten)]
+        cache: CacheArgs,
+        #[arg(long)]
+        json: bool,
+    },
     /// Compare two lock files offline; exit 7 if they differ (fetchedAt is ignored).
     Diff {
         old: PathBuf,
@@ -511,6 +539,7 @@ impl Command {
             | Command::Search { json, .. }
             | Command::Download { json, .. }
             | Command::Sync { json, .. }
+            | Command::Inspect { json, .. }
             | Command::Diff { json, .. } => *json,
             Command::Cache { action } => match action {
                 CacheAction::Stat { json, .. } | CacheAction::Clear { json, .. } => *json,
@@ -1071,6 +1100,30 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                 collection_version,
                 fetched_at,
                 allow_weak_checksums,
+                allow_discovered_credentials,
+                well_known_url,
+                allow_origin,
+                credentials,
+                cache,
+                json,
+            })
+            .await?;
+        }
+        Command::Inspect {
+            tei,
+            product_release,
+            collection_version,
+            allow_discovered_credentials,
+            well_known_url,
+            allow_origin,
+            credentials,
+            cache,
+            json,
+        } => {
+            inspect::inspect(inspect::InspectOptions {
+                tei,
+                product_release,
+                collection_version,
                 allow_discovered_credentials,
                 well_known_url,
                 allow_origin,

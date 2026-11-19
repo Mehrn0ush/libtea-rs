@@ -199,7 +199,7 @@ pub(crate) fn diff(old: &Path, new: &Path, json: bool) -> anyhow::Result<()> {
     }
 }
 
-fn select_release(
+pub(crate) fn select_release(
     releases: &[libtea_client::ResolvedRelease],
     wanted: Option<&str>,
 ) -> anyhow::Result<libtea_client::ResolvedRelease> {

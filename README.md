@@ -87,6 +87,14 @@ integrity verified (decoded-byte checksums only; not publisher authenticity)	str
 
 `download` writes to a temporary file and moves it into place only after every declared checksum matched the decoded bytes. An existing output file is refused unless you pass `--force`. If all declared checksums are SHA-1 the command exits 4 and writes nothing, unless you pass `--allow-weak-checksums`. Add `--require-checksums` to fail when a format declares none.
 
+### Inspect a TEI
+
+`inspect` resolves a TEI and prints a summary of its product, product release, components, latest collection and artifact formats. It downloads nothing. To fetch the latest collection's artifacts, check them and record them, use `sync` (next section).
+
+```sh
+libtea inspect tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
+```
+
 ### Search by identifier
 
 `search` queries products, product releases, components or component releases on a known API base, filtered by identifier type and value (or by type alone). A PURL or TEI value is checked before it is sent, and is sent as given. Pages are the caller's: pass the printed `next_page_token` back as `--page-token`.
