@@ -87,6 +87,15 @@ integrity verified (decoded-byte checksums only; not publisher authenticity)	str
 
 `download` writes to a temporary file and moves it into place only after every declared checksum matched the decoded bytes. An existing output file is refused unless you pass `--force`. If all declared checksums are SHA-1 the command exits 4 and writes nothing, unless you pass `--allow-weak-checksums`. Add `--require-checksums` to fail when a format declares none.
 
+### Search by identifier
+
+`search` queries products, product releases, components or component releases on a known API base, filtered by identifier type and value (or by type alone). A PURL or TEI value is checked before it is sent, and is sent as given. Pages are the caller's: pass the printed `next_page_token` back as `--page-token`.
+
+```sh
+libtea search products --base https://api.example.com --id-type PURL --id-value pkg:npm/left-pad@1.3.0
+libtea search product-releases --base https://api.example.com --sort-field release-date --sort-order desc --page-size 20
+```
+
 ### Lifecycle (CLE)
 
 `cle` fetches the lifecycle events of a product, product release, component or component release. With `--version` it also says which apply to that version, comparing versions as SemVer. A range it cannot compare (a `vers` type other than `semver` or `npm`, such as `pypi`) is listed as not evaluated, never as not applying.
