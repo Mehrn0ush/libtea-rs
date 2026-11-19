@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-client`: **added** `Service::discover_purl(&Purl)`, which resolves a Package URL through `/discovery` on a known API base and chooses the server and version for each release as `Client::discover` does for a TEI. The PURL is sent as given, not in canonical form. Additive.
+- `libtea-cli` (unpublished): `discover --purl <purl> --base <url>` resolves a Package URL on a known API base (a PURL names no server); a malformed PURL is exit status 2 and nothing is sent. The output is the same as for a TEI. New command `cle` fetches the lifecycle (CLE) of a product, product release, component or component release, and with `--version` evaluates it for that SemVer version, listing the events it could not evaluate (`docs/cli-json.md`). `404 NOT_IMPLEMENTED` exits 0 with `implemented: false`. Part of #61.
 - Documentation: the release workflow ran for `v0.1.7` (run 44500983192); the docs that list the tags it has run for now include it. The design notes for PURL, CLE and signatures point at their stage 2 issues (#60, #61, #62), and `docs/compatibility.md` is reviewed for 0.1.7.
 
 ## 0.1.7 — 2026-11-19

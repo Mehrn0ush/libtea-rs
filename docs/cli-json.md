@@ -6,13 +6,14 @@ are asserted by `crates/tea-cli/tests/json_and_exit_codes.rs`; renaming one
 fails a test. Fields are snake_case. New fields may be added in a minor release;
 consumers should ignore unknown fields.
 
-Newer objects (`sync`, `diff`, `download` status, `cache`) carry `schema_version`
+Newer objects (`sync`, `diff`, `download` status, `cache`, `cle`) carry `schema_version`
 (currently `1`). The first group of outputs (`spec`, `parse-tei`, `discover`,
 `product-release`, `collections`, `conformance`) has no version field. All of
 this is the contract since 0.1.0; it did not change through 0.1.6 (the CLI's
 sources are identical between the `v0.1.0` and `v0.1.6` tags). In 0.1.7,
 `download --json` gained an optional `signature` member (below); nothing
-was renamed or removed.
+was renamed or removed. After 0.1.7, `discover --purl` (same array as
+`discover <tei>`) and `cle` were added.
 
 ## `spec --json`
 
@@ -31,9 +32,61 @@ The flag is accepted for uniformity; the report is always JSON. Object:
 (array of `{id, passed, detail}`). It is an offline smoke report, not a
 certification.
 
-## `discover <tei> --json`
+## `discover <tei> --json` and `discover --purl <purl> --base <url> --json`
 
-Array of `{product_release, root_url, api_version}`.
+Array of `{product_release, root_url, api_version}`: for each product release,
+the server and API version to call next. For `--purl` that is chosen from the
+`servers` of the `/discovery` answer on `--base`, as for a TEI. The PURL is
+checked locally first (a malformed one is exit status 2 and nothing is sent)
+and is sent exactly as given, not in canonical form.
+
+## `cle --base <url> (--product | --product-release | --component | --component-release) <uuid> [--version <v>] --json`
+
+```json
+{
+  "schema_version": 1,
+  "subject": {"type": "product_release", "uuid": "<uuid as given>"},
+  "implemented": true,
+  "message": null,
+  "cle": {"events": [ ... ], "definitions": { ... }},
+  "version": "1.4.0",
+  "status": {
+    "released": "2024-01-01T00:00:00Z",
+    "end_of_development": null,
+    "end_of_support": null,
+    "end_of_life": "2026-01-01T00:00:00Z",
+    "end_of_distribution": null,
+    "end_of_marketing": null,
+    "superseded_by": null,
+    "withdrawn_events": [4],
+    "unevaluated": [{"event_id": 2, "reason": "unsupported_scheme", "detail": "pypi"}]
+  }
+}
+```
+
+- `subject.type` is `product`, `product_release`, `component` or
+  `component_release`.
+- `cle` is the CLE document re-serialised from the model (camelCase, as in the
+  TEA OpenAPI). When the server answers `404 NOT_IMPLEMENTED`, `implemented`
+  is `false`, `cle` is `null`, `message` is the server's message (or `null`)
+  and the exit status is 0. Any other `404` is exit status 5.
+- `version` and `status` are present only with `--version`, which takes a
+  SemVer 2.0 version (`1.4.0`, not `1.4` or `v1.4.0`; anything else is exit
+  status 2 and nothing is sent). `status` is `null` when `implemented` is
+  `false`.
+- Dates are the `effective` time of the event that applies (the highest `id`
+  of each type); `null` means no applying event *that could be evaluated*.
+  Events whose `vers` range is of a type other than `semver` or `npm`, that
+  are malformed, or whose type is unknown are listed in `unevaluated` with
+  `reason` `unsupported_scheme` (`detail`: the `vers` type), `malformed`
+  (`detail`: what was wrong) or `unknown_event_type` (`detail`: the type).
+  Check `unevaluated` before reading a `null` as "does not apply".
+- `withdrawn_events` lists the ids cancelled by `withdrawn` events.
+
+Without `--json`, `cle` prints the CLE document as indented JSON, or with
+`--version` one `name<TAB>value` line per field above (`-` for none), plus
+`withdrawn_event<TAB>id` and `unevaluated<TAB>id<TAB>reason<TAB>detail` lines,
+and a warning on stderr when an event could not be evaluated.
 
 ## `product-release ... --json`
 

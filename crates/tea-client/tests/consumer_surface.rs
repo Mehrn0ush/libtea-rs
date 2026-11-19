@@ -610,3 +610,56 @@ async fn product_release_get_and_unknown_identifier() {
         } if code == "OBJECT_UNKNOWN"
     ));
 }
+
+#[tokio::test]
+async fn discover_purl_sends_the_original_spelling_and_selects_a_server() {
+    let server = MockServer::start().await;
+    let spelled = "pkg:PyPI/Django@4.2?B=2&a=1";
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/discovery"))
+        .and(query_param("purl", spelled))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!([{
+                "productReleaseUuid": ID,
+                "servers": [
+                    {"rootUrl": "https://old.example.com", "versions": ["0.9.0"], "priority": 1},
+                    {"rootUrl": server.uri(), "versions": ["1.0.0"], "priority": 0.5}
+                ]
+            }])),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    let service = client.service(&server.uri(), "1.0.0").unwrap();
+    let purl = libtea_core::Purl::parse(spelled).unwrap();
+    let releases = service.discover_purl(&purl).await.unwrap();
+    assert_eq!(releases.len(), 1);
+    assert_eq!(
+        releases[0].product_release,
+        ProductReleaseId::parse(ID).unwrap()
+    );
+    // The only server with a supported version, despite its lower priority.
+    assert_eq!(releases[0].root_url, server.uri());
+    assert_eq!(releases[0].api_version, "1.0.0");
+}
+
+#[tokio::test]
+async fn discover_purl_with_no_usable_server_is_an_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1.0.0/discovery"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!([{
+                "productReleaseUuid": ID,
+                "servers": [{"rootUrl": server.uri(), "versions": ["0.9.0"], "priority": 1}]
+            }])),
+        )
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    let service = client.service(&server.uri(), "1.0.0").unwrap();
+    let purl = libtea_core::Purl::parse("pkg:pypi/django@4.2").unwrap();
+    let error = service.discover_purl(&purl).await.unwrap_err();
+    assert!(matches!(error, ClientError::Model(_)), "{error:?}");
+}

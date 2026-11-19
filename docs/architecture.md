@@ -13,7 +13,7 @@ libtea-cli
 
 `libtea-conformance` runs checks that do not contact a network and writes a JSON report. A passing report means the local checks passed. It does not certify a server.
 
-`libtea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover`, `product-release`, `collections`, `download`, `sync`, `diff` and `cache`. Identifier filters are `ListParams` on `libtea-client` list methods; the CLI does not expose them.
+`libtea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover` (a TEI, or a PURL on a known base), `product-release`, `collections`, `cle`, `download`, `sync`, `diff` and `cache`. Identifier filters are `ListParams` on `libtea-client` list methods; the CLI does not expose them.
 
 ## Request path
 
