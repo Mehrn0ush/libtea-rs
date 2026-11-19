@@ -24,12 +24,14 @@ pub mod enums;
 pub mod error;
 pub mod http_cache;
 pub mod ids;
+pub mod lifecycle;
 pub mod lock;
 pub mod model;
 pub mod policy;
 pub mod purl;
 pub mod signature_format;
 pub mod tei;
+pub mod vers;
 pub mod version;
 
 // Third-party crates whose types appear in this crate's public API. Re-exported
@@ -50,6 +52,7 @@ pub use ids::{
     ArtifactId, CollectionId, ComponentId, ComponentReleaseId, DistributionId, ProductId,
     ProductReleaseId, TeaTimestamp, TeaUuid,
 };
+pub use lifecycle::{LifecycleStatus, Unevaluated};
 pub use lock::{
     diff as diff_locks, ChangedArtifact, FieldChange, LockDiff, LockFile, LockedArtifact,
     LockedChecksum, LockedIntegrity, LOCK_SCHEMA_VERSION,

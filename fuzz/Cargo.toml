@@ -11,6 +11,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 libtea-core = { path = "../crates/tea-core" }
+semver = "1"
 
 [[bin]]
 name = "tei_parse"
@@ -77,15 +78,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "signature_format"
-path = "fuzz_targets/signature_format.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "purl_parse"
-path = "fuzz_targets/purl_parse.rs"
+name = "vers_range"
+path = "fuzz_targets/vers_range.rs"
 test = false
 doc = false
 bench = false

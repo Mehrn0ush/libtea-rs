@@ -376,5 +376,6 @@ No other consumer paths are implemented. Publisher operations are out of scope.
 
 - Signature download tests assert bytes / absence only — not authenticity. `detect_signature_format` names a container (OpenPGP, CMS, Sigstore bundle) from hand-built fixtures; no signature from a real publisher has been inspected, because no server in `docs/interop/` serves one.
 - Oolong CLE and `/token` live results are server limitations, not SDK defects.
+- `Cle::status_for_semver` is tested with the OpenAPI examples and hand-built events only; no server in `docs/interop/` has served a CLE document to evaluate.
 - Vulnetix evidence is for that named deployment only.
 - ReARM evidence is one run against the public demo deployment, for one product release; it says nothing about other ReARM deployments.

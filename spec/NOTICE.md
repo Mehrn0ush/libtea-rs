@@ -14,10 +14,10 @@ The Apache License 2.0 text is in this repository's root `LICENSE`. The
 upstream `LICENSE` and any upstream `NOTICE` file are not vendored. Re-check
 them at the pinned commit when re-pinning (`spec/RE-PINNING.md`).
 
-The files under `spec/purl/` are unmodified copies of the Package URL test
-suite and its MIT `LICENSE` from https://github.com/package-url/purl-spec
-(release `v1.1.1`, commit `26671718c3da7225c582a94da319c0c6c3a60cf7`); paths
-and SHA-256 digests in `spec/purl/PINNED.md`.
+The files under `spec/vers/` are unmodified copies of two `vers` test files
+and the MIT `LICENSE` from https://github.com/package-url/vers-spec (release
+`v1.2.1`, commit `76c729180ce3ffb24b2e9f90e34585150fe0ffcf`); digests in
+`spec/vers/PINNED.md`.
 
 These files are specification inputs for tests and documentation. They are not
 packaged into the published `libtea-core` or `libtea-client` crates (check
