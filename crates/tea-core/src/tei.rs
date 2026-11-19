@@ -99,6 +99,41 @@ impl Tei {
         format!("https://{}/.well-known/tea", self.domain)
     }
 
+    /// The Package URL inside a `purl` TEI, or `None` for any other TEI type.
+    ///
+    /// **Experimental:** may change in a 0.x minor release.
+    ///
+    /// The identifier is decoded from unpadded Base64URL and parsed with
+    /// [`crate::purl::Purl::parse`]. The TEI itself is not changed: a TEI is
+    /// used exactly as received, whatever the canonical form of its PURL.
+    ///
+    /// ```
+    /// use libtea_core::Tei;
+    ///
+    /// let tei = Tei::parse("tei://example.com/purl/cGtnOm1hdmVuL2NvbW1vbnMtaW8vY29tbW9ucy1pb0AyLjIyLjA").unwrap();
+    /// let purl = tei.purl().unwrap().unwrap();
+    /// assert_eq!(purl.as_str(), "pkg:maven/commons-io/commons-io@2.22.0");
+    /// assert_eq!(Tei::parse("tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d").unwrap().purl(), None);
+    /// ```
+    #[must_use]
+    pub fn purl(&self) -> Option<Result<crate::purl::Purl, crate::purl::PurlError>> {
+        if self.tei_type != "purl" {
+            return None;
+        }
+        let decoded = if self.identifier.contains('=') {
+            None
+        } else {
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(&self.identifier)
+                .ok()
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+        };
+        Some(match decoded {
+            Some(text) => crate::purl::Purl::parse(&text),
+            None => Err(crate::purl::PurlError::TeiIdentifier),
+        })
+    }
+
     /// Check the unique identifier against the TEI type registry at the pinned commit.
     ///
     /// Unknown types are structurally valid and return `Ok(())`. Their

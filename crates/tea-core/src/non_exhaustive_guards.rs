@@ -1408,3 +1408,71 @@ pub(crate) struct GuardSignatureFormat;
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlSignatureFormat;
+
+/// `PurlError` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::PurlError) -> u8 {
+///     match x {
+///         libtea_core::PurlError::TooLong => 0,
+///         libtea_core::PurlError::Scheme => 0,
+///         libtea_core::PurlError::Type => 0,
+///         libtea_core::PurlError::Name => 0,
+///         libtea_core::PurlError::Namespace => 0,
+///         libtea_core::PurlError::QualifierKey => 0,
+///         libtea_core::PurlError::DuplicateQualifier => 0,
+///         libtea_core::PurlError::Subpath => 0,
+///         libtea_core::PurlError::Encoding => 0,
+///         libtea_core::PurlError::TeiIdentifier => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardPurlError;
+
+/// Control for `GuardPurlError`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::PurlError) -> u8 {
+///     match x {
+///         libtea_core::PurlError::TooLong => 0,
+///         libtea_core::PurlError::Scheme => 0,
+///         libtea_core::PurlError::Type => 0,
+///         libtea_core::PurlError::Name => 0,
+///         libtea_core::PurlError::Namespace => 0,
+///         libtea_core::PurlError::QualifierKey => 0,
+///         libtea_core::PurlError::DuplicateQualifier => 0,
+///         libtea_core::PurlError::Subpath => 0,
+///         libtea_core::PurlError::Encoding => 0,
+///         libtea_core::PurlError::TeiIdentifier => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlPurlError;
+
+/// `PurlRules` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::PurlRules) -> u8 {
+///     match x {
+///         libtea_core::PurlRules::Generic => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardPurlRules;
+
+/// Control for `GuardPurlRules`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::PurlRules) -> u8 {
+///     match x {
+///         libtea_core::PurlRules::Generic => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlPurlRules;

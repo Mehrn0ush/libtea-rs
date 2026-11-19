@@ -27,6 +27,7 @@ pub mod ids;
 pub mod lock;
 pub mod model;
 pub mod policy;
+pub mod purl;
 pub mod signature_format;
 pub mod tei;
 pub mod version;
@@ -60,6 +61,7 @@ pub use model::{
     ProductReleaseWithCollection, TeaErrorBody, TokenResponse,
 };
 pub use policy::{classify_ip, origin_key, parse_api_base, DestinationPolicy, IpClass};
+pub use purl::{same_package_url, CanonicalPurl, Purl, PurlError, PurlRules};
 pub use signature_format::{detect_signature_format, SignatureFormat};
 pub use tei::{encode_query_component, Tei};
 pub use version::{
