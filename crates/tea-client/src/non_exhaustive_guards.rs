@@ -645,3 +645,23 @@ pub(crate) struct GuardCacheStats;
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlCacheStats;
+
+/// `FormatOnlyVerifier` is `#[non_exhaustive]`: struct-update syntax must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::FormatOnlyVerifier) {
+///     let _ = libtea_client::FormatOnlyVerifier { ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardFormatOnlyVerifier;
+
+/// Control for `GuardFormatOnlyVerifier`: the type path and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::FormatOnlyVerifier) {
+///     let libtea_client::FormatOnlyVerifier { .. } = base;
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlFormatOnlyVerifier;

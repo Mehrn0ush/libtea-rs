@@ -29,6 +29,19 @@ pub struct Identifier {
     pub id_value: String,
 }
 
+impl Identifier {
+    /// The value parsed as a Package URL when `id_type` is `PURL`, otherwise `None`.
+    ///
+    /// **Experimental:** may change in a 0.x minor release.
+    ///
+    /// `id_value` is not changed; compare [`crate::purl::Purl::canonical`] values
+    /// to ask whether two identifiers name the same package.
+    #[must_use]
+    pub fn purl(&self) -> Option<Result<crate::purl::Purl, crate::purl::PurlError>> {
+        (self.id_type == IdentifierType::Purl).then(|| crate::purl::Purl::parse(&self.id_value))
+    }
+}
+
 /// A TEA Product.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
