@@ -145,6 +145,9 @@ Decisions taken: own implementation (no new dependency), generic rules only
   is not a version separator: the version is split from the last path
   segment only. The suite has this case; how-to-parse, read literally, would
   take `babel/core` as the version.
+- In 0.1.8 (part of #60): `Service::discover_purl` (`libtea-client`) and
+  `libtea discover --purl` send a parsed `Purl` to `/discovery` as given
+  (`Purl::as_str`), not canonicalized.
 
 **Corrections to the proposal above**, from ECMA-427 clause 5 and the type
 definitions at the pinned commit:

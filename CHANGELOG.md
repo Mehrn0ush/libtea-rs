@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- Documentation: the release workflow ran for `v0.1.8` (run 44584585018); the docs that list the tags it has run for now include it. `docs/cli-json.md` and the CLE and PURL design notes say the new commands shipped in 0.1.8, and `docs/compatibility.md` is reviewed for 0.1.8 and notes that those commands are tested against mock servers only.
+
 ## 0.1.8 — 2026-11-19
 
 Library source changes against `v0.1.7`: `libtea-client` only (`Service::discover_purl`, and `Client::discover`'s server selection moved into a shared helper with no change in behaviour); `libtea-core` has no source change and is released at 0.1.8 to keep the crates on one version (`git diff --stat v0.1.7 v0.1.8 -- crates/tea-core/src crates/tea-client/src`). All changes are additive; `cargo semver-checks` against 0.1.7 reports no update required for either publishable crate.
