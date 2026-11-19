@@ -212,9 +212,13 @@ pub(crate) fn current_uid(fallback: Option<&Path>) -> Result<u32, ClientError> {
 pub(crate) struct Cache {
     pub(crate) config: CacheConfig,
     entries: PathBuf,
-    counter: AtomicU64,
     pub(crate) offline: bool,
 }
+
+/// Numbers temporary files. One per process, not per [`Cache`]: several clients
+/// in one process can share a directory, and a per-cache counter gave each of
+/// them the same names.
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl Cache {
     pub(crate) fn open(config: CacheConfig, offline: bool) -> Result<Self, ClientError> {
@@ -224,7 +228,6 @@ impl Cache {
         Ok(Self {
             config,
             entries,
-            counter: AtomicU64::new(0),
             offline,
         })
     }
@@ -238,7 +241,7 @@ impl Cache {
         self.entries.join(format!(
             ".{key}.{}-{}.tmp",
             std::process::id(),
-            self.counter.fetch_add(1, Ordering::Relaxed)
+            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
         ))
     }
 
@@ -295,16 +298,9 @@ impl Cache {
         let Ok(bytes) = encode_entry(meta, body) else {
             return;
         };
-        let tmp = self.temp_path(key);
-        let result = open_private(&tmp)
-            .and_then(|mut file| file.write_all(&bytes))
-            .and_then(|()| std::fs::rename(&tmp, self.entry_path(key)));
-        match result {
+        match write_entry_file(&self.temp_path(key), &bytes, &self.entry_path(key)) {
             Ok(()) => self.prune_blocking(),
-            Err(error) => {
-                tracing::debug!(kind = ?error.kind(), "cache entry not written");
-                let _ = std::fs::remove_file(&tmp);
-            }
+            Err(error) => tracing::debug!(kind = ?error.kind(), "cache entry not written"),
         }
     }
 
@@ -454,6 +450,21 @@ fn read_regular(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
         ));
     }
     Ok(bytes)
+}
+
+/// Write `bytes` to the new file `tmp`, then rename it to `dest`. On failure
+/// `tmp` is removed only if this call created it: a file already at that path
+/// belongs to someone else.
+fn write_entry_file(tmp: &Path, bytes: &[u8], dest: &Path) -> std::io::Result<()> {
+    let mut file = open_private(tmp)?;
+    let result = file.write_all(bytes).and_then(|()| {
+        drop(file);
+        std::fs::rename(tmp, dest)
+    });
+    if result.is_err() {
+        let _ = std::fs::remove_file(tmp);
+    }
+    result
 }
 
 fn open_private(path: &Path) -> std::io::Result<std::fs::File> {
@@ -682,6 +693,58 @@ pub fn cache_clear(dir: &Path) -> Result<u64, ClientError> {
         }
     }
     Ok(removed)
+}
+
+#[cfg(test)]
+mod temp_file_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("libtea-cache-tmp-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn two_caches_on_one_directory_never_share_a_temporary_name() {
+        let dir = scratch("names");
+        // The cache creates its own directory, private; `scratch` is not.
+        let cache_dir = dir.join("cache");
+        let first = Cache::open(CacheConfig::new(&cache_dir), false).unwrap();
+        let second = Cache::open(CacheConfig::new(&cache_dir), false).unwrap();
+        let key = "0".repeat(64);
+        let names: std::collections::BTreeSet<PathBuf> = (0..4)
+            .flat_map(|_| [first.temp_path(&key), second.temp_path(&key)])
+            .collect();
+        assert_eq!(names.len(), 8);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_temporary_file_someone_else_created_is_left_alone() {
+        let dir = scratch("theirs");
+        let tmp = dir.join("theirs.tmp");
+        let dest = dir.join("entry");
+        std::fs::write(&tmp, b"theirs").unwrap();
+        let error = write_entry_file(&tmp, b"mine", &dest).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(&tmp).unwrap(), b"theirs");
+        assert!(!dest.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_rename_removes_only_its_own_temporary_file() {
+        let dir = scratch("mine");
+        let tmp = dir.join("mine.tmp");
+        // A destination inside a missing directory: the rename fails.
+        let dest = dir.join("missing").join("entry");
+        assert!(write_entry_file(&tmp, b"mine", &dest).is_err());
+        assert!(!tmp.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(all(test, unix))]
