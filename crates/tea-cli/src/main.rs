@@ -122,6 +122,7 @@ fn classify(error: &anyhow::Error) -> (u8, &'static str) {
     }
     // A bare model, TEI or policy error comes from a value the user passed.
     if error.downcast_ref::<libtea_core::TeiError>().is_some()
+        || error.downcast_ref::<libtea_core::PurlError>().is_some()
         || error.downcast_ref::<libtea_core::ModelError>().is_some()
         || error.downcast_ref::<libtea_core::PolicyError>().is_some()
     {
@@ -181,16 +182,28 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Resolve a TEI through `.well-known/tea` and `/discovery`.
+    /// Resolve a TEI through `.well-known/tea` and `/discovery`, or a Package
+    /// URL (`--purl`) through `/discovery` on a known API base.
     Discover {
-        tei: String,
+        #[arg(required_unless_present = "purl", conflicts_with = "purl")]
+        tei: Option<String>,
+        /// Resolve this Package URL instead of a TEI. A PURL names no server,
+        /// so --base is required. It is checked locally and sent as given.
+        #[arg(long, requires = "base")]
+        purl: Option<String>,
+        /// The API base to ask for --purl.
+        #[arg(long, requires = "purl")]
+        base: Option<String>,
+        /// The API version of --base [default: 1.0.0].
+        #[arg(long, requires = "purl")]
+        api_version: Option<String>,
         #[command(flatten)]
         credentials: CredentialArgs,
         /// Send the API key to token endpoints learned from discovery.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "purl")]
         allow_discovered_credentials: bool,
         /// Fetch the well-known document from this URL instead of the TEI domain.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "purl")]
         well_known_url: Option<Url>,
         /// Allow HTTP and non-public addresses for this origin only.
         #[arg(long)]
@@ -236,6 +249,40 @@ enum Command {
         page_size: Option<u32>,
         #[arg(long)]
         page_token: Option<String>,
+        #[command(flatten)]
+        credentials: CredentialArgs,
+        #[arg(long)]
+        allow_origin: Option<Url>,
+        #[command(flatten)]
+        cache: CacheArgs,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Fetch the lifecycle (CLE) of one object from a known API base, and
+    /// with --version, the lifecycle status of that version.
+    #[command(group(clap::ArgGroup::new("subject").required(true).multiple(false)))]
+    Cle {
+        #[arg(long)]
+        base: String,
+        #[arg(long, default_value = "1.0.0")]
+        api_version: String,
+        /// Product UUID.
+        #[arg(long, group = "subject")]
+        product: Option<String>,
+        /// Product release UUID.
+        #[arg(long, group = "subject")]
+        product_release: Option<String>,
+        /// Component UUID.
+        #[arg(long, group = "subject")]
+        component: Option<String>,
+        /// Component release UUID.
+        #[arg(long, group = "subject")]
+        component_release: Option<String>,
+        /// Evaluate the events for this SemVer 2.0 version (for example
+        /// 1.4.0). Ranges of `vers` types other than semver and npm are listed
+        /// as not evaluated, never as not applying.
+        #[arg(long)]
+        version: Option<String>,
         #[command(flatten)]
         credentials: CredentialArgs,
         #[arg(long)]
@@ -381,6 +428,7 @@ impl Command {
             | Command::Discover { json, .. }
             | Command::ProductRelease { json, .. }
             | Command::Collections { json, .. }
+            | Command::Cle { json, .. }
             | Command::Download { json, .. }
             | Command::Sync { json, .. }
             | Command::Diff { json, .. } => *json,
@@ -538,6 +586,9 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Discover {
             tei,
+            purl,
+            base,
+            api_version,
             credentials,
             allow_discovered_credentials,
             well_known_url,
@@ -545,22 +596,35 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             cache,
             json,
         } => {
-            let parsed = Tei::parse(&tei)?;
-            let mut builder = with_cache(
-                ClientBuilder::new().allow_discovered_credentials(allow_discovered_credentials),
-                &cache,
-            )?;
-            if let Some((id, secret)) = resolve_api_key(&credentials)? {
-                builder = builder.api_key(ApiKey::new(id, secret));
-            }
-            if let Some(origin) = &allow_origin {
-                builder = builder
-                    .destination_policy(libtea_core::DestinationPolicy::allow_origin(origin)?);
-            }
-            if let Some(url) = well_known_url {
-                builder = builder.well_known_fetch_url(url);
-            }
-            let releases = builder.build()?.discover(&parsed).await?;
+            let releases = if let Some(purl) = purl {
+                // Checked before any request; the server gets the text as given.
+                let parsed = libtea_core::Purl::parse(&purl)?;
+                let base = base.ok_or_else(|| usage("--purl needs --base"))?;
+                let client =
+                    with_cache(configured_builder(&credentials, allow_origin)?, &cache)?.build()?;
+                client
+                    .service(&base, api_version.as_deref().unwrap_or("1.0.0"))?
+                    .discover_purl(&parsed)
+                    .await?
+            } else {
+                let tei = tei.ok_or_else(|| usage("give a TEI or --purl"))?;
+                let parsed = Tei::parse(&tei)?;
+                let mut builder = with_cache(
+                    ClientBuilder::new().allow_discovered_credentials(allow_discovered_credentials),
+                    &cache,
+                )?;
+                if let Some((id, secret)) = resolve_api_key(&credentials)? {
+                    builder = builder.api_key(ApiKey::new(id, secret));
+                }
+                if let Some(origin) = &allow_origin {
+                    builder = builder
+                        .destination_policy(libtea_core::DestinationPolicy::allow_origin(origin)?);
+                }
+                if let Some(url) = well_known_url {
+                    builder = builder.well_known_fetch_url(url);
+                }
+                builder.build()?.discover(&parsed).await?
+            };
             if json {
                 let rows: Vec<_> = releases
                     .iter()
@@ -583,6 +647,57 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                     );
                 }
             }
+        }
+        Command::Cle {
+            base,
+            api_version,
+            product,
+            product_release,
+            component,
+            component_release,
+            version,
+            credentials,
+            allow_origin,
+            cache,
+            json,
+        } => {
+            // Parse everything the user gave before any request.
+            let version = version
+                .map(|text| {
+                    libtea_core::semver::Version::parse(&text).map_err(|error| {
+                        usage(format!("--version is not a SemVer version: {error}"))
+                    })
+                })
+                .transpose()?;
+            let client =
+                with_cache(configured_builder(&credentials, allow_origin)?, &cache)?.build()?;
+            let service = client.service(&base, &api_version)?;
+            let (kind, uuid, fetch) = if let Some(uuid) = product {
+                let id = libtea_core::ProductId::parse(&uuid)?;
+                ("product", uuid, service.get_product_cle(id).await?)
+            } else if let Some(uuid) = product_release {
+                let id = libtea_core::ProductReleaseId::parse(&uuid)?;
+                (
+                    "product_release",
+                    uuid,
+                    service.get_product_release_cle(id).await?,
+                )
+            } else if let Some(uuid) = component {
+                let id = libtea_core::ComponentId::parse(&uuid)?;
+                ("component", uuid, service.get_component_cle(id).await?)
+            } else if let Some(uuid) = component_release {
+                let id = libtea_core::ComponentReleaseId::parse(&uuid)?;
+                (
+                    "component_release",
+                    uuid,
+                    service.get_component_release_cle(id).await?,
+                )
+            } else {
+                return Err(usage(
+                    "give one of --product, --product-release, --component, --component-release",
+                ));
+            };
+            print_cle(kind, &uuid, &fetch, version.as_ref(), json)?;
         }
         Command::ProductRelease {
             base,
@@ -1113,6 +1228,127 @@ fn check_output_target(path: &Path, force: bool) -> anyhow::Result<()> {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err).with_context(|| format!("inspecting {}", path.display())),
     }
+}
+
+/// Print a CLE fetch, and with a version its lifecycle status
+/// (`docs/cli-json.md`).
+fn print_cle(
+    kind: &str,
+    uuid: &str,
+    fetch: &libtea_client::CleFetch,
+    version: Option<&libtea_core::semver::Version>,
+    json: bool,
+) -> anyhow::Result<()> {
+    let (cle, message) = match fetch {
+        libtea_client::CleFetch::Events(cle) => (Some(cle), None),
+        libtea_client::CleFetch::NotImplemented { message, .. } => (None, message.as_deref()),
+        _ => return Err(anyhow::anyhow!("unsupported CLE response")),
+    };
+    let status = cle
+        .zip(version)
+        .map(|(cle, version)| cle.status_for_semver(version));
+    if json {
+        let mut value = serde_json::json!({
+            "schema_version": 1,
+            "subject": {"type": kind, "uuid": uuid},
+            "implemented": cle.is_some(),
+            "message": message,
+            "cle": cle,
+        });
+        if let Some(version) = version {
+            value["version"] = serde_json::json!(version.to_string());
+            value["status"] = status.as_ref().map_or(serde_json::Value::Null, status_json);
+        }
+        out!("{}", serde_json::to_string_pretty(&value)?);
+        return Ok(());
+    }
+    let Some(cle) = cle else {
+        err!(
+            "lifecycle not implemented by the server for this {}{}",
+            kind.replace('_', " "),
+            message.map(|m| format!(": {m}")).unwrap_or_default()
+        );
+        return Ok(());
+    };
+    let Some(status) = status else {
+        out!("{}", serde_json::to_string_pretty(cle)?);
+        return Ok(());
+    };
+    let date = |value: &Option<libtea_core::TeaTimestamp>| {
+        value
+            .as_ref()
+            .map_or_else(|| "-".to_owned(), |t| t.as_str().to_owned())
+    };
+    out!(
+        "version\t{}",
+        version.map(ToString::to_string).unwrap_or_default()
+    );
+    out!("released\t{}", date(&status.released));
+    out!("end_of_development\t{}", date(&status.end_of_development));
+    out!("end_of_support\t{}", date(&status.end_of_support));
+    out!("end_of_life\t{}", date(&status.end_of_life));
+    out!("end_of_distribution\t{}", date(&status.end_of_distribution));
+    out!("end_of_marketing\t{}", date(&status.end_of_marketing));
+    out!(
+        "superseded_by\t{}",
+        status.superseded_by.as_deref().unwrap_or("-")
+    );
+    for id in &status.withdrawn_events {
+        out!("withdrawn_event\t{id}");
+    }
+    for item in &status.unevaluated {
+        let (event_id, reason, detail) = unevaluated_parts(item);
+        out!("unevaluated\t{event_id}\t{reason}\t{detail}");
+    }
+    if !status.unevaluated.is_empty() {
+        err!(
+            "{} event(s) could not be evaluated for this version; a missing date above is not \
+             evidence that the event does not apply",
+            status.unevaluated.len()
+        );
+    }
+    Ok(())
+}
+
+fn unevaluated_parts(item: &libtea_core::Unevaluated) -> (i64, &'static str, String) {
+    match item {
+        libtea_core::Unevaluated::UnsupportedScheme {
+            event_id, scheme, ..
+        } => (*event_id, "unsupported_scheme", scheme.clone()),
+        libtea_core::Unevaluated::Malformed {
+            event_id, detail, ..
+        } => (*event_id, "malformed", detail.clone()),
+        libtea_core::Unevaluated::UnknownEventType {
+            event_id,
+            event_type,
+            ..
+        } => (*event_id, "unknown_event_type", event_type.clone()),
+        _ => (0, "unknown", String::new()),
+    }
+}
+
+fn status_json(status: &libtea_core::LifecycleStatus) -> serde_json::Value {
+    let date =
+        |value: &Option<libtea_core::TeaTimestamp>| value.as_ref().map(|t| t.as_str().to_owned());
+    let unevaluated: Vec<_> = status
+        .unevaluated
+        .iter()
+        .map(|item| {
+            let (event_id, reason, detail) = unevaluated_parts(item);
+            serde_json::json!({"event_id": event_id, "reason": reason, "detail": detail})
+        })
+        .collect();
+    serde_json::json!({
+        "released": date(&status.released),
+        "end_of_development": date(&status.end_of_development),
+        "end_of_support": date(&status.end_of_support),
+        "end_of_life": date(&status.end_of_life),
+        "end_of_distribution": date(&status.end_of_distribution),
+        "end_of_marketing": date(&status.end_of_marketing),
+        "superseded_by": status.superseded_by,
+        "withdrawn_events": status.withdrawn_events,
+        "unevaluated": unevaluated,
+    })
 }
 
 fn configured_builder(

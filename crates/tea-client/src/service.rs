@@ -197,6 +197,28 @@ impl Service {
         })
     }
 
+    /// Resolve a Package URL on this already-known API base, and choose the
+    /// server and version to call next for each release, as
+    /// [`Client::discover`] does for a TEI.
+    ///
+    /// A PURL names no server, so there is no `.well-known` step: the base is
+    /// the caller's. The PURL is sent exactly as it was parsed
+    /// ([`Purl::as_str`](libtea_core::Purl::as_str)), never in canonical form,
+    /// since the server matches the identifiers it stores.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ClientError::Unresolved`] for a TEA 404 (not evidence that
+    /// no release exists), and an error when a release has no server with a
+    /// supported version.
+    pub async fn discover_purl(
+        &self,
+        purl: &libtea_core::Purl,
+    ) -> Result<Vec<crate::ResolvedRelease>, ClientError> {
+        let releases = self.discover_identifier(None, Some(purl.as_str())).await?;
+        crate::resolve_releases(releases, &self.client.inner.supported)
+    }
+
     /// `GET /products`.
     ///
     /// # Errors

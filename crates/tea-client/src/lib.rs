@@ -111,6 +111,28 @@ pub struct ResolvedRelease {
     pub api_version: String,
 }
 
+/// For each release from `/discovery`, the server and version to call next.
+pub(crate) fn resolve_releases(
+    releases: Vec<DiscoveryInfo>,
+    supported: &libtea_core::SupportedApi,
+) -> Result<Vec<ResolvedRelease>, ClientError> {
+    let mut resolved = Vec::with_capacity(releases.len());
+    for release in releases {
+        let server = release.select_server(supported)?;
+        let chosen = server.into_iter().next().ok_or_else(|| {
+            ClientError::Model(libtea_core::ModelError::Invalid(
+                "discovery returned no usable server".into(),
+            ))
+        })?;
+        resolved.push(ResolvedRelease {
+            product_release: release.product_release,
+            root_url: chosen.root_url,
+            api_version: chosen.version,
+        });
+    }
+    Ok(resolved)
+}
+
 impl Client {
     /// Resolve a TEI through `.well-known/tea` and `/discovery`.
     ///
@@ -247,21 +269,7 @@ impl Client {
                     continue;
                 }
             };
-            let mut resolved = Vec::with_capacity(releases.len());
-            for release in releases {
-                let server = release.select_server(&self.inner.supported)?;
-                let chosen = server.into_iter().next().ok_or_else(|| {
-                    ClientError::Model(libtea_core::ModelError::Invalid(
-                        "discovery returned no usable server".into(),
-                    ))
-                })?;
-                resolved.push(ResolvedRelease {
-                    product_release: release.product_release,
-                    root_url: chosen.root_url,
-                    api_version: chosen.version,
-                });
-            }
-            return Ok(resolved);
+            return resolve_releases(releases, &self.inner.supported);
         }
         Err(last_stage_error)
     }

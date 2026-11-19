@@ -73,10 +73,11 @@ identifier 2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
 well_known https://example.com/.well-known/tea
 ```
 
-Resolve a TEI, then download one artifact and check it:
+Resolve a TEI (or a Package URL on a known API base), then download one artifact and check it:
 
 ```sh
 libtea discover tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d
+libtea discover --purl pkg:npm/left-pad@1.3.0 --base https://api.example.com
 libtea download --base https://api.example.com --artifact 11111111-1111-4111-8111-111111111111 --revision 1 --media-type application/vnd.cyclonedx+json --output sbom.json
 ```
 
@@ -85,6 +86,25 @@ integrity verified (decoded-byte checksums only; not publisher authenticity)	str
 ```
 
 `download` writes to a temporary file and moves it into place only after every declared checksum matched the decoded bytes. An existing output file is refused unless you pass `--force`. If all declared checksums are SHA-1 the command exits 4 and writes nothing, unless you pass `--allow-weak-checksums`. Add `--require-checksums` to fail when a format declares none.
+
+### Lifecycle (CLE)
+
+`cle` fetches the lifecycle events of a product, product release, component or component release. With `--version` it also says which apply to that version, comparing versions as SemVer. A range it cannot compare (a `vers` type other than `semver` or `npm`, such as `pypi`) is listed as not evaluated, never as not applying.
+
+```sh
+libtea cle --base https://api.example.com --product-release 2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d --version 1.4.0
+```
+
+```text
+version	1.4.0
+released	2024-01-01T00:00:00Z
+end_of_development	-
+end_of_support	-
+end_of_life	2026-01-01T00:00:00Z
+end_of_distribution	-
+end_of_marketing	-
+superseded_by	-
+```
 
 ### Lock files in CI
 
