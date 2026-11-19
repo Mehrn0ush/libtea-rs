@@ -292,6 +292,43 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Query products, product releases, components or component releases on a
+    /// known API base, optionally by identifier (caller-managed pagination).
+    Search {
+        /// What to query.
+        #[arg(value_enum)]
+        what: SearchKind,
+        #[arg(long)]
+        base: String,
+        #[arg(long, default_value = "1.0.0")]
+        api_version: String,
+        /// Identifier type to filter on. Can be given without --id-value
+        /// (TEA uses that form for compliance documents).
+        #[arg(long, value_enum)]
+        id_type: Option<SearchIdType>,
+        /// Identifier value to filter on; needs --id-type. A PURL or TEI value
+        /// is checked locally first and sent as given.
+        #[arg(long, requires = "id_type")]
+        id_value: Option<String>,
+        #[arg(long)]
+        page_size: Option<u32>,
+        #[arg(long)]
+        page_token: Option<String>,
+        /// `name` for products and components; `created-date`, `release-date`
+        /// or `version` for releases.
+        #[arg(long)]
+        sort_field: Option<String>,
+        #[arg(long, value_enum)]
+        sort_order: Option<SearchSortOrder>,
+        #[command(flatten)]
+        credentials: CredentialArgs,
+        #[arg(long)]
+        allow_origin: Option<Url>,
+        #[command(flatten)]
+        cache: CacheArgs,
+        #[arg(long)]
+        json: bool,
+    },
     /// Download one artifact revision to a file or stdout.
     Download {
         #[arg(long)]
@@ -398,6 +435,48 @@ enum Command {
     },
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum SearchKind {
+    Products,
+    ProductReleases,
+    Components,
+    ComponentReleases,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum SearchIdType {
+    #[value(name = "CPE", alias = "cpe")]
+    Cpe,
+    #[value(name = "TEI", alias = "tei")]
+    Tei,
+    #[value(name = "PURL", alias = "purl")]
+    Purl,
+    #[value(
+        name = "COMPLIANCE_DOCUMENT",
+        alias = "compliance_document",
+        alias = "compliance-document"
+    )]
+    ComplianceDocument,
+}
+
+impl SearchIdType {
+    fn wire(self) -> libtea_core::enums::IdentifierType {
+        use libtea_core::enums::IdentifierType;
+        match self {
+            Self::Cpe => IdentifierType::Cpe,
+            Self::Tei => IdentifierType::Tei,
+            Self::Purl => IdentifierType::Purl,
+            Self::ComplianceDocument => IdentifierType::ComplianceDocument,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum SearchSortOrder {
+    Asc,
+    Desc,
+}
+
 #[derive(Debug, Subcommand)]
 enum CacheAction {
     /// Count entries and bytes without changing anything.
@@ -429,6 +508,7 @@ impl Command {
             | Command::ProductRelease { json, .. }
             | Command::Collections { json, .. }
             | Command::Cle { json, .. }
+            | Command::Search { json, .. }
             | Command::Download { json, .. }
             | Command::Sync { json, .. }
             | Command::Diff { json, .. } => *json,
@@ -698,6 +778,113 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                 ));
             };
             print_cle(kind, &uuid, &fetch, version.as_ref(), json)?;
+        }
+        Command::Search {
+            what,
+            base,
+            api_version,
+            id_type,
+            id_value,
+            page_size,
+            page_token,
+            sort_field,
+            sort_order,
+            credentials,
+            allow_origin,
+            cache,
+            json,
+        } => {
+            // Check the identifier before any request; it is sent as given.
+            match (id_type, &id_value) {
+                (Some(SearchIdType::Purl), Some(value)) => {
+                    libtea_core::Purl::parse(value)?;
+                }
+                (Some(SearchIdType::Tei), Some(value)) => {
+                    Tei::parse(value)?;
+                }
+                _ => {}
+            }
+            let order = sort_order.map(|order| match order {
+                SearchSortOrder::Asc => libtea_core::enums::SortOrder::Asc,
+                SearchSortOrder::Desc => libtea_core::enums::SortOrder::Desc,
+            });
+            let base_query = SearchQuery {
+                page_size,
+                page_token,
+                sort_order: order,
+                id_type: id_type.map(SearchIdType::wire),
+                id_value,
+            };
+            let client =
+                with_cache(configured_builder(&credentials, allow_origin)?, &cache)?.build()?;
+            let service = client.service(&base, &api_version)?;
+            match what {
+                SearchKind::Products | SearchKind::Components => {
+                    let field = sort_field
+                        .as_deref()
+                        .map(|field| match field {
+                            "name" => Ok(()),
+                            other => Err(usage(format!(
+                                "--sort-field {other} is not valid here; use name"
+                            ))),
+                        })
+                        .transpose()?;
+                    if matches!(what, SearchKind::Products) {
+                        let query = base_query
+                            .params(field.map(|()| libtea_core::enums::ProductSort::Name));
+                        let page = service.query_products(&query).await?;
+                        print_page(&page, json, |product| {
+                            format!("{}\t{}", product.uuid, product.name)
+                        })?;
+                    } else {
+                        let query = base_query
+                            .params(field.map(|()| libtea_core::enums::ComponentSort::Name));
+                        let page = service.query_components(&query).await?;
+                        print_page(&page, json, |component| {
+                            format!("{}\t{}", component.uuid, component.name)
+                        })?;
+                    }
+                }
+                SearchKind::ProductReleases | SearchKind::ComponentReleases => {
+                    use libtea_core::enums::ReleaseSort;
+                    let field = sort_field
+                        .as_deref()
+                        .map(|field| match field {
+                            "created-date" | "createdDate" => Ok(ReleaseSort::CreatedDate),
+                            "release-date" | "releaseDate" => Ok(ReleaseSort::ReleaseDate),
+                            "version" => Ok(ReleaseSort::Version),
+                            other => Err(usage(format!(
+                                "--sort-field {other} is not valid here; use created-date, \
+                                 release-date or version"
+                            ))),
+                        })
+                        .transpose()?;
+                    let query = base_query.params(field);
+                    if matches!(what, SearchKind::ProductReleases) {
+                        let page = service.query_product_releases(&query).await?;
+                        print_page(&page, json, |release| {
+                            format!(
+                                "{}\t{}\t{}\t{}",
+                                release.uuid,
+                                release.version,
+                                release.product,
+                                release.product_name.as_deref().unwrap_or("-")
+                            )
+                        })?;
+                    } else {
+                        let page = service.query_component_releases(&query).await?;
+                        print_page(&page, json, |release| {
+                            format!(
+                                "{}\t{}\t{}\t{}",
+                                release.uuid,
+                                release.version,
+                                release.component,
+                                release.component_name.as_deref().unwrap_or("-")
+                            )
+                        })?;
+                    }
+                }
+            }
         }
         Command::ProductRelease {
             base,
@@ -1228,6 +1415,50 @@ fn check_output_target(path: &Path, force: bool) -> anyhow::Result<()> {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err).with_context(|| format!("inspecting {}", path.display())),
     }
+}
+
+/// The `search` options shared by every kind of query.
+struct SearchQuery {
+    page_size: Option<u32>,
+    page_token: Option<String>,
+    sort_order: Option<libtea_core::enums::SortOrder>,
+    id_type: Option<libtea_core::enums::IdentifierType>,
+    id_value: Option<String>,
+}
+
+impl SearchQuery {
+    fn params<S>(self, sort_field: Option<S>) -> ListParams<S> {
+        let mut query = ListParams::default();
+        query.page_size = self.page_size;
+        query.page_token = self.page_token;
+        query.sort_field = sort_field;
+        query.sort_order = self.sort_order;
+        query.id_type = self.id_type;
+        query.id_value = self.id_value;
+        query
+    }
+}
+
+/// Print one page of query results: the page as JSON, or a header line and
+/// one tab-separated row per result.
+fn print_page<T: serde::Serialize>(
+    page: &libtea_core::Page<T>,
+    json: bool,
+    row: impl Fn(&T) -> String,
+) -> anyhow::Result<()> {
+    if json {
+        out!("{}", serde_json::to_string_pretty(page)?);
+        return Ok(());
+    }
+    out!(
+        "has_next {}\tnext_page_token {}",
+        page.has_next,
+        page.next_page_token.as_deref().unwrap_or("")
+    );
+    for result in &page.results {
+        out!("{}", row(result));
+    }
+    Ok(())
 }
 
 /// Print a CLE fetch, and with a version its lifecycle status

@@ -13,7 +13,7 @@ this is the contract since 0.1.0; it did not change through 0.1.6 (the CLI's
 sources are identical between the `v0.1.0` and `v0.1.6` tags). In 0.1.7,
 `download --json` gained an optional `signature` member (below); nothing
 was renamed or removed. After 0.1.7, `discover --purl` (same array as
-`discover <tei>`) and `cle` were added.
+`discover <tei>`), `cle` and `search` were added.
 
 ## `spec --json`
 
@@ -98,6 +98,29 @@ OpenAPI).
 
 A Collection object (`--latest` or `--version`) or a page
 (`hasNext`, `nextPageToken`, `results`), camelCase as in the TEA OpenAPI.
+
+## `search <what> --base <url> [--id-type T [--id-value V]] ... --json`
+
+`<what>` is `products`, `product-releases`, `components` or
+`component-releases`. Output: one page as the server sent it, re-serialised
+from the model, camelCase as in the TEA OpenAPI: `hasNext`, `nextPageToken`,
+`results` (Product, Product Release, Component or Component Release objects).
+Pagination is the caller's: pass `nextPageToken` back as `--page-token`.
+
+- `--id-type` is `CPE`, `TEI`, `PURL` or `COMPLIANCE_DOCUMENT` (lowercase and
+  `compliance-document` are accepted too). It can be given alone; TEA uses that
+  form for compliance documents. `--id-value` needs `--id-type`.
+- A `PURL` or `TEI` value is checked locally first (exit status 2 and nothing
+  sent if it is malformed) and is sent exactly as given.
+- `--sort-field` is `name` for products and components, and `created-date`,
+  `release-date` or `version` for releases; `--sort-order` is `asc` or `desc`.
+  Anything else is exit status 2.
+
+Without `--json`: a line `has_next <bool><TAB>next_page_token <token>`, then one
+line per result: `uuid<TAB>name` for products and components,
+`uuid<TAB>version<TAB>product<TAB>product_name` for product releases and
+`uuid<TAB>version<TAB>component<TAB>component_name` for component releases
+(`-` when the name is absent).
 
 ## `download ... --output FILE --json`
 

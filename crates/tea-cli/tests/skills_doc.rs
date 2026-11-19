@@ -150,7 +150,7 @@ fn shell_lines(text: &str) -> Vec<String> {
 
 #[test]
 fn documented_libtea_commands_and_flags_exist() {
-    const SUBCOMMANDS: [&str; 11] = [
+    const SUBCOMMANDS: [&str; 12] = [
         "spec",
         "parse-tei",
         "conformance",
@@ -158,6 +158,7 @@ fn documented_libtea_commands_and_flags_exist() {
         "product-release",
         "collections",
         "cle",
+        "search",
         "download",
         "sync",
         "diff",
