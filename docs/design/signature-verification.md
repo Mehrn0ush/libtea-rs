@@ -67,8 +67,8 @@ tests.
 
 ## Stage 1: open questions and a proposed first slice (issue #12)
 
-*Added 2026-11-11 for review. The "Proposed first slice" below is implemented
-after 0.1.6 (issue #12), with the differences listed under "What was built".*
+*Added 2026-11-11 for review. The "Proposed first slice" below shipped in
+0.1.7 (issue #12; stage 2 is #62), with the differences listed under "What was built".*
 
 ### What the pinned specification says
 

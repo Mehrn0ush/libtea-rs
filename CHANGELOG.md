@@ -4,6 +4,10 @@ All notable changes to this workspace are documented here. The publishable crate
 
 Items marked **Experimental** may change in a minor release before 0.9; everything else follows semantic versioning from this release on.
 
+## Unreleased
+
+- Documentation: the release workflow ran for `v0.1.7` (run 44500983192); the docs that list the tags it has run for now include it. The design notes for PURL, CLE and signatures point at their stage 2 issues (#60, #61, #62), and `docs/compatibility.md` is reviewed for 0.1.7.
+
 ## 0.1.7 — 2026-11-19
 
 Library source changes against `v0.1.6`: the new `libtea-core` modules `purl`, `vers`, `lifecycle` and `signature_format` with `Tei::purl` and `Identifier::purl`, the new `libtea-client` `signature::FormatOnlyVerifier`, and the cache fix (`git diff --stat v0.1.6 v0.1.7 -- crates/tea-core/src crates/tea-client/src`). All additions are additive; `cargo semver-checks` against 0.1.6 reports no update required for either publishable crate.
