@@ -1,7 +1,7 @@
 # Compatibility
 
 What this repository supports, and how each claim is checked. Last reviewed for
-0.1.7 (2026-11-19).
+0.1.8 (2026-11-19).
 
 ## TEA specification
 
@@ -44,7 +44,9 @@ server; see `docs/interoperability.md` for the servers it has been run against.
 `product-release`, `sync`, `sync --check`) ran through the Action `v0.1.5` on
 `ubuntu-24.04`, `macos-15` and `windows-2022` against two public servers
 (scratch-repository run 43160787117; `docs/interoperability.md`). Not with
-credentials, and not on the arm64 Linux runner or in a container.
+credentials, and not on the arm64 Linux runner or in a container. The commands
+added in 0.1.8 (`discover --purl`, `cle`, `search`, `inspect`) are tested
+against mock servers only.
 
 **Linux libc.** The gnu archives need glibc 2.34 or newer (Ubuntu 22.04+,
 Debian 12+, RHEL 9+), measured on the v0.1.0 archives; they are built on

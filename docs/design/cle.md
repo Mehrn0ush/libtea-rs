@@ -113,7 +113,7 @@ against ECMA-428 is the first task of the implementation PR.
 Decisions taken: library only (no CLI command yet); a general `vers` parser
 with SemVer comparison only; additive and Experimental.
 
-After 0.1.7 (part of #61): the CLI command `libtea cle` fetches a CLE
+In 0.1.8 (part of #61): the CLI command `libtea cle` fetches a CLE
 document and with `--version` prints `status_for_semver` for it, including
 the unevaluated events (`docs/cli-json.md`).
 

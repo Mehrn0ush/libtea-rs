@@ -12,8 +12,8 @@ Newer objects (`sync`, `diff`, `download` status, `cache`, `cle`, `inspect`) car
 this is the contract since 0.1.0; it did not change through 0.1.6 (the CLI's
 sources are identical between the `v0.1.0` and `v0.1.6` tags). In 0.1.7,
 `download --json` gained an optional `signature` member (below); nothing
-was renamed or removed. After 0.1.7, `discover --purl` (same array as
-`discover <tei>`), `cle`, `search` and `inspect` were added.
+was renamed or removed. In 0.1.8, `discover --purl` (same array as
+`discover <tei>`), `cle`, `search` and `inspect` were added; existing outputs did not change.
 
 ## `spec --json`
 
