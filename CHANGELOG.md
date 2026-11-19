@@ -6,6 +6,7 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-client`: **fixed** cache entries lost when several clients in one process share a cache directory. Each client numbered its temporary files from zero, so concurrent stores used the same temporary name; the store that lost `create_new` then removed the other's temporary file, and both renames failed. Temporary files are now numbered per process, and a store removes a temporary file only if it created it. Seen as an intermittent Windows failure of `concurrent_clients_never_leave_a_corrupt_entry`. No API change.
 - `libtea-core`: **added** `signature_format::{SignatureFormat, detect_signature_format, MAX_SIGNATURE_INSPECT_BYTES}` (**Experimental**): names the container a detached signature appears to use (OpenPGP armored or binary, CMS `SignedData`, Sigstore bundle) from its bytes alone. It verifies nothing. Additive.
 - `libtea-client`: **added** `signature::FormatOnlyVerifier` (**Experimental**), a `SignatureVerifier` that returns `MissingSignature` for empty bytes and `Unsupported` otherwise, never `Verified`; and re-exports of the detection items. The `SignatureVerifier` trait is unchanged. Additive.
 - `libtea-cli` (unpublished): `download --signature` fetches the signature published for the selected format after the artifact and reports its detected format and that it was not verified, on stderr and as a new optional `signature` member of `download --json`. Exit codes are unchanged. Issue #12, stage 1 (`docs/design/signature-verification.md`).
