@@ -1,6 +1,6 @@
 # CLE evaluation (ECMA-428), `vers` semver only: design
 
-**Status:** stage 1 implemented after 0.1.6 (issue #11): `libtea_core::vers`
+**Status:** stage 1 shipped in 0.1.7 (issue #11; stage 2 is #61): `libtea_core::vers`
 and `Cle::status_for_semver`. The proposal below is kept as written; "What was
 built" at the end says where the implementation differs.
 

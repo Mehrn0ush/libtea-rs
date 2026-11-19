@@ -1,6 +1,6 @@
 # PURL canonicalization (ECMA-427): design
 
-**Status:** stage 1 implemented after 0.1.6 (issue #10): `libtea_core::purl`.
+**Status:** stage 1 shipped in 0.1.7 (issue #10; stage 2 is #60): `libtea_core::purl`.
 The proposal below is kept as written; "What was built" at the end says where
 the implementation differs and which statements in it turned out to be wrong.
 

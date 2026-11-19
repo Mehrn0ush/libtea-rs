@@ -9,8 +9,8 @@ consumers should ignore unknown fields.
 Newer objects (`sync`, `diff`, `download` status, `cache`) carry `schema_version`
 (currently `1`). The first group of outputs (`spec`, `parse-tei`, `discover`,
 `product-release`, `collections`, `conformance`) has no version field. All of
-this is the contract since 0.1.0; it has not changed through 0.1.6 (the CLI's
-sources are identical between the `v0.1.0` and `v0.1.6` tags). After 0.1.6,
+this is the contract since 0.1.0; it did not change through 0.1.6 (the CLI's
+sources are identical between the `v0.1.0` and `v0.1.6` tags). In 0.1.7,
 `download --json` gained an optional `signature` member (below); nothing
 was renamed or removed.
 
@@ -87,7 +87,7 @@ after the checksum check) and `--json` is rejected with exit status 2.
   authenticity and no signature is checked.
 - `etag` is a validator, not a checksum.
 
-With `--signature` (added after 0.1.6), the object also has a `signature`
+With `--signature` (added in 0.1.7), the object also has a `signature`
 member. Without the flag the member is absent and no signature request is
 made.
 
