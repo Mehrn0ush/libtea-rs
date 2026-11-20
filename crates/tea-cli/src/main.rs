@@ -280,11 +280,15 @@ enum Command {
         /// Component release UUID.
         #[arg(long, group = "subject")]
         component_release: Option<String>,
-        /// Evaluate the events for this SemVer 2.0 version (for example
-        /// 1.4.0). Ranges of `vers` types other than semver and npm are listed
-        /// as not evaluated, never as not applying.
+        /// Evaluate the events for this version: SemVer 2.0 (for example
+        /// 1.4.0) by default, or PEP 440 with --scheme pypi. Ranges the scheme
+        /// cannot compare are listed as not evaluated, never as not applying.
         #[arg(long)]
         version: Option<String>,
+        /// How --version is parsed and compared: semver (`vers` types semver
+        /// and npm) or pypi (PEP 440, `vers` type pypi).
+        #[arg(long, value_enum, default_value_t = CleScheme::Semver, requires = "version")]
+        scheme: CleScheme,
         #[command(flatten)]
         credentials: CredentialArgs,
         #[arg(long)]
@@ -462,6 +466,54 @@ enum Command {
         #[command(subcommand)]
         action: CacheAction,
     },
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum CleScheme {
+    Semver,
+    Pypi,
+}
+
+/// A `cle --version`, parsed by its scheme.
+enum CleVersion {
+    Semver(libtea_core::semver::Version),
+    Pypi(libtea_core::Pep440Version),
+}
+
+impl CleVersion {
+    fn parse(text: &str, scheme: CleScheme) -> anyhow::Result<Self> {
+        match scheme {
+            CleScheme::Semver => libtea_core::semver::Version::parse(text)
+                .map(Self::Semver)
+                .map_err(|error| usage(format!("--version is not a SemVer version: {error}"))),
+            CleScheme::Pypi => libtea_core::Pep440Version::parse(text)
+                .map(Self::Pypi)
+                .map_err(|error| usage(format!("--version is not a PEP 440 version: {error}"))),
+        }
+    }
+
+    fn scheme(&self) -> &'static str {
+        match self {
+            Self::Semver(_) => "semver",
+            Self::Pypi(_) => "pypi",
+        }
+    }
+
+    fn status(&self, cle: &libtea_core::Cle) -> libtea_core::LifecycleStatus {
+        match self {
+            Self::Semver(version) => cle.status_for_semver(version),
+            Self::Pypi(version) => cle.status_for_pypi(version),
+        }
+    }
+}
+
+impl std::fmt::Display for CleVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Semver(version) => version.fmt(f),
+            Self::Pypi(version) => version.fmt(f),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -766,6 +818,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             component,
             component_release,
             version,
+            scheme,
             credentials,
             allow_origin,
             cache,
@@ -773,11 +826,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         } => {
             // Parse everything the user gave before any request.
             let version = version
-                .map(|text| {
-                    libtea_core::semver::Version::parse(&text).map_err(|error| {
-                        usage(format!("--version is not a SemVer version: {error}"))
-                    })
-                })
+                .map(|text| CleVersion::parse(&text, scheme))
                 .transpose()?;
             let client =
                 with_cache(configured_builder(&credentials, allow_origin)?, &cache)?.build()?;
@@ -1521,7 +1570,7 @@ fn print_cle(
     kind: &str,
     uuid: &str,
     fetch: &libtea_client::CleFetch,
-    version: Option<&libtea_core::semver::Version>,
+    version: Option<&CleVersion>,
     json: bool,
 ) -> anyhow::Result<()> {
     let (cle, message) = match fetch {
@@ -1529,9 +1578,7 @@ fn print_cle(
         libtea_client::CleFetch::NotImplemented { message, .. } => (None, message.as_deref()),
         _ => return Err(anyhow::anyhow!("unsupported CLE response")),
     };
-    let status = cle
-        .zip(version)
-        .map(|(cle, version)| cle.status_for_semver(version));
+    let status = cle.zip(version).map(|(cle, version)| version.status(cle));
     if json {
         let mut value = serde_json::json!({
             "schema_version": 1,
@@ -1542,6 +1589,7 @@ fn print_cle(
         });
         if let Some(version) = version {
             value["version"] = serde_json::json!(version.to_string());
+            value["scheme"] = serde_json::json!(version.scheme());
             value["status"] = status.as_ref().map_or(serde_json::Value::Null, status_json);
         }
         out!("{}", serde_json::to_string_pretty(&value)?);

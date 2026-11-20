@@ -194,6 +194,8 @@ tests under `spec/vers/`, `spec/vers/PINNED.md`):
   expects a normalized string, which this module does not produce, and is
   not vendored; it also expects ranges with repeated versions and consecutive
   lower bounds to validate, which section 5.4 forbids.
-- Not done: the CLI (`libtea cle --version` still evaluates SemVer; a scheme
-  option would be a CLI release), and real CLE data with `pypi` ranges.
+- The CLI: `libtea cle --version <v> --scheme pypi` evaluates with
+  `status_for_pypi` (`libtea-cli` 0.2.1; `semver` stays the default, so
+  existing commands do not change). `--json` gains a `scheme` member.
+- Not done: real CLE data with `pypi` ranges (no server tested serves any).
 

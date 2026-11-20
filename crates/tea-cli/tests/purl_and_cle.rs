@@ -221,6 +221,7 @@ async fn cle_json_with_a_version_carries_the_status_and_what_was_not_evaluated()
             "implemented",
             "message",
             "schema_version",
+            "scheme",
             "status",
             "subject",
             "version"
@@ -233,6 +234,7 @@ async fn cle_json_with_a_version_carries_the_status_and_what_was_not_evaluated()
     );
     assert_eq!(value["implemented"], true);
     assert_eq!(value["version"], "1.4.0");
+    assert_eq!(value["scheme"], "semver");
     assert_eq!(value["cle"]["events"].as_array().unwrap().len(), 5);
     let status = &value["status"];
     assert_eq!(status["released"], "2024-01-01T00:00:00Z");
@@ -267,6 +269,48 @@ async fn cle_text_with_a_version_warns_about_events_not_evaluated() {
     assert!(stdout.contains("withdrawn_event\t4\n"), "{stdout}");
     assert!(
         stdout.contains("unevaluated\t2\tunsupported_scheme\tpypi\n"),
+        "{stdout}"
+    );
+    assert!(text(&output.stderr).contains("could not be evaluated"));
+}
+
+#[tokio::test]
+async fn cle_with_the_pypi_scheme_compares_pep_440_versions() {
+    let server = MockServer::start().await;
+    serve_cle(
+        &server,
+        ResponseTemplate::new(200).set_body_json(cle_body()),
+    )
+    .await;
+    // `1.4` equals the released `1.4.0` under PEP 440, not under SemVer.
+    let output = cle(&server, &["--version", "1.4", "--scheme", "pypi", "--json"]);
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    let value = json(&output.stdout);
+    assert_eq!(value["version"], "1.4");
+    assert_eq!(value["scheme"], "pypi");
+    let status = &value["status"];
+    assert_eq!(status["released"], "2024-01-01T00:00:00Z");
+    assert_eq!(status["end_of_support"], "2025-06-01T00:00:00Z");
+    // Not "no end of life": the SemVer range was not evaluated.
+    assert_eq!(status["end_of_life"], serde_json::Value::Null);
+    assert_eq!(status["withdrawn_events"], serde_json::json!([4]));
+    assert_eq!(
+        status["unevaluated"],
+        serde_json::json!([{"event_id": 3, "reason": "unsupported_scheme", "detail": "semver"}])
+    );
+
+    // The version is printed in its normalized form.
+    let output = cle(&server, &["--version", "1.4.0-RC1", "--scheme", "pypi"]);
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    let stdout = text(&output.stdout);
+    assert!(stdout.contains("version\t1.4.0rc1\n"), "{stdout}");
+    assert!(
+        stdout.contains("end_of_support\t2025-06-01T00:00:00Z\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("released\t-\n"), "{stdout}");
+    assert!(
+        stdout.contains("unevaluated\t3\tunsupported_scheme\tsemver\n"),
         "{stdout}"
     );
     assert!(text(&output.stderr).contains("could not be evaluated"));
@@ -344,10 +388,43 @@ async fn cle_bad_input_is_a_usage_error_before_any_request() {
         );
         assert_eq!(json(&output.stderr)["error"]["kind"], "usage");
     }
+    for version in ["v", "1.4.0.", "latest"] {
+        let output = cle(
+            &server,
+            &["--version", version, "--scheme", "pypi", "--json"],
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{version}: {}",
+            text(&output.stderr)
+        );
+        let error = json(&output.stderr);
+        assert_eq!(error["error"]["kind"], "usage");
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("not a PEP 440 version"),
+            "{error}"
+        );
+    }
     let uri = server.uri();
     let cases: &[&[&str]] = &[
         &["cle", "--base", &uri],
         &["cle", "--base", &uri, "--product", REL, "--component", REL],
+        &["cle", "--base", &uri, "--product", REL, "--scheme", "pypi"],
+        &[
+            "cle",
+            "--base",
+            &uri,
+            "--product",
+            REL,
+            "--version",
+            "1.4.0",
+            "--scheme",
+            "cargo",
+        ],
         &[
             "cle",
             "--base",
