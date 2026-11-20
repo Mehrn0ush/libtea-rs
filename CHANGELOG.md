@@ -7,6 +7,7 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 ## Unreleased
 
 - Documentation: the release workflow ran for `v0.1.8` (run 44584585018); the docs that list the tags it has run for now include it. `docs/cli-json.md` and the CLE and PURL design notes say the new commands shipped in 0.1.8, and `docs/compatibility.md` is reviewed for 0.1.8 and notes that those commands are tested against mock servers only.
+- Documentation: `inspect`, `search`, `discover --purl` and `cle` were run against Vulnetix and the ReARM demo on Linux, macOS and Windows (`docs/interop/cli-0.1.8-2026-11-20.md`). All passed, except that ReARM does not resolve a PURL without a version (`OBJECT_UNKNOWN`). `docs/interoperability.md` and `docs/compatibility.md` record the run.
 
 ## 0.1.8 — 2026-11-19
 
