@@ -45,8 +45,10 @@ server; see `docs/interoperability.md` for the servers it has been run against.
 `ubuntu-24.04`, `macos-15` and `windows-2022` against two public servers
 (scratch-repository run 43160787117; `docs/interoperability.md`). Not with
 credentials, and not on the arm64 Linux runner or in a container. The commands
-added in 0.1.8 (`discover --purl`, `cle`, `search`, `inspect`) are tested
-against mock servers only.
+added in 0.1.8 (`discover --purl`, `cle`, `search`, `inspect`) ran with the 0.1.8
+binary on the same three runners against the same two servers
+(scratch-repository run 44662015332;
+`docs/interop/cli-0.1.8-2026-11-20.md`).
 
 **Linux libc.** The gnu archives need glibc 2.34 or newer (Ubuntu 22.04+,
 Debian 12+, RHEL 9+), measured on the v0.1.0 archives; they are built on

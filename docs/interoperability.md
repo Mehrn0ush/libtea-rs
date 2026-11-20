@@ -142,6 +142,26 @@ The GitHub Action (`v0.1.5`, `attestation: required`) was run from a workflow in
 
 No result file other than the ReARM record is committed for this run; the run's log on GitHub is the source, and it expires with the repository's log retention.
 
+## The 0.1.8 CLI commands against public servers (2026-11-20)
+
+`inspect`, `search`, `discover --purl` and `cle` were run with the released
+0.1.8 binary (installed and verified by the Action `v0.1.8`) against Vulnetix
+and the ReARM demo, on `ubuntu-24.04`, `macos-15` and `windows-2022` (run
+44662015332 of `Mehrn0ush/libtea-action-test`). Read-only and anonymous.
+Details: [`docs/interop/cli-0.1.8-2026-11-20.md`](interop/cli-0.1.8-2026-11-20.md).
+
+| Command | Vulnetix | ReARM demo |
+| --- | --- | --- |
+| `inspect` | Passed | Passed |
+| `search`, all four kinds; by TEI; by PURL | Passed | Passed |
+| `discover --purl`, release PURL (with version) | Resolved to the TEI's release | Resolved to the TEI's release |
+| `discover --purl`, product PURL (no version) | Resolved to one release, not the TEI's | Exit 5, `OBJECT_UNKNOWN` |
+| `cle`, all four subjects | Passed: CLE documents with `released` and `supersededBy` events | Passed: one `released` event each |
+| `cle --version` | Not run (versions are not SemVer) | Passed (`26.11.17`) |
+
+Which releases a server returns for a PURL without a version is not specified,
+so the two different answers are recorded, not counted as errors.
+
 ## Implementations named by the specification
 
 | Name | Role described there | What this repository verified |
@@ -321,6 +341,7 @@ alone as "does not exist".
 | **Mock / unit** | Checked-in, non-ignored `cargo test` (wiremock or unit) |
 | **Oolong (ignored live)** | Ignored tests in `oolong_idtype_live` / `oolong_surface_live` |
 | **Vulnetix (manual)** | Read-only probes; `docs/interoperability.md` + `scripts/interop-probe.sh` |
+| **CLI 0.1.8 (public)** | The 0.1.8 CLI commands against Vulnetix and the ReARM demo, 2026-11-20 (`docs/interop/cli-0.1.8-2026-11-20.md`) |
 | **Untested (reason)** | Explicit gap with rationale |
 
 The **Tested** column lists independent mock/unit test names that exercise the
@@ -330,24 +351,24 @@ interoperability.
 
 | Method | Path | Operation ID | SDK method | Status | Tested |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/discovery` | `discover` | `Service::discover_identifier`, `Client::discover` | Implemented. Mock / unit. Oolong. Vulnetix | `discovery_follows_version_and_stops_on_tea_404`; `non_tea_404_fails_over_to_the_next_endpoint`; `bearer_401_does_not_fail_over`; `discovery_403_does_not_fail_over_or_fetch_a_token` |
-| GET | `/products` | `queryProducts` | `Service::query_products` | Implemented. Mock / unit. Oolong. Vulnetix (smoke) | `product_pages_keep_tokens_opaque_and_do_not_follow_urls`; `empty_page_and_malformed_page_and_oversized_page_size`; `type_only_identifier_filter_is_serialized`; `value_only_identifier_filter_sends_no_request`; `follow_pages_multi_page_then_exhausted` |
-| GET | `/product/{uuid}` | `getProduct` | `Service::get_product` | Implemented. Mock / unit. Oolong. Vulnetix | `gets_a_product`; `oversized_json_is_rejected` |
+| GET | `/discovery` | `discover` | `Service::discover_identifier`, `Client::discover` | Implemented. Mock / unit. Oolong. Vulnetix. CLI 0.1.8 (public; by TEI and by PURL) | `discovery_follows_version_and_stops_on_tea_404`; `non_tea_404_fails_over_to_the_next_endpoint`; `bearer_401_does_not_fail_over`; `discovery_403_does_not_fail_over_or_fetch_a_token` |
+| GET | `/products` | `queryProducts` | `Service::query_products` | Implemented. Mock / unit. Oolong. Vulnetix (smoke). CLI 0.1.8 (public) | `product_pages_keep_tokens_opaque_and_do_not_follow_urls`; `empty_page_and_malformed_page_and_oversized_page_size`; `type_only_identifier_filter_is_serialized`; `value_only_identifier_filter_sends_no_request`; `follow_pages_multi_page_then_exhausted` |
+| GET | `/product/{uuid}` | `getProduct` | `Service::get_product` | Implemented. Mock / unit. Oolong. Vulnetix. CLI 0.1.8 (public) | `gets_a_product`; `oversized_json_is_rejected` |
 | GET | `/product/{uuid}/releases` | `listProductReleases` | `Service::list_product_releases` | Implemented. Mock / unit. Oolong | `list_and_query_product_releases_paths_and_params` |
-| GET | `/product/{uuid}/cle` | `getProductCle` | `Service::get_product_cle` | Optional. Mock / unit. Oolong (`NotImplemented`) | `cle_success_for_every_cle_endpoint`; `cle_not_implemented_is_distinct_from_an_unknown_object`; `cle_success_and_object_unknown` |
-| GET | `/productReleases` | `queryProductReleases` | `Service::query_product_releases` | Implemented. Mock / unit. Oolong | `list_and_query_product_releases_paths_and_params` (query path); identifier filters in `protocol` |
-| GET | `/productRelease/{uuid}` | `getProductRelease` | `Service::get_product_release` | Implemented. Mock / unit. Oolong. Vulnetix | `product_release_get_and_unknown_identifier` |
-| GET | `/productRelease/{uuid}/cle` | `getProductReleaseCle` | `Service::get_product_release_cle` | Optional. Mock / unit. Oolong (`NotImplemented`) | `cle_success_for_every_cle_endpoint`; `cle_success_and_object_unknown` (unknown path) |
+| GET | `/product/{uuid}/cle` | `getProductCle` | `Service::get_product_cle` | Optional. Mock / unit. Oolong (`NotImplemented`). CLI 0.1.8 (public) | `cle_success_for_every_cle_endpoint`; `cle_not_implemented_is_distinct_from_an_unknown_object`; `cle_success_and_object_unknown` |
+| GET | `/productReleases` | `queryProductReleases` | `Service::query_product_releases` | Implemented. Mock / unit. Oolong. CLI 0.1.8 (public) | `list_and_query_product_releases_paths_and_params` (query path); identifier filters in `protocol` |
+| GET | `/productRelease/{uuid}` | `getProductRelease` | `Service::get_product_release` | Implemented. Mock / unit. Oolong. Vulnetix. CLI 0.1.8 (public) | `product_release_get_and_unknown_identifier` |
+| GET | `/productRelease/{uuid}/cle` | `getProductReleaseCle` | `Service::get_product_release_cle` | Optional. Mock / unit. Oolong (`NotImplemented`). CLI 0.1.8 (public) | `cle_success_for_every_cle_endpoint`; `cle_success_and_object_unknown` (unknown path) |
 | GET | `/productRelease/{uuid}/collections` | `listProductReleaseCollections` | `Service::list_product_release_collections` | Implemented. Mock / unit. Oolong. Vulnetix | `pagination_anomalies_are_visible_to_callers` |
 | GET | `/productRelease/{uuid}/collection/latest` | `getLatestProductReleaseCollection` | `Service::get_latest_product_release_collection` | Implemented. Mock / unit. Oolong. Vulnetix | `product_release_collection_latest_and_by_version` |
 | GET | `/productRelease/{uuid}/collection/{collectionVersion}` | `getProductReleaseCollectionByVersion` | `Service::get_product_release_collection` | Implemented. Mock / unit. Oolong. Vulnetix | `product_release_collection_latest_and_by_version` |
-| GET | `/components` | `queryComponents` | `Service::query_components` | Implemented. Mock / unit. Oolong | `empty_page_and_malformed_page_and_oversized_page_size`; `type_only_filter_stays_on_the_next_page`; `value_only_identifier_filter_sends_no_request` |
+| GET | `/components` | `queryComponents` | `Service::query_components` | Implemented. Mock / unit. Oolong. CLI 0.1.8 (public) | `empty_page_and_malformed_page_and_oversized_page_size`; `type_only_filter_stays_on_the_next_page`; `value_only_identifier_filter_sends_no_request` |
 | GET | `/component/{uuid}` | `getComponent` | `Service::get_component` | Implemented. Mock / unit. Oolong. Vulnetix | `get_component_happy_path`; `not_acceptable_is_an_api_error_and_a_missing_json_type_is_rejected` (missing JSON Content-Type) |
 | GET | `/component/{uuid}/releases` | `listComponentReleases` | `Service::list_component_releases` | Implemented. Mock / unit. Oolong | `list_and_query_component_releases_paths` |
-| GET | `/component/{uuid}/cle` | `getComponentCle` | `Service::get_component_cle` | Optional. Mock / unit. Oolong (`NotImplemented`) | `cle_success_for_every_cle_endpoint`; `cle_success_and_object_unknown` (`NOT_IMPLEMENTED` path) |
-| GET | `/componentReleases` | `queryComponentReleases` | `Service::query_component_releases` | Implemented. Mock / unit. Oolong | `list_and_query_component_releases_paths` |
+| GET | `/component/{uuid}/cle` | `getComponentCle` | `Service::get_component_cle` | Optional. Mock / unit. Oolong (`NotImplemented`). CLI 0.1.8 (public) | `cle_success_for_every_cle_endpoint`; `cle_success_and_object_unknown` (`NOT_IMPLEMENTED` path) |
+| GET | `/componentReleases` | `queryComponentReleases` | `Service::query_component_releases` | Implemented. Mock / unit. Oolong. CLI 0.1.8 (public) | `list_and_query_component_releases_paths` |
 | GET | `/componentRelease/{uuid}` | `getComponentRelease` | `Service::get_component_release` | Implemented. Mock / unit. Oolong. Vulnetix | `component_release_collections_and_versioned_gets` |
-| GET | `/componentRelease/{uuid}/cle` | `getComponentReleaseCle` | `Service::get_component_release_cle` | Optional. Mock / unit. Oolong (`NotImplemented`) | `cle_success_for_every_cle_endpoint` |
+| GET | `/componentRelease/{uuid}/cle` | `getComponentReleaseCle` | `Service::get_component_release_cle` | Optional. Mock / unit. Oolong (`NotImplemented`). CLI 0.1.8 (public) | `cle_success_for_every_cle_endpoint` |
 | GET | `/componentRelease/{uuid}/collections` | `listComponentReleaseCollections` | `Service::list_component_release_collections` | Implemented. Mock / unit. Oolong. Vulnetix | `component_release_collections_and_versioned_gets` |
 | GET | `/componentRelease/{uuid}/collection/latest` | `getLatestComponentReleaseCollection` | `Service::get_latest_component_release_collection` | Implemented. Mock / unit. Oolong | `component_release_collection_latest_and_by_version`; `component_release_collections_and_versioned_gets` |
 | GET | `/componentRelease/{uuid}/collection/{collectionVersion}` | `getComponentReleaseCollectionByVersion` | `Service::get_component_release_collection` | Implemented. Mock / unit. Oolong | `component_release_collection_latest_and_by_version`; `component_release_collections_and_versioned_gets` |
@@ -375,7 +396,7 @@ No other consumer paths are implemented. Publisher operations are out of scope.
 #### Remaining caveats (still true)
 
 - Signature download tests assert bytes / absence only — not authenticity. `detect_signature_format` names a container (OpenPGP, CMS, Sigstore bundle) from hand-built fixtures; no signature from a real publisher has been inspected, because no server in `docs/interop/` serves one.
-- Oolong CLE and `/token` live results are server limitations, not SDK defects.
-- `Cle::status_for_semver` is tested with the OpenAPI examples and hand-built events only; no server in `docs/interop/` has served a CLE document to evaluate.
+- Oolong CLE and `/token` live results are server limitations, not SDK defects. Vulnetix and the ReARM demo do serve CLE documents.
+- `Cle::status_for_semver` has run on one real CLE document (ReARM demo, a single `released` event; `docs/interop/cli-0.1.8-2026-11-20.md`). The other milestones are tested with the OpenAPI examples and hand-built events only.
 - Vulnetix evidence is for that named deployment only.
 - ReARM evidence is one run against the public demo deployment, for one product release; it says nothing about other ReARM deployments.
