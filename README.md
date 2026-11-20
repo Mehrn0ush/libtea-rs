@@ -114,11 +114,14 @@ libtea search product-releases --base https://api.example.com --sort-field relea
 
 ### Lifecycle (CLE)
 
-`cle` fetches the lifecycle events of a product, product release, component or component release. With `--version` it also says which apply to that version, comparing versions as SemVer. A range it cannot compare (a `vers` type other than `semver` or `npm`, such as `pypi`) is listed as not evaluated, never as not applying.
+`cle` fetches the lifecycle events of a product, product release, component or component release. With `--version` it also says which apply to that version, comparing versions as SemVer, or as Python package versions (PEP 440) with `--scheme pypi`. A range the scheme cannot compare (for SemVer, a `vers` type other than `semver` or `npm`; for `pypi`, any type but `pypi`) is listed as not evaluated, never as not applying.
 
 ```sh
 libtea cle --base https://api.example.com --product-release 2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d --version 1.4.0
+libtea cle --base https://api.example.com --product-release 2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d --version 1.4 --scheme pypi
 ```
+
+The first prints:
 
 ```text
 version	1.4.0
