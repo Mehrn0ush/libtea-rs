@@ -9,7 +9,7 @@ certification. No cryptographic signature verification. Checksum
 Implemented against Transparency Exchange API commit
 `962a0228af1bfcc1232ac3f79239317ff33fdb04`. The TEA specification is still beta.
 
-This crate depends on `libtea-core` 0.1.8. It does not depend on the CLI or the conformance crate.
+This crate depends on `libtea-core` 0.1.8. It does not depend on the CLI.
 
 ```toml
 [dependencies]

@@ -8,6 +8,20 @@ the README doctests are in `crates/doctests`, and `libtea-conformance` is
 removed. Its `#[non_exhaustive]` guards were dropped with it: the types are
 `pub(crate)` in a binary now, so there is nothing for a caller to construct.
 
+Tags (decided 2026-11-20): `v<version>` stays the CLI's tag. It already is:
+`scripts/check-release-tag.sh` compares it with `crates/tea-cli/Cargo.toml`,
+and the release workflow, the Action's download URL and the attestation's
+`--source-ref` all use it, so none of them change. A release of the libraries
+alone is tagged `libs-v<version>` and starts no workflow.
+
+Step 3 is done: `libtea-cli` has crates.io metadata, its own `README.md` and
+`LICENSE`, and an `include` list (sources, README, LICENSE; the tests read
+repository files and stay out). CI checks the packaged file list. A full
+`cargo package -p libtea-cli` resolves `libtea-client` from crates.io, so it
+can only pass once the libraries it needs are published; it is a release step,
+not a CI gate. `publish = false` is gone, so nothing but the release checklist
+keeps the CLI from being published before 0.2.0.
+
 ## Why
 
 A crate on crates.io cannot depend on an unpublished one, and `libtea-cli`
