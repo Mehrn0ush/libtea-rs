@@ -1,7 +1,7 @@
 # Compatibility
 
 What this repository supports, and how each claim is checked. Last reviewed for
-the libraries 0.1.8 and `libtea-cli` 0.2.0 (2026-11-20).
+the libraries 0.1.9 and `libtea-cli` 0.2.0 (2026-11-20).
 
 ## TEA specification
 
@@ -22,7 +22,7 @@ server; see `docs/interoperability.md` for the servers it has been run against.
 | MSRV | 1.89, checked in CI (`rust 1.89.0` job) with the committed `Cargo.lock` |
 | MSRV policy | Latest stable minus about four releases; raised only in a minor release, and listed in `CHANGELOG.md` |
 | Edition | 2021 |
-| Semver | `libtea-core` and `libtea-client` follow SemVer from 0.1.0, checked by `cargo semver-checks` in CI. Items marked **Experimental** (HTTP cache, lock file, signature extension point and format detection, `purl`, `vers`, `lifecycle`) may change in a 0.x minor release |
+| Semver | `libtea-core` and `libtea-client` follow SemVer from 0.1.0, checked by `cargo semver-checks` in CI. Items marked **Experimental** (HTTP cache, lock file, signature extension point and format detection, `purl`, `vers`, `lifecycle`, `pep440`) may change in a 0.x minor release |
 | `unsafe` | `#![forbid(unsafe_code)]` in every crate |
 | TLS | rustls with bundled `webpki-roots`; no system certificate store, so trust roots change only with a new release |
 

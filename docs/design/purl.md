@@ -1,7 +1,7 @@
 # PURL canonicalization (ECMA-427): design
 
 **Status:** stage 1 shipped in 0.1.7 (issue #10): `libtea_core::purl`. Stage 2
-(#60) is type by type; `pypi` is done ("Stage 2: pypi" at the end).
+(#60) is type by type; `pypi` shipped in 0.1.9 ("Stage 2: pypi" at the end).
 The proposal below is kept as written; "What was built" at the end says where
 the implementation differs and which statements in it turned out to be wrong.
 

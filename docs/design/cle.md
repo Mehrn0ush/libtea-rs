@@ -2,7 +2,7 @@
 
 **Status:** stage 1 shipped in 0.1.7 (issue #11): `libtea_core::vers` and
 `Cle::status_for_semver`. Stage 2 (#61): the CLI command shipped in 0.1.8, and
-`pypi` is evaluated ("Stage 2: pypi" at the end). The proposal below is kept as written; "What was
+`pypi` is evaluated from 0.1.9 ("Stage 2: pypi" at the end). The proposal below is kept as written; "What was
 built" at the end says where the implementation differs.
 
 ## What exists

@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- Documentation: `libtea-core` and `libtea-client` 0.1.9 are on crates.io, tagged `libs-v0.1.9`, the first library-only release (no release run). `docs/compatibility.md` is reviewed for 0.1.9 and lists `pep440` as Experimental. The PURL and CLE design notes say the `pypi` stage shipped in 0.1.9.
+- `scripts/check-repo-settings.sh` (not part of any crate): the tag ruleset must cover `libs-v*` as well as `v*`, so `.github/workflows/repo-settings.yml` reports it if library tags lose their protection. Tested in `crates/tea-cli/tests/repo_settings.rs`. This repository's ruleset passes.
 ## 0.1.9 — 2026-11-20
 
 Libraries only: `libtea-core` and `libtea-client` 0.1.9, tagged `libs-v0.1.9`; the CLI stays at 0.2.0 and is not republished. Library source changes against 0.1.8 are in `libtea-core` only (`git diff --stat v0.1.8 libs-v0.1.9 -- crates/tea-core/src crates/tea-client/src`); `libtea-client` has no source change and is released at 0.1.9 to depend on `libtea-core` 0.1.9. All changes are to Experimental modules and are additive, except that `Purl::canonical` now applies the `pypi` rules; `cargo semver-checks` against 0.1.8 reports no update required for either crate.
