@@ -1,13 +1,16 @@
 //! The Package URL test suite (`spec/purl/`, purl-spec v1.1.1) against
 //! `libtea_core::purl`.
 //!
-//! `parse` cases compare components, `validate` cases compare the canonical
-//! string, and `expected_failure` parse cases must be rejected. `build` cases
+//! `parse` cases compare the components of the canonical form (the suite
+//! expects normalized components, while `Purl`'s accessors return what was
+//! written), `validate` cases compare the canonical string, and
+//! `expected_failure` parse cases must be rejected. `build` cases
 //! construct a PURL from components, which this module does not offer, so they
 //! are skipped.
 //!
-//! The parser applies only the rules ECMA-427 gives for every type. Cases that
-//! need a type-specific rule (case folding, character rules, required or
+//! The parser applies the rules ECMA-427 gives for every type, and the
+//! type-specific rules `PurlRules` names (`pypi`). Cases that need a
+//! type-specific rule it does not have (case folding, character rules, required or
 //! prohibited components) are listed in `TYPE_SPECIFIC` with that reason; the
 //! test fails if one of them starts passing, so the list stays honest.
 
@@ -70,7 +73,8 @@ fn run_case(case: &Value) -> Option<String> {
             {
                 expected["qualifiers"] = Value::Null;
             }
-            let actual = components(purl);
+            let canonical = Purl::parse(purl.canonical().as_str()).ok()?;
+            let actual = components(&canonical);
             (actual != expected).then(|| format!("components {actual}"))
         }
         ("validate" | "roundtrip", false, Ok(purl)) => {
@@ -83,8 +87,8 @@ fn run_case(case: &Value) -> Option<String> {
 }
 
 /// Cases whose expected result needs a rule this generic parser does not
-/// apply, keyed by file, test type and input, with the rule. Two are not
-/// type rules but cases the suite contradicts elsewhere (marked "upstream").
+/// apply, keyed by file, test type and input, with the rule. Three are not
+/// type rules but cases the suite gets wrong (marked "upstream").
 const TYPE_SPECIFIC: &[(&str, &str, &str, &str)] = &[
     ("bitbucket-test.json", "validate", "pkg:bitbucket/birKenfeld/pyGments-main@244fd47e07d1014f0aed9c", "namespace and name are case-insensitive (lowercased)"),
     ("bitbucket-test.json", "parse", "pkg:bitbucket/birKenfeld/pyGments-main@244fd47e07d1014f0aed9c", "namespace and name are case-insensitive (lowercased)"),
@@ -113,13 +117,7 @@ const TYPE_SPECIFIC: &[(&str, &str, &str, &str)] = &[
     ("mlflow-test.json", "validate", "pkg:mlflow/CreditFraud@3?repository_url=https://adb-5245952564735461.0.azuredatabricks.net/api/2.0/mlflow", "name is case-insensitive (lowercased)"),
     ("mlflow-test.json", "parse", "pkg:mlflow/CreditFraud@3?repository_url=https://adb-5245952564735461.0.azuredatabricks.net/api/2.0/mlflow", "name is case-insensitive (lowercased)"),
     ("otp-test.json", "parse", "pkg:otp/namespace/hex@2.1.1", "type rules for the namespace"),
-    ("pypi-test.json", "validate", "pkg:PYPI/Django_package@1.11.1.dev1", "name is lowercased and runs of `-`, `_`, `.` become `-`"),
-    ("pypi-test.json", "parse", "pkg:PYPI/Django_package@1.11.1.dev1", "name is lowercased and runs of `-`, `_`, `.` become `-`"),
-    ("pypi-test.json", "parse", "pkg:pypi/friendly.bard@1.0", "name is lowercased and runs of `-`, `_`, `.` become `-`"),
-    ("pypi-test.json", "parse", "pkg:pypi/friendly--bard@1.0", "name is lowercased and runs of `-`, `_`, `.` become `-`"),
-    ("pypi-test.json", "parse", "pkg:pypi/friendly__bard@1.0", "name is lowercased and runs of `-`, `_`, `.` become `-`"),
-    ("pypi-test.json", "parse", "pkg:pypi/My.PyPI_.--._Package@1.11.1.dev1", "name is lowercased and runs of `-`, `_`, `.` become `-`"),
-    ("pypi-test.json", "validate", "pkg:pypi/My.PyPI_.--._Package@1.11.1.dev1", "name is lowercased and runs of `-`, `_`, `.` become `-`"),
+    ("pypi-test.json", "parse", "pkg:pypi/My.PyPI_.--._Package@1.11.1.dev1", "upstream: the expected subpath is a description sentence, not a subpath"),
     ("rpm-test.json", "parse", "pkg:Rpm/fedora/curl@7.50.3-1.fc25?Arch=i386&Distro=fedora-25", "upstream contradiction: the validate case for the same input expects the keys lowercased"),
     ("swift-test.json", "parse", "pkg:swift/Alamofire@5.4.3", "namespace is required"),
     ("swift-test.json", "parse", "pkg:swift/github.com/Alamofire/@5.4.3", "namespace is required"),

@@ -1,6 +1,7 @@
 # PURL canonicalization (ECMA-427): design
 
-**Status:** stage 1 shipped in 0.1.7 (issue #10; stage 2 is #60): `libtea_core::purl`.
+**Status:** stage 1 shipped in 0.1.7 (issue #10): `libtea_core::purl`. Stage 2
+(#60) is type by type; `pypi` is done ("Stage 2: pypi" at the end).
 The proposal below is kept as written; "What was built" at the end says where
 the implementation differs and which statements in it turned out to be wrong.
 
@@ -170,3 +171,34 @@ definitions at the pinned commit:
 `rpm` has the same pair, and maven's `repositorY_url` is expected to parse.
 This implementation lowercases keys, as how-to-parse says, and lists the two
 `parse` cases. Not reported upstream yet.
+
+## Stage 2: pypi
+
+From the purl-spec `pypi` type definition at the pinned commit
+(`types/pypi-definition.json`, not vendored; the suite's `pypi-test.json` is):
+the name is case-insensitive, with the normalization rules "The name shall be
+lowercase" and "Replace runs of consecutive dash '-', underscore '_', or dot
+'.' characters with a single dash '-'" (PEP 503), and the version is marked
+case-insensitive with no normalization rule.
+
+- `Purl::canonical` applies both to `pypi` PURLs: the name is lowercased and
+  its runs collapsed, the version is lowercased. Only ASCII letters are
+  lowercased, because valid PyPI names and versions are ASCII. Lowercasing the
+  version follows `case_sensitive: false`; the suite has no case for it. No
+  PEP 440 normalization of the version (`1.0-1` vs `1.0.post1`): the
+  definition does not ask for it.
+- `CanonicalPurl::rules()` is the new `PurlRules::Pypi` for those, and
+  `Generic` for every other type. `Purl`'s accessors still return what was
+  written (`name()` of `pkg:pypi/Django_Allauth` is `Django_Allauth`).
+- The definition prohibits a namespace. A `pypi` PURL with one still parses:
+  rejecting components by type is a separate rule, not applied for any type.
+- The suite's `parse` cases are now compared on the components of the
+  canonical form, since the suite expects normalized components. 380 cases
+  pass (374 before) and 35 are listed (41 before). Six `pypi` cases pass now.
+  The seventh stays listed: for `pkg:pypi/My.PyPI_.--._Package@1.11.1.dev1`
+  the expected `subpath` is the sentence "Applied normalization_rules to
+  convert input string to valid form.", which no parser can produce. Not
+  reported upstream yet.
+- **Behaviour change, Experimental API:** two `pypi` PURLs that differ only in
+  name case or separators, or in version case, now compare equal under
+  `same_package_url`, and their canonical text changes.
