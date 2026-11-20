@@ -1,7 +1,7 @@
 # Compatibility
 
 What this repository supports, and how each claim is checked. Last reviewed for
-the libraries 0.1.9 and `libtea-cli` 0.2.0 (2026-11-20).
+the libraries 0.1.9 and `libtea-cli` 0.2.1 (2026-11-20).
 
 ## TEA specification
 
@@ -48,7 +48,8 @@ credentials, and not on the arm64 Linux runner or in a container. The commands
 added in 0.1.8 (`discover --purl`, `cle`, `search`, `inspect`) ran with the 0.1.8
 binary on the same three runners against the same two servers
 (scratch-repository run 44662015332;
-`docs/interop/cli-0.1.8-2026-11-20.md`).
+`docs/interop/cli-0.1.8-2026-11-20.md`). `cle --scheme pypi` (0.2.1) is tested
+against mock servers only: neither server serves `vers:pypi` ranges.
 
 **Linux libc.** The gnu archives need glibc 2.34 or newer (Ubuntu 22.04+,
 Debian 12+, RHEL 9+), measured on the v0.1.0 archives; they are built on
