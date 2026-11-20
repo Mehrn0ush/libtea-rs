@@ -6,6 +6,9 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-core`: **added** `pep440` (**Experimental**): `Pep440Version` parses Python package versions (PEP 440), case-insensitively and with the alternative spellings the specification accepts, and orders them as it says (`1.0 == 1.0.0`, `1.0.dev1 < 1.0a1 < 1.0 < 1.0.post1`). `as_str` keeps the input, and `Display` prints the normalized form. Also `Pep440Error` and `MAX_PEP440_BYTES`. No new dependency. Part of #61 (`docs/design/cle.md`, "Stage 2: pypi").
+- `libtea-core`: **added** `VersRange::contains_pypi` and `VersRange::is_pypi_type`, which evaluate `vers:pypi` ranges with PEP 440 ordering, and `Cle::status_for_pypi`, which evaluates a CLE document for a PEP 440 version. New `VersError::NotPep440`. `VersError::UnsupportedType`'s message is now "vers type is not evaluated by this method". Additive and **Experimental**. The vers-spec PyPI containment tests are vendored under `spec/vers/` (same commit): 7 cases pass, and 3 use unsorted ranges, which the specification forbids, so they are rejected.
+- Fuzzing: new target `pep440_version`, and `vers_range` also evaluates `pypi`.
 - Documentation: the release workflow ran for `v0.2.0` (run 44691175896), and `libtea-cli` 0.2.0 is on crates.io. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for the libraries 0.1.8 and the CLI 0.2.0. The plan in `docs/design/cli-publish.md` is marked done.
 
 ## libtea-cli 0.2.0 — 2026-11-20

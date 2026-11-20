@@ -3,17 +3,19 @@
 //! **Experimental:** may change in a 0.x minor release.
 //!
 //! [`Cle::status_for_semver`] applies the events of a [`Cle`] to one SemVer
-//! version, as `docs/design/cle.md` describes:
+//! version, and [`Cle::status_for_pypi`] to one PEP 440 version, as
+//! `docs/design/cle.md` describes:
 //!
 //! 1. A `withdrawn` event cancels the event its `eventId` names.
 //! 2. An event with no `versions` (and, for `released`, no `version`) applies
 //!    to the component as a whole. Otherwise it applies when one of its
-//!    specifiers matches: `{ version }` by SemVer equality, `{ range }` by
-//!    [`VersRange::contains_semver`].
+//!    specifiers matches: `{ version }` by equality under the scheme,
+//!    `{ range }` by [`VersRange::contains_semver`] or
+//!    [`VersRange::contains_pypi`].
 //! 3. Of the applying events of one type, the highest `id` wins.
 //!
-//! An event that cannot be evaluated (a `vers` type that is not SemVer, a
-//! malformed specifier, an unknown event type) is never treated as "does not
+//! An event that cannot be evaluated (a `vers` type the scheme does not
+//! evaluate, a malformed specifier, an unknown event type) is never treated as "does not
 //! apply": it is listed in [`LifecycleStatus::unevaluated`]. So "no end of
 //! life recorded" and "end of life could not be evaluated" stay distinct.
 //!
@@ -26,6 +28,7 @@ use std::collections::BTreeSet;
 use crate::enums::CleEventType;
 use crate::ids::TeaTimestamp;
 use crate::model::{Cle, CleEvent, CleVersionSpecifier};
+use crate::pep440::Pep440Version;
 use crate::vers::{VersError, VersRange};
 
 /// The lifecycle state of one version.
@@ -62,7 +65,9 @@ pub struct LifecycleStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Unevaluated {
-    /// A `range` whose `vers` type is not compared as SemVer here.
+    /// A `range` whose `vers` type the evaluating method does not compare
+    /// (anything but `semver` and `npm` for [`Cle::status_for_semver`],
+    /// anything but `pypi` for [`Cle::status_for_pypi`]).
     #[non_exhaustive]
     UnsupportedScheme {
         /// The event.
@@ -121,6 +126,36 @@ impl Cle {
     /// ```
     #[must_use]
     pub fn status_for_semver(&self, version: &semver::Version) -> LifecycleStatus {
+        self.status::<SemVer>(version)
+    }
+
+    /// The lifecycle status of `version`, comparing versions with PEP 440
+    /// ordering: `{ version }` specifiers by PEP 440 equality (`1.0` equals
+    /// `1.0.0`), and `vers:pypi` ranges by [`VersRange::contains_pypi`].
+    /// Ranges of every other type are [`Unevaluated::UnsupportedScheme`].
+    ///
+    /// **Experimental:** may change in a 0.x minor release.
+    ///
+    /// ```
+    /// use libtea_core::{Cle, Pep440Version};
+    ///
+    /// let cle: Cle = serde_json::from_str(r#"{"events": [
+    ///   {"id": 2, "type": "endOfSupport", "effective": "2025-06-01T00:00:00Z",
+    ///    "published": "2025-01-01T00:00:00Z", "versions": [{"range": "vers:pypi/<2.0"}]},
+    ///   {"id": 1, "type": "released", "effective": "2024-01-01T00:00:00Z",
+    ///    "published": "2024-01-01T00:00:00Z", "version": "1.4"}
+    /// ]}"#).unwrap();
+    /// let status = cle.status_for_pypi(&Pep440Version::parse("1.4.0").unwrap());
+    /// assert_eq!(status.end_of_support.unwrap().as_str(), "2025-06-01T00:00:00Z");
+    /// assert_eq!(status.released.unwrap().as_str(), "2024-01-01T00:00:00Z");
+    /// assert!(status.unevaluated.is_empty());
+    /// ```
+    #[must_use]
+    pub fn status_for_pypi(&self, version: &Pep440Version) -> LifecycleStatus {
+        self.status::<Pypi>(version)
+    }
+
+    fn status<S: Scheme>(&self, version: &S::Version) -> LifecycleStatus {
         let mut status = LifecycleStatus::default();
         let cancelled: BTreeSet<i64> = self
             .events
@@ -162,7 +197,7 @@ impl Cle {
                 });
                 continue;
             }
-            match applies(event, version) {
+            match applies::<S>(event, version) {
                 Applies::No => continue,
                 Applies::Unknown(reasons) => {
                     status.unevaluated.extend(reasons);
@@ -206,14 +241,64 @@ impl Cle {
     }
 }
 
-fn applies(event: &CleEvent, version: &semver::Version) -> Applies {
+/// How one versioning scheme parses, compares and evaluates versions.
+trait Scheme {
+    type Version;
+    /// The detail of a `Malformed` entry for a version that does not parse.
+    const NOT_A_VERSION: &'static str;
+    fn parse(text: &str) -> Option<Self::Version>;
+    fn same(a: &Self::Version, b: &Self::Version) -> bool;
+    fn contains(range: &VersRange, version: &Self::Version) -> Result<bool, VersError>;
+}
+
+struct SemVer;
+
+impl Scheme for SemVer {
+    type Version = semver::Version;
+    const NOT_A_VERSION: &'static str = "version is not SemVer";
+
+    fn parse(text: &str) -> Option<Self::Version> {
+        semver::Version::parse(text).ok()
+    }
+
+    /// SemVer precedence: build metadata does not count.
+    fn same(a: &Self::Version, b: &Self::Version) -> bool {
+        (a.major, a.minor, a.patch, &a.pre).cmp(&(b.major, b.minor, b.patch, &b.pre))
+            == Ordering::Equal
+    }
+
+    fn contains(range: &VersRange, version: &Self::Version) -> Result<bool, VersError> {
+        range.contains_semver(version)
+    }
+}
+
+struct Pypi;
+
+impl Scheme for Pypi {
+    type Version = Pep440Version;
+    const NOT_A_VERSION: &'static str = "version is not a PEP 440 version";
+
+    fn parse(text: &str) -> Option<Self::Version> {
+        Pep440Version::parse(text).ok()
+    }
+
+    fn same(a: &Self::Version, b: &Self::Version) -> bool {
+        a == b
+    }
+
+    fn contains(range: &VersRange, version: &Self::Version) -> Result<bool, VersError> {
+        range.contains_pypi(version)
+    }
+}
+
+fn applies<S: Scheme>(event: &CleEvent, version: &S::Version) -> Applies {
     let specifiers = event.versions.as_deref().unwrap_or_default();
     if event.event_type == CleEventType::Released {
         if let Some(released) = &event.version {
-            return match semver::Version::parse(released) {
-                Ok(released) if same_version(&released, version) => Applies::Yes,
-                Ok(_) => Applies::No,
-                Err(_) => Applies::Unknown(vec![malformed(event.id, "version is not SemVer")]),
+            return match S::parse(released) {
+                Some(released) if S::same(&released, version) => Applies::Yes,
+                Some(_) => Applies::No,
+                None => Applies::Unknown(vec![malformed(event.id, S::NOT_A_VERSION)]),
             };
         }
     }
@@ -222,7 +307,7 @@ fn applies(event: &CleEvent, version: &semver::Version) -> Applies {
     }
     let mut reasons = Vec::new();
     for specifier in specifiers {
-        match matches(specifier, version, event.id) {
+        match matches::<S>(specifier, version, event.id) {
             Ok(true) => return Applies::Yes,
             Ok(false) => {}
             Err(reason) => reasons.push(reason),
@@ -235,19 +320,19 @@ fn applies(event: &CleEvent, version: &semver::Version) -> Applies {
     }
 }
 
-fn matches(
+fn matches<S: Scheme>(
     specifier: &CleVersionSpecifier,
-    version: &semver::Version,
+    version: &S::Version,
     event_id: i64,
 ) -> Result<bool, Unevaluated> {
     match (&specifier.version, &specifier.range) {
-        (Some(exact), None) => semver::Version::parse(exact)
-            .map(|exact| same_version(&exact, version))
-            .map_err(|_| malformed(event_id, "version is not SemVer")),
+        (Some(exact), None) => S::parse(exact)
+            .map(|exact| S::same(&exact, version))
+            .ok_or_else(|| malformed(event_id, S::NOT_A_VERSION)),
         (None, Some(range)) => {
             let parsed =
                 VersRange::parse(range).map_err(|err| malformed(event_id, &err.to_string()))?;
-            parsed.contains_semver(version).map_err(|err| match err {
+            S::contains(&parsed, version).map_err(|err| match err {
                 VersError::UnsupportedType => Unevaluated::UnsupportedScheme {
                     event_id,
                     scheme: parsed.version_type().to_owned(),
@@ -260,10 +345,6 @@ fn matches(
             "a version specifier needs exactly one of version and range",
         )),
     }
-}
-
-fn same_version(a: &semver::Version, b: &semver::Version) -> bool {
-    (a.major, a.minor, a.patch, &a.pre).cmp(&(b.major, b.minor, b.patch, &b.pre)) == Ordering::Equal
 }
 
 fn malformed(event_id: i64, detail: &str) -> Unevaluated {
@@ -420,6 +501,61 @@ mod tests {
         let status = doc.status_for_semver(&v("1.2.0"));
         assert_eq!(date(&status.end_of_life), Some("2026-01-02T00:00:00Z"));
         assert!(status.unevaluated.is_empty());
+    }
+
+    fn p(text: &str) -> Pep440Version {
+        Pep440Version::parse(text).unwrap()
+    }
+
+    #[test]
+    fn pypi_versions_and_ranges() {
+        let doc = cle(vec![
+            event(
+                6,
+                "supersededBy",
+                serde_json::json!({"versions": [{"range": "vers:pypi/<2.0"}], "supersededByVersion": "2.0"}),
+            ),
+            event(
+                5,
+                "endOfLife",
+                serde_json::json!({"versions": [{"range": "vers:semver/<2.0.0"}]}),
+            ),
+            event(
+                4,
+                "endOfSupport",
+                serde_json::json!({"versions": [{"version": "1.4"}, {"range": "vers:pypi/>=1.5|<1.6"}]}),
+            ),
+            event(
+                3,
+                "endOfDevelopment",
+                serde_json::json!({"versions": [{"version": "one"}]}),
+            ),
+            event(1, "released", serde_json::json!({"version": "1.4.0"})),
+        ]);
+        let status = doc.status_for_pypi(&p("1.4"));
+        assert_eq!(status.superseded_by.as_deref(), Some("2.0"));
+        assert_eq!(date(&status.end_of_support), Some("2026-01-04T00:00:00Z"));
+        assert_eq!(date(&status.released), Some("2026-01-01T00:00:00Z"));
+        assert_eq!(status.end_of_life, None);
+        assert!(matches!(
+            &status.unevaluated[..],
+            [
+                Unevaluated::UnsupportedScheme { event_id: 5, scheme },
+                Unevaluated::Malformed { event_id: 3, detail },
+            ] if scheme == "semver" && detail == "version is not a PEP 440 version"
+        ));
+        // A post-release is after 1.4, and inside the second range of event 4.
+        let post = doc.status_for_pypi(&p("1.5.post1"));
+        assert_eq!(date(&post.end_of_support), Some("2026-01-04T00:00:00Z"));
+        assert_eq!(post.released, None);
+        assert_eq!(doc.status_for_pypi(&p("2.0")).superseded_by, None);
+        // The SemVer evaluation of the same document sees the other side.
+        let semver = doc.status_for_semver(&v("1.4.0"));
+        assert_eq!(date(&semver.end_of_life), Some("2026-01-05T00:00:00Z"));
+        assert!(semver
+            .unevaluated
+            .iter()
+            .any(|u| matches!(u, Unevaluated::UnsupportedScheme { event_id: 6, .. })));
     }
 
     #[test]

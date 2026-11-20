@@ -27,6 +27,7 @@ pub mod ids;
 pub mod lifecycle;
 pub mod lock;
 pub mod model;
+pub mod pep440;
 pub mod policy;
 pub mod purl;
 pub mod signature_format;
@@ -63,6 +64,7 @@ pub use model::{
     ComponentReleaseWithCollection, Identifier, Page, Product, ProductRelease,
     ProductReleaseWithCollection, TeaErrorBody, TokenResponse,
 };
+pub use pep440::{Pep440Error, Pep440Version};
 pub use policy::{classify_ip, origin_key, parse_api_base, DestinationPolicy, IpClass};
 pub use purl::{same_package_url, CanonicalPurl, Purl, PurlError, PurlRules};
 pub use signature_format::{detect_signature_format, SignatureFormat};
