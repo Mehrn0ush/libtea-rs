@@ -6,6 +6,10 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+## libtea-cli 0.2.1 — 2026-11-20
+
+CLI only: `libtea-cli` 0.2.1, tagged `v0.2.1`. It depends on `libtea-core` and `libtea-client` 0.1.9, which are already on crates.io and are not republished, so it also picks up their changes (PEP 440 versions, `vers:pypi`, and the `pypi` rules in `Purl::canonical`). The one new CLI feature is `cle --scheme`. Without it, every command, flag, exit code and lock-file format behaves as in 0.2.0, and the only `--json` change is the added `scheme` member of `cle --json` with `--version` (`git diff --stat v0.2.0 v0.2.1 -- crates/tea-cli/src`). The GitHub Action takes `version: "0.2.1"`.
+
 - Documentation: `libtea-core` and `libtea-client` 0.1.9 are on crates.io, tagged `libs-v0.1.9`, the first library-only release (no release run). `docs/compatibility.md` is reviewed for 0.1.9 and lists `pep440` as Experimental. The PURL and CLE design notes say the `pypi` stage shipped in 0.1.9.
 - `scripts/check-repo-settings.sh` (not part of any crate): the tag ruleset must cover `libs-v*` as well as `v*`, so `.github/workflows/repo-settings.yml` reports it if library tags lose their protection. Tested in `crates/tea-cli/tests/repo_settings.rs`. This repository's ruleset passes.
 - `libtea-cli`: **added** `cle --scheme semver|pypi`. With `--scheme pypi`, `--version` takes a PEP 440 version and the events are evaluated with `Cle::status_for_pypi` (libraries 0.1.9), so `vers:pypi` ranges are compared and other range types are listed as not evaluated. `semver` is the default, so existing commands behave as before. `cle --json` with `--version` gains a `scheme` member; nothing was renamed or removed. A version that is not valid for its scheme, or `--scheme` without `--version`, is exit status 2 and nothing is sent (`docs/cli-json.md`, `docs/cli-exit-codes.md`). Part of #61.
