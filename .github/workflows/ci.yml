@@ -105,10 +105,10 @@ jobs:
       # registry dependency cannot succeed. List packaged files only.
       - name: List libtea-client files
         run: cargo package -p libtea-client --locked --no-verify --list
-      - name: Confirm CLI and conformance stay unpublished
+      - name: Confirm the CLI and the doctests crate stay unpublished
         run: |
           grep -q 'publish = false' crates/tea-cli/Cargo.toml
-          grep -q 'publish = false' crates/tea-conformance/Cargo.toml
+          grep -q 'publish = false' crates/doctests/Cargo.toml
 
   deny:
     name: cargo deny

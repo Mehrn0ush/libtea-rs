@@ -255,10 +255,10 @@ status only:
 
 ## Offline conformance suite and mock tests
 
-`libtea-conformance` runs checks that use the pinned specification examples and rules. The checks do not contact a network.
+`libtea conformance` runs checks that use the pinned specification examples and rules. The checks do not contact a network. The code is `crates/tea-cli/src/conformance.rs`.
 
 ```sh
-cargo test -p libtea-conformance
+cargo test -p libtea-cli --bin libtea conformance
 cargo run -p libtea-cli -- conformance
 ```
 

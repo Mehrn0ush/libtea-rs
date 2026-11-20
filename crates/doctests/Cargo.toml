@@ -1,0 +1,13 @@
+[package]
+name = "libtea-doctests"
+version = "0.0.0"
+description = "Compiles the workspace README snippets as doctests; nothing else"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dev-dependencies]
+libtea-client.workspace = true
+tokio.workspace = true

@@ -36,6 +36,7 @@ macro_rules! err {
     };
 }
 
+mod conformance;
 mod inspect;
 mod sync;
 
@@ -687,7 +688,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Command::Conformance { .. } => {
-            let report = libtea_conformance::static_report();
+            let report = conformance::static_report();
             out!("{}", report.to_json()?);
             if !report.passed() {
                 return Err(coded(exit::FAILURE, "conformance checks failed"));
