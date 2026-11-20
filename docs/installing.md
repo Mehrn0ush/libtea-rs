@@ -5,7 +5,7 @@
 > produces. The verification commands below were run against each release from
 > 0.1.0 to 0.1.8 with gh 2.103.3.
 
-`libtea` is distributed as a GitHub release. From 0.2.0 (not released yet) it
+`libtea` is distributed as a GitHub release. From 0.2.0 it
 is also on crates.io as `libtea-cli`, which has no checksum file or attestation
 (see "From crates.io" below). Each GitHub release carries, for version `X.Y.Z`:
 
@@ -115,7 +115,7 @@ SHA-256 check and the attestation check for you and then runs a command.
 
 ## From crates.io (0.2.0 and later)
 
-From 0.2.0 (not released yet), `libtea-cli` is published to crates.io. Versions
+From 0.2.0, `libtea-cli` is published to crates.io. Versions
 0.1.x are not; for them use the archives above or build from a tag (below).
 It needs Rust 1.89 or newer.
 

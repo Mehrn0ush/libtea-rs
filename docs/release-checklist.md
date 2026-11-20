@@ -1,8 +1,8 @@
 # Release checklist (libtea-core → libtea-client → libtea-cli)
 
-`libtea-doctests` is never published (`publish = false`). Do **not** publish
-`libtea-cli` before its 0.2.0 release (`docs/design/cli-publish.md`); 0.1.x of
-the CLI is on GitHub Releases only.
+`libtea-doctests` is never published (`publish = false`). `libtea-cli` is
+published from 0.2.0 (`docs/design/cli-publish.md`); 0.1.x of the CLI is on
+GitHub Releases only.
 
 A green **local** `cargo doc` is **not** sufficient. CI must be green on the
 feature branch and again on `main` before anything is tagged or published.

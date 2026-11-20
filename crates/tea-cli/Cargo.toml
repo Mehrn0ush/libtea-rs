@@ -1,6 +1,6 @@
 [package]
 name = "libtea-cli"
-version = "0.1.8"
+version = "0.2.0"
 description = "The libtea command: discover, inspect and download CycloneDX Transparency Exchange API (TEA) artifacts with checksum checks"
 readme = "README.md"
 keywords = ["cyclonedx", "sbom", "tei", "transparency", "cli"]
@@ -10,7 +10,7 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 homepage = "https://github.com/Mehrn0ush/libtea-rs"
-# Not published before 0.2.0 (docs/design/cli-publish.md). The tests read files
+# Published from 0.2.0 (docs/design/cli-publish.md). The tests read files
 # from the repository (docs, scripts, workflows), so they stay out of the
 # package; Cargo.lock is added by `cargo package` for `cargo install --locked`.
 include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE"]

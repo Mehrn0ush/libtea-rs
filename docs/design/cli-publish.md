@@ -24,8 +24,9 @@ keeps the CLI from being published before 0.2.0.
 
 Step 4 is done: `docs/installing.md`, the README, `docs/compatibility.md`,
 `docs/architecture.md` and `docs/release-checklist.md` describe the crates.io
-route and the release order. They say "from 0.2.0 (not released yet)"; the
-release PR (step 5) removes "not released yet".
+route and the release order. Step 5 is the
+release PR for `libtea-cli` 0.2.0; the libraries stay at 0.1.8 and are not
+republished.
 
 ## Why
 

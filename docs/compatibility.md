@@ -67,8 +67,8 @@ build-provenance attestation (`docs/installing.md`).
 | GitHub Releases archives | SHA-256 and attestation (`gh attestation verify`) |
 | GitHub Action `Mehrn0ush/libtea-rs` (Marketplace: `libtea-rs`) | Downloads the archive, checks SHA-256, verifies the attestation when `gh` is present. Use 0.1.2 or later |
 | crates.io (`libtea-core`, `libtea-client`) | crates.io checksums; no attestation |
-| crates.io (`libtea-cli`, from 0.2.0, not released yet) | `cargo install libtea-cli --locked` builds from source; crates.io checksums; no attestation |
+| crates.io (`libtea-cli`, from 0.2.0) | `cargo install libtea-cli --locked` builds from source; crates.io checksums; no attestation |
 | `cargo install --git ... --tag vX.Y.Z libtea-cli` | Builds from source; no checksum or attestation |
 
-The CLI 0.1.x is not on crates.io; 0.2.0 will be (issue #14). There is no Homebrew formula or
+The CLI 0.1.x is not on crates.io; 0.2.0 and later are (issue #14). There is no Homebrew formula or
 container image (issue #17).

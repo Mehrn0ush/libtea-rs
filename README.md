@@ -9,7 +9,7 @@
 
 Independent Rust client libraries and a command-line tool for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 
-**Status:** 0.1.8. Releases 0.1.1 to 0.1.4 changed only documentation, CI and the GitHub Action; 0.1.5 added `libtea_client::core`, a re-export of `libtea-core`; 0.1.6 fixed a panic in `libtea_core::http_cache::parse_retry_after` and updated internal dependencies; 0.1.7 added Package URL parsing and comparison (`libtea_core::purl`), version ranges and CLE lifecycle evaluation for SemVer (`libtea_core::vers`, `libtea_core::lifecycle`), and signature format detection (`libtea_core::signature_format`, all Experimental), and fixed lost cache entries when several clients share a cache directory; 0.1.8 adds `Service::discover_purl` (`libtea-client`) and the CLI commands `discover --purl`, `cle`, `search` and `inspect`. Supported TEA versions, Rust versions and platforms, and how each is tested: [`docs/compatibility.md`](docs/compatibility.md). `libtea-core` and `libtea-client` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
+**Status:** libraries 0.1.8, CLI 0.2.0. Releases 0.1.1 to 0.1.4 changed only documentation, CI and the GitHub Action; 0.1.5 added `libtea_client::core`, a re-export of `libtea-core`; 0.1.6 fixed a panic in `libtea_core::http_cache::parse_retry_after` and updated internal dependencies; 0.1.7 added Package URL parsing and comparison (`libtea_core::purl`), version ranges and CLE lifecycle evaluation for SemVer (`libtea_core::vers`, `libtea_core::lifecycle`), and signature format detection (`libtea_core::signature_format`, all Experimental), and fixed lost cache entries when several clients share a cache directory; 0.1.8 adds `Service::discover_purl` (`libtea-client`) and the CLI commands `discover --purl`, `cle`, `search` and `inspect`. From there the CLI is versioned separately: `libtea-cli` 0.2.0 is the first on crates.io and changes no command, flag, exit code or JSON output. Supported TEA versions, Rust versions and platforms, and how each is tested: [`docs/compatibility.md`](docs/compatibility.md). `libtea-core`, `libtea-client` and `libtea-cli` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
 
 ## What it is, and what it is not
 
@@ -21,14 +21,14 @@ It is not a TEA server, does not sign or publish anything, does not scan for vul
 | --- | --- |
 | `libtea-core` | TEI, version negotiation, models, checksums, destination rules, lock file format. No network code. |
 | `libtea-client` | Async client (`tokio`, `reqwest`, `rustls`). |
-| `libtea-cli` | The `libtea` command. On crates.io from 0.2.0 (not released yet); versioned separately from the libraries. |
+| `libtea-cli` | The `libtea` command. On crates.io from 0.2.0; versioned separately from the libraries. |
 | `libtea-doctests` | Compiles this README's Rust snippets. Not published. |
 
 ## Install
 
 **Release binaries.** Each release has archives for seven targets (Linux gnu and musl on x86_64 and aarch64, macOS on x86_64 and aarch64, Windows x86_64), a `SHA256SUMS` file, a CycloneDX SBOM and a build-provenance attestation. Download from the [releases page](https://github.com/Mehrn0ush/libtea-rs/releases); [docs/installing.md](docs/installing.md) gives the checksum and attestation commands, which you should run before installing. Then `libtea --version` shows what you have.
 
-**From crates.io**, from `libtea-cli` 0.2.0 (not released yet; 0.1.x is not on crates.io). It needs Rust 1.89 or later:
+**From crates.io**, from `libtea-cli` 0.2.0 (0.1.x is not on crates.io). It needs Rust 1.89 or later:
 
 ```sh
 cargo install libtea-cli --locked
@@ -39,7 +39,7 @@ This compiles the published source on your machine. Unlike the release binaries,
 **From a tag** (needs Rust 1.89 or later):
 
 ```sh
-cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.8 --locked libtea-cli
+cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.2.0 --locked libtea-cli
 ```
 
 This builds the `libtea` binary at the tagged release. Without `--tag` it builds the default branch. No checksum or attestation check is involved in this route either.
@@ -240,7 +240,7 @@ The repository has a composite action that downloads a release of `libtea`, veri
 ```yaml
 - uses: Mehrn0ush/libtea-rs@<commit-sha-of-a-release-tag>
   with:
-    version: "0.1.8"
+    version: "0.2.0"
     command: sync
     check: "true"
     tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d

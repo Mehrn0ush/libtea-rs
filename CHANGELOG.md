@@ -6,6 +6,10 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+## libtea-cli 0.2.0 — 2026-11-20
+
+The first `libtea-cli` on crates.io (`cargo install libtea-cli --locked`), and the first CLI version separate from the libraries. `libtea-core` and `libtea-client` stay at 0.1.8 and are not republished; the CLI depends on them. **No command, flag, exit code, `--json` shape or lock-file format changed** since 0.1.8: the only source change is the conformance code moved into the CLI (`git diff --stat v0.1.8 v0.2.0 -- crates/tea-cli/src`), and `conformance --json` is byte-identical (`crates/tea-cli/tests/conformance_report.rs`). The release archives, `SHA256SUMS` and attestation are produced as before, under the tag `v0.2.0`; the crates.io route has no checksum file or attestation (`docs/installing.md`). The GitHub Action takes `version: "0.2.0"`. Issue #14.
+
 - `libtea-cli` (not yet published): crates.io metadata (description, keywords, category, homepage), its own `README.md` and `LICENSE`, and an `include` list so the package holds only the sources, README, LICENSE and lock file. `publish = false` is removed ahead of the 0.2.0 release; until then the release checklist says not to publish it. CI checks the packaged file list. Tags: `v<version>` stays the CLI's (and the binaries'), and a release of the libraries alone is tagged `libs-v<version>` (`docs/design/cli-publish.md`). Step 3 of #14.
 - `libtea-client` README: no longer mentions the removed conformance crate.
 - Documentation for publishing the CLI (step 4 of #14): `docs/installing.md` has a crates.io route for `libtea-cli` 0.2.0 and later, and says that it has no `SHA256SUMS` or attestation; the README, `docs/compatibility.md` and `docs/architecture.md` say the same. `docs/release-checklist.md` covers CLI-only, library-only and combined releases: the tags (`v<cli version>`, `libs-v<library version>`), the publish order `libtea-core` → `libtea-client` → `libtea-cli`, the full `cargo package -p libtea-cli` once the libraries are on crates.io, post-publish checks for the CLI, and `libs-v*` in the tag ruleset.
