@@ -109,19 +109,22 @@ if actions_checked:
             'Set Settings, Actions, General to "Allow all actions and reusable workflows"'
         )
 
+# v* tags the CLI and binary releases; libs-v* a release of the libraries alone.
 need_tag_rules = {"creation", "update", "deletion", "non_fast_forward"}
-good_tag_ruleset = False
+protected = set()
 for path in glob.glob(os.path.join(work, "tag-*.json")):
     ruleset = json.load(open(path, encoding="utf-8"))
     include = set(ruleset.get("conditions", {}).get("ref_name", {}).get("include", []))
-    covers = bool(include & {"refs/tags/v*", "~ALL"})
     has = {rule.get("type") for rule in ruleset.get("rules", [])}
-    if ruleset.get("enforcement") == "active" and covers and need_tag_rules <= has:
-        good_tag_ruleset = True
-if not good_tag_ruleset:
-    problems.append(
-        "no active tag ruleset covers v* and blocks creation, update, deletion and force pushes"
-    )
+    if ruleset.get("enforcement") == "active" and need_tag_rules <= has:
+        for pattern in ("v*", "libs-v*"):
+            if include & {f"refs/tags/{pattern}", "~ALL"}:
+                protected.add(pattern)
+for pattern in ("v*", "libs-v*"):
+    if pattern not in protected:
+        problems.append(
+            f"no active tag ruleset covers {pattern} and blocks creation, update, deletion and force pushes"
+        )
 
 if problems:
     for problem in problems:

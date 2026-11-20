@@ -21,7 +21,9 @@ The CLI and the libraries have separate versions (the CLI goes to 0.2.0 while
 `v<version>` is checked against `crates/tea-cli/Cargo.toml` by
 `scripts/check-release-tag.sh`; the binaries, the Action's download URL and the
 attestation's `--source-ref` all use it. A `libs-v` tag does not match the
-release workflow's `v[0-9]+...` trigger and starts nothing.
+release workflow's `v[0-9]+...` trigger and starts nothing. `libs-v0.1.9`
+(2026-11-20) was the first library-only release: `libtea-core` and
+`libtea-client` 0.1.9, no release run, no GitHub release.
 
 Publish in dependency order: `libtea-core`, then `libtea-client`, then
 `libtea-cli`, each only after the index serves the one before. Publish only
@@ -309,7 +311,8 @@ jq '{name,target,enforcement,conditions: (.conditions | .ref_name.include += ["r
 gh api -X PUT "repos/$REPO/rulesets/$ID" --input tag-ruleset-new.json
 ```
 
-`scripts/check-repo-settings.sh` checks the `v*` pattern only.
+`scripts/check-repo-settings.sh` requires both patterns, `v*` and `libs-v*`. This
+repository's ruleset has had both since 2026-11-20.
 
 `cargo audit` is required as well; it reads the same RustSec database as
 `cargo deny` and is a second opinion on it. A new advisory against a

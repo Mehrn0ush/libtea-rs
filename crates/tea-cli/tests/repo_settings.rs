@@ -48,12 +48,12 @@ fn branch_rules(types: &[&str], checks: &[&str]) -> Value {
     Value::Array(rules)
 }
 
-fn tag_ruleset(enforcement: &str, include: &str, types: &[&str]) -> Value {
+fn tag_ruleset(enforcement: &str, include: &[&str], types: &[&str]) -> Value {
     json!({
         "id": 7,
         "target": "tag",
         "enforcement": enforcement,
-        "conditions": {"ref_name": {"include": [include], "exclude": []}},
+        "conditions": {"ref_name": {"include": include, "exclude": []}},
         "rules": types.iter().map(|t| json!({"type": t})).collect::<Vec<_>>()
     })
 }
@@ -139,6 +139,7 @@ const GOOD_BRANCH: [&str; 4] = [
     "deletion",
 ];
 const GOOD_TAG: [&str; 4] = ["creation", "update", "deletion", "non_fast_forward"];
+const RELEASE_TAGS: [&str; 2] = ["refs/tags/v*", "refs/tags/libs-v*"];
 
 #[test]
 fn complete_settings_pass() {
@@ -148,7 +149,7 @@ fn complete_settings_pass() {
     let f = Fixture::new(
         "ok",
         Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
-        Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+        Some(tag_ruleset("active", &RELEASE_TAGS, &GOOD_TAG)),
     );
     let out = f.run();
     assert!(out.status.success(), "{}", stderr(&out));
@@ -167,19 +168,19 @@ fn each_missing_setting_is_reported() {
                 &["required_status_checks", "non_fast_forward", "deletion"],
                 &CHECKS,
             )),
-            Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+            Some(tag_ruleset("active", &RELEASE_TAGS, &GOOD_TAG)),
             "does not require a pull request",
         ),
         (
             "nocheck",
             Some(branch_rules(&["pull_request", "non_fast_forward", "deletion"], &[])),
-            Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+            Some(tag_ruleset("active", &RELEASE_TAGS, &GOOD_TAG)),
             "does not require status checks",
         ),
         (
             "somechecks",
             Some(branch_rules(&GOOD_BRANCH, &["rust stable", "package"])),
-            Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+            Some(tag_ruleset("active", &RELEASE_TAGS, &GOOD_TAG)),
             "required status checks are missing: cargo audit, cargo deny, cargo semver-checks, non_exhaustive guards, rust 1.89.0, tests on macos-15, tests on windows-2022",
         ),
         (
@@ -188,13 +189,13 @@ fn each_missing_setting_is_reported() {
                 &["pull_request", "required_status_checks", "deletion"],
                 &CHECKS,
             )),
-            Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+            Some(tag_ruleset("active", &RELEASE_TAGS, &GOOD_TAG)),
             "force pushes to main are not blocked",
         ),
         (
             "norules",
             Some(json!([])),
-            Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+            Some(tag_ruleset("active", &RELEASE_TAGS, &GOOD_TAG)),
             "no rules apply to main",
         ),
         (
@@ -206,19 +207,25 @@ fn each_missing_setting_is_reported() {
         (
             "tagdisabled",
             Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
-            Some(tag_ruleset("disabled", "refs/tags/v*", &GOOD_TAG)),
+            Some(tag_ruleset("disabled", &RELEASE_TAGS, &GOOD_TAG)),
             "no active tag ruleset covers v*",
         ),
         (
             "tagwrongpattern",
             Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
-            Some(tag_ruleset("active", "refs/tags/release-*", &GOOD_TAG)),
+            Some(tag_ruleset("active", &["refs/tags/release-*"], &GOOD_TAG)),
             "no active tag ruleset covers v*",
+        ),
+        (
+            "tagnolibs",
+            Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
+            Some(tag_ruleset("active", &["refs/tags/v*"], &GOOD_TAG)),
+            "no active tag ruleset covers libs-v*",
         ),
         (
             "tagweak",
             Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
-            Some(tag_ruleset("active", "refs/tags/v*", &["creation", "update"])),
+            Some(tag_ruleset("active", &RELEASE_TAGS, &["creation", "update"])),
             "no active tag ruleset covers v*",
         ),
     ];
@@ -312,7 +319,7 @@ fn good(tag: &str, actions: Option<Value>) -> Fixture {
     Fixture::with_actions(
         tag,
         Some(branch_rules(&GOOD_BRANCH, &CHECKS)),
-        Some(tag_ruleset("active", "refs/tags/v*", &GOOD_TAG)),
+        Some(tag_ruleset("active", &RELEASE_TAGS, &GOOD_TAG)),
         actions,
     )
 }
