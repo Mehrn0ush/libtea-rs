@@ -386,7 +386,7 @@ dependencies = [
 
 [[package]]
 name = "libtea-core"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "base64",
  "blake2",
