@@ -21,20 +21,28 @@ It is not a TEA server, does not sign or publish anything, does not scan for vul
 | --- | --- |
 | `libtea-core` | TEI, version negotiation, models, checksums, destination rules, lock file format. No network code. |
 | `libtea-client` | Async client (`tokio`, `reqwest`, `rustls`). |
-| `libtea-cli` | The `libtea` command. Not published to crates.io. |
+| `libtea-cli` | The `libtea` command. On crates.io from 0.2.0 (not released yet); versioned separately from the libraries. |
 | `libtea-doctests` | Compiles this README's Rust snippets. Not published. |
 
 ## Install
 
 **Release binaries.** Each release has archives for seven targets (Linux gnu and musl on x86_64 and aarch64, macOS on x86_64 and aarch64, Windows x86_64), a `SHA256SUMS` file, a CycloneDX SBOM and a build-provenance attestation. Download from the [releases page](https://github.com/Mehrn0ush/libtea-rs/releases); [docs/installing.md](docs/installing.md) gives the checksum and attestation commands, which you should run before installing. Then `libtea --version` shows what you have.
 
-**From source** (needs Rust 1.89 or later):
+**From crates.io**, from `libtea-cli` 0.2.0 (not released yet; 0.1.x is not on crates.io). It needs Rust 1.89 or later:
+
+```sh
+cargo install libtea-cli --locked
+```
+
+This compiles the published source on your machine. Unlike the release binaries, it involves no `SHA256SUMS` file and no attestation; [docs/installing.md](docs/installing.md) says what that means.
+
+**From a tag** (needs Rust 1.89 or later):
 
 ```sh
 cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.8 --locked libtea-cli
 ```
 
-This builds the `libtea` binary at the tagged release. Without `--tag` it builds the default branch. No checksum or attestation check is involved in this route. `libtea-cli` is not published to crates.io, so `cargo install libtea-cli` does not work.
+This builds the `libtea` binary at the tagged release. Without `--tag` it builds the default branch. No checksum or attestation check is involved in this route either.
 
 **Libraries** from crates.io. The library example below uses `libtea-client` and `tokio`; the `libtea-core` types come through `libtea_client::core` (from 0.1.5; with 0.1.4 or older, also depend on `libtea-core`):
 
@@ -257,11 +265,11 @@ Details and reasoning: [docs/security.md](docs/security.md). Report vulnerabilit
 
 ## Scope and non-goals
 
-Not in 0.1.x: a publisher API; official CycloneDX or ECMA certification (the offline suite is a smoke test); signature verification (see `docs/design/signature-verification.md`); universal server compatibility; HTTPS SVCB lookup; OAuth beyond API-key `client_credentials`; publishing `libtea-cli` or `libtea-conformance` to crates.io.
+Not in 0.1.x: a publisher API; official CycloneDX or ECMA certification (the offline suite is a smoke test); signature verification (see `docs/design/signature-verification.md`); universal server compatibility; HTTPS SVCB lookup; OAuth beyond API-key `client_credentials`.
 
 ## Documentation
 
-- [docs/installing.md](docs/installing.md): verify and install the release binaries
+- [docs/installing.md](docs/installing.md): verify and install the release binaries, or install from crates.io
 - [docs/github-action.md](docs/github-action.md), [docs/lock-file.md](docs/lock-file.md), [docs/cache.md](docs/cache.md)
 - [docs/cli-json.md](docs/cli-json.md), [docs/cli-exit-codes.md](docs/cli-exit-codes.md)
 - [docs/auth.md](docs/auth.md), [docs/security.md](docs/security.md), [docs/architecture.md](docs/architecture.md)

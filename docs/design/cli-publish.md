@@ -22,6 +22,11 @@ can only pass once the libraries it needs are published; it is a release step,
 not a CI gate. `publish = false` is gone, so nothing but the release checklist
 keeps the CLI from being published before 0.2.0.
 
+Step 4 is done: `docs/installing.md`, the README, `docs/compatibility.md`,
+`docs/architecture.md` and `docs/release-checklist.md` describe the crates.io
+route and the release order. They say "from 0.2.0 (not released yet)"; the
+release PR (step 5) removes "not released yet".
+
 ## Why
 
 A crate on crates.io cannot depend on an unpublished one, and `libtea-cli`

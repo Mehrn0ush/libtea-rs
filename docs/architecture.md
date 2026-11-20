@@ -14,7 +14,7 @@ libtea-cli             (commands, offline conformance report)
 
 `libtea-doctests` (`crates/doctests`, not published) compiles the Rust snippets of the workspace `README.md` as doctests. Nothing depends on it.
 
-`libtea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. Its commands are `spec`, `parse-tei`, `conformance`, `discover` (a TEI, or a PURL on a known base), `product-release`, `collections`, `cle`, `search`, `inspect`, `download`, `sync`, `diff` and `cache`. Identifier filters are `ListParams` on `libtea-client` list methods; `search` exposes them for the four top-level queries.
+`libtea-cli` calls the public crates. It does not reimplement TEI parsing or HTTP. It is versioned separately from the libraries (it goes to 0.2.0 while they stay on 0.1.x) and, from 0.2.0, published to crates.io after them; its stable surface is its commands, flags, exit codes, `--json` output and lock-file format, not a Rust API (`docs/design/cli-publish.md`). Its commands are `spec`, `parse-tei`, `conformance`, `discover` (a TEI, or a PURL on a known base), `product-release`, `collections`, `cle`, `search`, `inspect`, `download`, `sync`, `diff` and `cache`. Identifier filters are `ListParams` on `libtea-client` list methods; `search` exposes them for the four top-level queries.
 
 ## Request path
 

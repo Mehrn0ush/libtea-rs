@@ -5,8 +5,9 @@
 > produces. The verification commands below were run against each release from
 > 0.1.0 to 0.1.8 with gh 2.103.3.
 
-`libtea` is distributed as a GitHub release, not on crates.io (`libtea-cli` is
-`publish = false`). Each release carries, for version `X.Y.Z`:
+`libtea` is distributed as a GitHub release. From 0.2.0 (not released yet) it
+is also on crates.io as `libtea-cli`, which has no checksum file or attestation
+(see "From crates.io" below). Each GitHub release carries, for version `X.Y.Z`:
 
 | File | Contents |
 | --- | --- |
@@ -111,6 +112,27 @@ To read the SBOM: `libtea-X.Y.Z.cdx.json` is plain JSON.
 
 `docs/github-action.md` describes an action that does the download, the
 SHA-256 check and the attestation check for you and then runs a command.
+
+## From crates.io (0.2.0 and later)
+
+From 0.2.0 (not released yet), `libtea-cli` is published to crates.io. Versions
+0.1.x are not; for them use the archives above or build from a tag (below).
+It needs Rust 1.89 or newer.
+
+```sh
+cargo install libtea-cli --version X.Y.Z --locked
+libtea --version
+```
+
+`--locked` builds with the `Cargo.lock` packaged with the crate, that is the
+dependency versions recorded when it was packaged; without it Cargo resolves the
+newest compatible versions instead. This route **has none of the checks above**:
+there is no `SHA256SUMS` and no build-provenance attestation. Cargo checks each
+downloaded crate against the checksum in the crates.io index, which proves only
+that you got what crates.io serves, not which commit or workflow it was built
+from. The crate is uploaded from a maintainer's machine, not by the release
+workflow. You compile the binary yourself, so nothing ties it to the attested
+archives. If you need the attestation, use the archives.
 
 ## Build from source instead
 
