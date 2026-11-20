@@ -1,7 +1,7 @@
 # Compatibility
 
 What this repository supports, and how each claim is checked. Last reviewed for
-0.1.8 (2026-11-19).
+the libraries 0.1.8 and `libtea-cli` 0.2.0 (2026-11-20).
 
 ## TEA specification
 

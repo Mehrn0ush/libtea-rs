@@ -1,6 +1,7 @@
 # Folding `libtea-conformance` into the CLI and publishing `libtea-cli` 0.2: plan
 
-**Status:** plan for issue #14. Decisions taken (2026-11-20): crate name
+**Status:** done (issue #14). `libtea-cli` 0.2.0 was published to crates.io
+and GitHub Releases on 2026-11-20 (release run 44691175896). The plan as written follows. Decisions taken (2026-11-20): crate name
 `libtea-cli`; a tiny unpublished `libtea-doctests` crate for the README
 doctests; independent versions (the CLI at 0.2.0, the libraries stay on 0.1.x).
 Steps 1 and 2 are done: the conformance code is in `crates/tea-cli/src/conformance.rs`,
