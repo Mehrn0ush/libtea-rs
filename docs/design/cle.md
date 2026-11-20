@@ -1,7 +1,8 @@
 # CLE evaluation (ECMA-428), `vers` semver only: design
 
-**Status:** stage 1 shipped in 0.1.7 (issue #11; stage 2 is #61): `libtea_core::vers`
-and `Cle::status_for_semver`. The proposal below is kept as written; "What was
+**Status:** stage 1 shipped in 0.1.7 (issue #11): `libtea_core::vers` and
+`Cle::status_for_semver`. Stage 2 (#61): the CLI command shipped in 0.1.8, and
+`pypi` is evaluated ("Stage 2: pypi" at the end). The proposal below is kept as written; "What was
 built" at the end says where the implementation differs.
 
 ## What exists
@@ -159,3 +160,40 @@ tests under `spec/vers/`, `spec/vers/PINNED.md`):
 - The ECMA-428 text itself is still not vendored, and no CLE document from a
   real server has been evaluated: the tests use the OpenAPI examples and
   hand-built events.
+
+## Stage 2: pypi
+
+- `libtea_core::pep440::Pep440Version`: PEP 440 versions (the "Version
+  specifiers" specification of the Python Packaging User Guide), parsed as its
+  appendix's regular expression accepts them (the `packaging` library's
+  `VERSION_PATTERN`): case-insensitive, an optional `v`, epoch, release, the
+  alternative pre-, post- and dev-release spellings, and local labels. It is
+  hand-written; no dependency was added. Surrounding whitespace is an error, not
+  stripped. Numbers above `u64::MAX` are an error.
+- Ordering is the specification's (`1.0 == 1.0.0`;
+  `1.0.dev1 < 1.0a1 < 1.0 < 1.0+local < 1.0.post1`; local segments: text before
+  numbers). Equality and hashing follow it; `as_str` keeps the input and
+  `Display` prints the normalized form. Checked with the specification's
+  ordering example and a `pep440_version` fuzz target (normalized form parses
+  to an equal version and is a fixed point).
+- `VersRange::contains_pypi` evaluates `vers:pypi` with that ordering, through
+  the same interval evaluation and validation as `contains_semver`. Only the
+  ordering is used, as `vers` asks: PEP 440's specifier rules (`<1.0` excluding
+  `1.0a1`, `~=`, `==1.*`) do not apply. A new `VersError::NotPep440` is a
+  constraint version that does not parse. Two spellings of one version
+  (`1.0|1.0.0`) repeat a version and are `Order`.
+- `Cle::status_for_pypi`: `{ version }` specifiers by PEP 440 equality,
+  `vers:pypi` ranges by `contains_pypi`, any other range type
+  `UnsupportedScheme`; `status_for_semver` reports `vers:pypi` the same way.
+- **Upstream test data** (vers-spec `v1.2.1`, the commit already pinned):
+  `tests/pypi_range_containment_test.json` is vendored. 7 of its 10 cases pass.
+  The other 3 use ranges that are not sorted by version
+  (`vers:pypi/>=3.0.0|2.0.3`), which section 5.4 forbids. This implementation
+  rejects them (`Order`) as it does every invalid range, and the suite test
+  asserts that. Not reported upstream yet. `pypi_range_validate_test.json`
+  expects a normalized string, which this module does not produce, and is
+  not vendored; it also expects ranges with repeated versions and consecutive
+  lower bounds to validate, which section 5.4 forbids.
+- Not done: the CLI (`libtea cle --version` still evaluates SemVer; a scheme
+  option would be a CLI release), and real CLE data with `pypi` ranges.
+

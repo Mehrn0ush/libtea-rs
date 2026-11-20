@@ -42,4 +42,7 @@ fuzz_target!(|data: &[u8]| {
     // Evaluation never panics, for any version the selector picks.
     let version = semver::Version::new(u64::from(selector % 4), u64::from(selector / 4 % 4), 0);
     let _ = range.contains_semver(&version);
+    let pypi = format!("{}.{}", selector % 4, selector / 4 % 4);
+    let pypi = libtea_core::pep440::Pep440Version::parse(&pypi).expect("a PEP 440 version");
+    let _ = range.contains_pypi(&pypi);
 });

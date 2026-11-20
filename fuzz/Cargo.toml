@@ -83,3 +83,10 @@ path = "fuzz_targets/vers_range.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "pep440_version"
+path = "fuzz_targets/pep440_version.rs"
+test = false
+doc = false
+bench = false

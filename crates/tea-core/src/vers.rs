@@ -1,13 +1,15 @@
 //! `vers` version ranges (the version-range notation CLE and PURL use),
-//! parsed in full and evaluated for SemVer versions only.
+//! parsed in full and evaluated for SemVer and PyPI versions.
 //!
 //! **Experimental:** may change in a 0.x minor release.
 //!
 //! [`VersRange::parse`] checks the syntax of any `vers:<type>/<constraints>`
 //! string. [`VersRange::contains_semver`] then evaluates it when its type
 //! compares versions as SemVer 2.0 ([`VersRange::is_semver_type`]): `semver`,
-//! and `npm`, whose registered `vers` type uses node-semver versions. Every
-//! other type is reported as unsupported, never guessed.
+//! and `npm`, whose registered `vers` type uses node-semver versions.
+//! [`VersRange::contains_pypi`] evaluates the `pypi` type with PEP 440
+//! ordering ([`crate::pep440`]). Every other type is reported as unsupported,
+//! never guessed.
 //!
 //! The rules are from the `vers` specification, release `v1.2.1` of
 //! <https://github.com/package-url/vers-spec> (`docs/specification/`):
@@ -18,6 +20,8 @@
 use std::cmp::Ordering;
 
 use thiserror::Error;
+
+use crate::pep440::Pep440Version;
 
 /// Inputs longer than this are rejected with [`VersError::TooLong`].
 pub const MAX_VERS_BYTES: usize = 4096;
@@ -61,8 +65,9 @@ pub enum VersError {
     /// or an unencoded character the specification reserves.
     #[error("vers version has an invalid percent-encoding")]
     Encoding,
-    /// The type does not compare versions as SemVer.
-    #[error("vers type is not evaluated as SemVer")]
+    /// The type is not one the evaluating method handles (SemVer types for
+    /// [`VersRange::contains_semver`], `pypi` for [`VersRange::contains_pypi`]).
+    #[error("vers type is not evaluated by this method")]
     UnsupportedType,
     /// A constraint version is not a SemVer 2.0 version.
     #[error("vers version is not a SemVer version")]
@@ -73,6 +78,9 @@ pub enum VersError {
     /// Comparators do not alternate between lower and upper bounds.
     #[error("vers constraints have an invalid comparator sequence")]
     Sequence,
+    /// A constraint version of a `pypi` range is not a PEP 440 version.
+    #[error("vers version is not a PEP 440 version")]
+    NotPep440,
 }
 
 /// The comparator of one constraint.
@@ -275,21 +283,80 @@ impl VersRange {
         if !self.is_semver_type() {
             return Err(VersError::UnsupportedType);
         }
+        self.contains_with(
+            version,
+            |text| semver::Version::parse(text).map_err(|_| VersError::NotSemver),
+            precedence,
+        )
+    }
+
+    /// Whether this range's versions are compared as PEP 440 versions here:
+    /// the `pypi` type.
+    #[must_use]
+    pub fn is_pypi_type(&self) -> bool {
+        self.version_type == "pypi"
+    }
+
+    /// Whether `version` is in the range, comparing with PEP 440 ordering
+    /// ([`crate::pep440`]): `1.0 == 1.0.0`, and
+    /// `1.0.dev1 < 1.0a1 < 1.0 < 1.0.post1 < 1.0.1`.
+    ///
+    /// Only the ordering is used, as `vers` asks: PEP 440's own specifier
+    /// rules (such as `<1.0` excluding `1.0a1`) do not apply, so
+    /// `vers:pypi/<1.0` contains `1.0a1`. The range is validated first, as
+    /// for [`Self::contains_semver`].
+    ///
+    /// ```
+    /// use libtea_core::pep440::Pep440Version;
+    /// use libtea_core::vers::VersRange;
+    ///
+    /// let range = VersRange::parse("vers:pypi/>=1.0|<2.0").unwrap();
+    /// let v = |s: &str| Pep440Version::parse(s).unwrap();
+    /// assert_eq!(range.contains_pypi(&v("1.5.post1")), Ok(true));
+    /// assert_eq!(range.contains_pypi(&v("1.0.0")), Ok(true));
+    /// assert_eq!(range.contains_pypi(&v("2.0rc1")), Ok(true));
+    /// assert_eq!(range.contains_pypi(&v("2.0")), Ok(false));
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`VersError::UnsupportedType`] when [`Self::is_pypi_type`] is false,
+    /// [`VersError::NotPep440`] for a constraint version that does not parse,
+    /// and [`VersError::Order`] or [`VersError::Sequence`] for a range the
+    /// specification calls invalid (including `1.0|1.0.0`, which repeats a
+    /// version).
+    pub fn contains_pypi(&self, version: &Pep440Version) -> Result<bool, VersError> {
+        if !self.is_pypi_type() {
+            return Err(VersError::UnsupportedType);
+        }
+        self.contains_with(
+            version,
+            |text| Pep440Version::parse(text).map_err(|_| VersError::NotPep440),
+            Ord::cmp,
+        )
+    }
+
+    /// Validate the constraints and evaluate them for `version`, with
+    /// `parse` for constraint versions and `order` for comparing them.
+    fn contains_with<T>(
+        &self,
+        version: &T,
+        parse: impl Fn(&str) -> Result<T, VersError>,
+        order: impl Fn(&T, &T) -> Ordering,
+    ) -> Result<bool, VersError> {
         if self.any {
             return Ok(true);
         }
         let mut bounds = Vec::with_capacity(self.constraints.len());
         for constraint in &self.constraints {
-            let parsed =
-                semver::Version::parse(&constraint.version).map_err(|_| VersError::NotSemver)?;
-            bounds.push((constraint.comparator, parsed));
+            bounds.push((constraint.comparator, parse(&constraint.version)?));
         }
-        validate(&bounds)?;
+        validate(&bounds, &order)?;
 
         // Equality first: an inclusive constraint on the version includes it,
         // a `!=` on it excludes it. Versions are unique, so these never clash.
         for (comparator, bound) in &bounds {
-            if precedence(version, bound) == Ordering::Equal {
+            if order(version, bound) == Ordering::Equal {
                 // `!=` excludes it; `<` and `>` do not include their own version.
                 return Ok(!matches!(
                     comparator,
@@ -303,20 +370,20 @@ impl VersRange {
             .filter(|(comparator, _)| comparator.is_lower() || comparator.is_upper())
             .collect();
         for (index, (comparator, bound)) in ranges.iter().enumerate() {
-            let below = precedence(version, bound) == Ordering::Less;
+            let below = order(version, bound) == Ordering::Less;
             if comparator.is_upper() {
                 // An upper bound opens the range when it is the first bound,
                 // or closes the interval the previous lower bound opened.
                 let opened = match index.checked_sub(1).map(|i| ranges[i]) {
                     None => true,
                     Some((previous, lower)) => {
-                        previous.is_lower() && precedence(version, lower) == Ordering::Greater
+                        previous.is_lower() && order(version, lower) == Ordering::Greater
                     }
                 };
                 if opened && below {
                     return Ok(true);
                 }
-            } else if index + 1 == ranges.len() && precedence(version, bound) == Ordering::Greater {
+            } else if index + 1 == ranges.len() && order(version, bound) == Ordering::Greater {
                 // A lower bound with nothing after it is open to the top.
                 return Ok(true);
             }
@@ -332,10 +399,13 @@ fn precedence(a: &semver::Version, b: &semver::Version) -> Ordering {
 
 /// Specification section 5.4: sorted and unique, then the comparator rules
 /// for contiguous constraints.
-fn validate(bounds: &[(Comparator, semver::Version)]) -> Result<(), VersError> {
+fn validate<T>(
+    bounds: &[(Comparator, T)],
+    order: impl Fn(&T, &T) -> Ordering,
+) -> Result<(), VersError> {
     if bounds
         .windows(2)
-        .any(|pair| precedence(&pair[0].1, &pair[1].1) != Ordering::Less)
+        .any(|pair| order(&pair[0].1, &pair[1].1) != Ordering::Less)
     {
         return Err(VersError::Order);
     }
@@ -495,6 +565,51 @@ mod tests {
         );
         assert_eq!(check("vers:semver/1.0"), VersError::NotSemver);
         assert_eq!(check("vers:pypi/>=1.0"), VersError::UnsupportedType);
+    }
+
+    fn contains_pypi(range: &str, version: &str) -> Result<bool, VersError> {
+        VersRange::parse(range)
+            .unwrap()
+            .contains_pypi(&Pep440Version::parse(version).unwrap())
+    }
+
+    #[test]
+    fn pypi_ranges_use_pep440_ordering() {
+        let range = "vers:pypi/>=1.0|!=1.5|<2.0";
+        assert_eq!(contains_pypi(range, "1.0.0"), Ok(true));
+        assert_eq!(contains_pypi(range, "1.0.dev1"), Ok(false));
+        assert_eq!(contains_pypi(range, "1.5.0"), Ok(false));
+        assert_eq!(contains_pypi(range, "1.5.post1"), Ok(true));
+        assert_eq!(contains_pypi(range, "2.0rc1"), Ok(true));
+        assert_eq!(contains_pypi(range, "2.0"), Ok(false));
+        assert_eq!(contains_pypi(range, "1!0.1"), Ok(false));
+        assert_eq!(contains_pypi("vers:pypi/1.0", "1.0.0+local"), Ok(false));
+        assert_eq!(contains_pypi("vers:pypi/*", "0"), Ok(true));
+        // Spelled differently, the same version twice.
+        assert_eq!(
+            contains_pypi("vers:pypi/1.0|1.0.0", "1"),
+            Err(VersError::Order)
+        );
+        assert_eq!(
+            contains_pypi("vers:pypi/2.0|<1.0", "1"),
+            Err(VersError::Order)
+        );
+        assert_eq!(
+            contains_pypi("vers:pypi/>=1.0|latest", "1"),
+            Err(VersError::NotPep440)
+        );
+        assert_eq!(
+            VersRange::parse("vers:npm/1.0.0")
+                .unwrap()
+                .contains_pypi(&Pep440Version::parse("1.0.0").unwrap()),
+            Err(VersError::UnsupportedType)
+        );
+        assert_eq!(
+            VersRange::parse("vers:pypi/1.0.0")
+                .unwrap()
+                .contains_semver(&v("1.0.0")),
+            Err(VersError::UnsupportedType)
+        );
     }
 
     #[test]

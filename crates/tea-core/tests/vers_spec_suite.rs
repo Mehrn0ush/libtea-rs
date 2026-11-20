@@ -2,16 +2,19 @@
 //! `libtea_core::vers`.
 //!
 //! `parse` cases compare the type and constraints, and an expected failure
-//! must be rejected by `VersRange::parse` or, for a SemVer type, by the
-//! validation `contains_semver` runs first. `containment` cases are evaluated
-//! for SemVer types. `validate` cases expect a normalized string, which this
+//! must be rejected by `VersRange::parse` or, for a SemVer or `pypi` type, by
+//! the validation `contains_semver` and `contains_pypi` run first.
+//! `containment` cases are evaluated for npm and PyPI. Three PyPI cases use
+//! unsorted ranges, which section 5.4 forbids; they are listed in
+//! `UNSORTED_UPSTREAM` and must be rejected, not evaluated. `validate` cases expect a normalized string, which this
 //! module does not produce, so they are skipped. Cases that need rules for a
 //! type this module does not evaluate are listed in `TYPE_SPECIFIC`; the test
 //! fails if one of them starts passing.
 
 use std::path::Path;
 
-use libtea_core::vers::{Comparator, VersRange};
+use libtea_core::pep440::Pep440Version;
+use libtea_core::vers::{Comparator, VersError, VersRange};
 use serde_json::Value;
 
 const TYPE_SPECIFIC: &[(&str, &str)] = &[
@@ -27,6 +30,16 @@ const TYPE_SPECIFIC: &[(&str, &str)] = &[
         "vers:datetime/2024-01-01T00%3a00%3a00Z",
         "datetime colons are not percent-encoded",
     ),
+];
+
+/// PyPI containment cases whose range is not sorted by version. Section 5.4
+/// makes such a range invalid, and this implementation rejects it rather
+/// than sorting it; the upstream test expects it to be evaluated. Not
+/// reported upstream yet.
+const UNSORTED_UPSTREAM: &[&str] = &[
+    "vers:pypi/>=3.0.0|2.0.3",
+    "vers:pypi/>=3.0.0|!=2.0.3",
+    "vers:pypi/0.0.2|0.0.6|>=3.0.0|0.0.1|0.0.4|0.0.5|0.0.3",
 ];
 
 fn cases(file: &str) -> Vec<Value> {
@@ -60,6 +73,11 @@ fn parse_and_validate(input: &str) -> Result<Value, String> {
     if range.is_semver_type() {
         range
             .contains_semver(&semver::Version::new(0, 0, 0))
+            .map_err(|err| err.to_string())?;
+    }
+    if range.is_pypi_type() {
+        range
+            .contains_pypi(&Pep440Version::parse("0").unwrap())
             .map_err(|err| err.to_string())?;
     }
     Ok(shape(&range))
@@ -110,6 +128,31 @@ fn containment_cases() {
         ran += 1;
     }
     assert!(ran >= 1);
+}
+
+#[test]
+fn pypi_containment_cases() {
+    let mut ran = 0;
+    let mut unsorted = 0;
+    for case in cases("pypi_range_containment_test.json") {
+        let input = case["input"]["vers"].as_str().unwrap();
+        let range = VersRange::parse(input).unwrap();
+        let version = Pep440Version::parse(case["input"]["version"].as_str().unwrap()).unwrap();
+        let result = range.contains_pypi(&version);
+        if UNSORTED_UPSTREAM.contains(&input) {
+            assert_eq!(result, Err(VersError::Order), "{case}");
+            unsorted += 1;
+            continue;
+        }
+        assert_eq!(
+            result,
+            Ok(case["expected_output"].as_bool().unwrap()),
+            "{case}"
+        );
+        ran += 1;
+    }
+    assert_eq!(unsorted, UNSORTED_UPSTREAM.len());
+    assert!(ran >= 7, "only {ran} cases ran");
 }
 
 #[test]

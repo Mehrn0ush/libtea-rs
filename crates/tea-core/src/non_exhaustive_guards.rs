@@ -1391,6 +1391,7 @@ pub(crate) struct ControlEntryError;
 ///         libtea_core::vers::VersError::NotSemver => 0,
 ///         libtea_core::vers::VersError::Order => 0,
 ///         libtea_core::vers::VersError::Sequence => 0,
+///         libtea_core::vers::VersError::NotPep440 => 0,
 ///     }
 /// }
 /// ```
@@ -1416,12 +1417,42 @@ pub(crate) struct GuardVersError;
 ///         libtea_core::vers::VersError::NotSemver => 0,
 ///         libtea_core::vers::VersError::Order => 0,
 ///         libtea_core::vers::VersError::Sequence => 0,
+///         libtea_core::vers::VersError::NotPep440 => 0,
 ///         _ => 1,
 ///     }
 /// }
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlVersError;
+
+/// `Pep440Error` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::pep440::Pep440Error) -> u8 {
+///     match x {
+///         libtea_core::pep440::Pep440Error::TooLong => 0,
+///         libtea_core::pep440::Pep440Error::Invalid => 0,
+///         libtea_core::pep440::Pep440Error::NumberTooLarge => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardPep440Error;
+
+/// Control for `GuardPep440Error`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::pep440::Pep440Error) -> u8 {
+///     match x {
+///         libtea_core::pep440::Pep440Error::TooLong => 0,
+///         libtea_core::pep440::Pep440Error::Invalid => 0,
+///         libtea_core::pep440::Pep440Error::NumberTooLarge => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlPep440Error;
 
 /// `Comparator` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
 ///
