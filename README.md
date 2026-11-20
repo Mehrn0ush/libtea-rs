@@ -9,7 +9,7 @@
 
 Independent Rust client libraries and a command-line tool for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 
-**Status:** libraries 0.1.8, CLI 0.2.0. Releases 0.1.1 to 0.1.4 changed only documentation, CI and the GitHub Action; 0.1.5 added `libtea_client::core`, a re-export of `libtea-core`; 0.1.6 fixed a panic in `libtea_core::http_cache::parse_retry_after` and updated internal dependencies; 0.1.7 added Package URL parsing and comparison (`libtea_core::purl`), version ranges and CLE lifecycle evaluation for SemVer (`libtea_core::vers`, `libtea_core::lifecycle`), and signature format detection (`libtea_core::signature_format`, all Experimental), and fixed lost cache entries when several clients share a cache directory; 0.1.8 adds `Service::discover_purl` (`libtea-client`) and the CLI commands `discover --purl`, `cle`, `search` and `inspect`. From there the CLI is versioned separately: `libtea-cli` 0.2.0 is the first on crates.io and changes no command, flag, exit code or JSON output. Supported TEA versions, Rust versions and platforms, and how each is tested: [`docs/compatibility.md`](docs/compatibility.md). `libtea-core`, `libtea-client` and `libtea-cli` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
+**Status:** libraries 0.1.9, CLI 0.2.0. Releases 0.1.1 to 0.1.4 changed only documentation, CI and the GitHub Action; 0.1.5 added `libtea_client::core`, a re-export of `libtea-core`; 0.1.6 fixed a panic in `libtea_core::http_cache::parse_retry_after` and updated internal dependencies; 0.1.7 added Package URL parsing and comparison (`libtea_core::purl`), version ranges and CLE lifecycle evaluation for SemVer (`libtea_core::vers`, `libtea_core::lifecycle`), and signature format detection (`libtea_core::signature_format`, all Experimental), and fixed lost cache entries when several clients share a cache directory; 0.1.8 adds `Service::discover_purl` (`libtea-client`) and the CLI commands `discover --purl`, `cle`, `search` and `inspect`. From there the CLI is versioned separately: `libtea-cli` 0.2.0 is the first on crates.io and changes no command, flag, exit code or JSON output. Libraries 0.1.9 add PEP 440 versions (`libtea_core::pep440`), `vers:pypi` and CLE evaluation for them, and the `pypi` rules in `Purl::canonical` (all Experimental). Supported TEA versions, Rust versions and platforms, and how each is tested: [`docs/compatibility.md`](docs/compatibility.md). `libtea-core`, `libtea-client` and `libtea-cli` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
 
 ## What it is, and what it is not
 
@@ -48,7 +48,7 @@ This builds the `libtea` binary at the tagged release. Without `--tag` it builds
 
 ```toml
 [dependencies]
-libtea-client = "0.1.8"
+libtea-client = "0.1.9"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
