@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # Check that the repository settings the release process depends on exist.
 #
-#   check-repo-settings.sh [OWNER/REPO [BRANCH]]
+#   check-repo-settings.sh OWNER/REPO [BRANCH]
+#
+# OWNER/REPO defaults to $GITHUB_REPOSITORY (set in workflows); there is no
+# default outside one.
 #
 # Reads two things through `gh api` (read-only, uses GH_TOKEN):
 #   * the rules that apply to BRANCH (default main): a pull request is required,
 #     the CI jobs below are required status checks, and force pushes and
 #     deletion are blocked;
-#   * the repository rulesets: an active tag ruleset covering `v*` that blocks
-#     creation by others, updates, deletion and force pushes.
+#   * the repository rulesets: an active tag ruleset covering `v*`, and one
+#     covering `libs-v*` (the same one is fine), each blocking creation by
+#     others, updates, deletion and force pushes.
 #
 # A third read, repos/OWNER/REPO/actions/permissions, needs admin rights. When
 # the token may not read it (HTTP 403 or 404, as with the workflow's
@@ -22,7 +26,6 @@
 # public repository they are free.
 #
 # The names in REQUIRED_CHECKS are the job names in .github/workflows/ci.yml.
-# `cargo audit` is left out on purpose: that job is continue-on-error.
 
 set -euo pipefail
 

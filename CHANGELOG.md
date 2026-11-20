@@ -6,6 +6,9 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- Documentation: the release workflow ran for `v0.2.1` (run 44783205174), and `libtea-cli` 0.2.1 is on crates.io. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for the CLI 0.2.1 and says `cle --scheme pypi` is tested against mock servers only. `docs/release-checklist.md` notes that the CI run started by a tag push is not a release gate, and that `scripts/check-repo-settings.sh` takes the repository as an argument.
+- `scripts/check-repo-settings.sh` (not part of any crate): the header comment matches the script. The repository argument is required outside a workflow, the tag rulesets must cover `libs-v*` as well as `v*`, and `cargo audit` is a required check (the comment said it was left out). No behaviour change.
+
 ## libtea-cli 0.2.1 — 2026-11-20
 
 CLI only: `libtea-cli` 0.2.1, tagged `v0.2.1`. It depends on `libtea-core` and `libtea-client` 0.1.9, which are already on crates.io and are not republished, so it also picks up their changes (PEP 440 versions, `vers:pypi`, and the `pypi` rules in `Purl::canonical`). The one new CLI feature is `cle --scheme`. Without it, every command, flag, exit code and lock-file format behaves as in 0.2.0, and the only `--json` change is the added `scheme` member of `cle --json` with `--version` (`git diff --stat v0.2.0 v0.2.1 -- crates/tea-cli/src`). The GitHub Action takes `version: "0.2.1"`.
