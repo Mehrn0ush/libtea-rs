@@ -1,6 +1,6 @@
 # CLI exit codes
 
-Stable for the `libtea` CLI (`libtea-cli`, unpublished). The numbers are part of
+Stable for the `libtea` CLI (`libtea-cli`). The numbers are part of
 the CLI contract: a change needs a CHANGELOG entry. The same table is in
 `libtea --help`. Tests: `crates/tea-cli/tests/json_and_exit_codes.rs`,
 `crates/tea-cli/tests/output_file.rs`.

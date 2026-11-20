@@ -1,9 +1,34 @@
-# Release checklist (libtea-core → libtea-client)
+# Release checklist (libtea-core → libtea-client → libtea-cli)
 
-Do **not** publish `libtea-cli` before its 0.2.0 release (`docs/design/cli-publish.md`). `libtea-doctests` is never published (`publish = false`).
+`libtea-doctests` is never published (`publish = false`). Do **not** publish
+`libtea-cli` before its 0.2.0 release (`docs/design/cli-publish.md`); 0.1.x of
+the CLI is on GitHub Releases only.
 
 A green **local** `cargo doc` is **not** sufficient. CI must be green on the
 feature branch and again on `main` before anything is tagged or published.
+
+## What a release contains, and its tag
+
+The CLI and the libraries have separate versions (the CLI goes to 0.2.0 while
+`libtea-core` and `libtea-client` stay on 0.1.x). A release is one of:
+
+| Release | Tag | Release workflow | Published to crates.io |
+| --- | --- | --- | --- |
+| CLI only | `v<cli version>` | yes: binaries, SBOM, attestation, draft | `libtea-cli` |
+| Libraries only | `libs-v<library version>` | no | the libraries that changed |
+| Both | `v<cli version>` (and `libs-v<library version>` on the same commit) | yes | the libraries, then `libtea-cli` |
+
+`v<version>` is checked against `crates/tea-cli/Cargo.toml` by
+`scripts/check-release-tag.sh`; the binaries, the Action's download URL and the
+attestation's `--source-ref` all use it. A `libs-v` tag does not match the
+release workflow's `v[0-9]+...` trigger and starts nothing.
+
+Publish in dependency order: `libtea-core`, then `libtea-client`, then
+`libtea-cli`, each only after the index serves the one before. Publish only
+the crates whose version was bumped; a crate whose version is already on
+crates.io is skipped (`cargo publish` refuses it anyway). A library left at its
+version keeps its published version: the CLI's `Cargo.toml` names the library
+versions it needs, so check that those are on crates.io before tagging.
 
 ## Exact order
 
@@ -22,36 +47,47 @@ feature branch and again on `main` before anything is tagged or published.
 4. **CI green on `main`** at the merge result. Record that SHA as
    `RELEASE_SHA`. If it differs from the reviewed SHA (a merge commit), the
    diff between them must be empty: `git diff <reviewed-sha> RELEASE_SHA`.
-5. `cargo publish --dry-run -p libtea-core --locked` from a clean checkout of
-   `RELEASE_SHA`.
-6. **Tag `RELEASE_SHA`** once: `git tag -a v0.1.0 RELEASE_SHA -m "libtea 0.1.0"`
-   and push the tag. The tag points at the `main` commit, never at a
-   feature-branch commit. This is the only tag; there is no separate trial tag.
-7. **Binary release workflow** (details in "Binary release" below). The tag
-   starts `release.yml`. Approve the two deployments (`attest`,
+5. From a clean checkout of `RELEASE_SHA`: `cargo publish --dry-run -p libtea-core --locked`
+   if `libtea-core` is released. For a CLI release whose libraries are all
+   already on crates.io, also `cargo package -p libtea-cli --locked` (the full
+   verify, which builds against the libraries from crates.io); otherwise that
+   check waits for step 12.
+6. **Tag `RELEASE_SHA`** once, with the tag from the table above:
+   `git tag -a v0.2.0 RELEASE_SHA -m "libtea 0.2.0"` for a CLI release, or
+   `git tag -a libs-v0.1.9 RELEASE_SHA -m "libtea libraries 0.1.9"` for the
+   libraries alone, and push it. The tag points at the `main` commit, never at a
+   feature-branch commit. There is no separate trial tag.
+7. **Binary release workflow** (CLI releases only; details in "Binary release"
+   below). The `v` tag starts `release.yml`. Approve the two deployments (`attest`,
    `draft-release`), download the **draft** release, and verify it with
    `docs/installing.md`: checksums, `gh attestation verify` with
    `--source-ref refs/tags/v$VERSION`, run the binary, open the SBOM. Do not go
    on until the checks succeed. Nothing has been published to crates.io at this point.
-8. Publish `libtea-core` (see "Publishing with a token" below):
+8. Publish `libtea-core` if it is released (see "Publishing with a token" below):
    `cargo publish -p libtea-core --locked`.
-9. **Wait** until the index serves `libtea-core 0.1.0`, for example until
-   `cargo info libtea-core@0.1.0` (or `cargo search libtea-core`) shows it.
-10. `cargo publish --dry-run -p libtea-client --locked` (this resolves
-    `libtea-core` from crates.io).
-11. `cargo publish -p libtea-client --locked`.
-12. **Publish the GitHub draft: publish the release by hand** (the workflow
-    never does).
-13. **Post-publish checks:** the commands are in "Post-publish checks" below.
+9. **Wait** until the index serves it, for example until
+   `cargo info libtea-core@0.1.9` (or `cargo search libtea-core`) shows it.
+10. If `libtea-client` is released: `cargo publish --dry-run -p libtea-client --locked`
+    (this resolves `libtea-core` from crates.io).
+11. `cargo publish -p libtea-client --locked`, then wait until the index serves
+    it, as in step 9.
+12. If `libtea-cli` is released: `cargo package -p libtea-cli --locked` (the
+    full verify; it resolves the libraries from crates.io, so it can only pass
+    once they are there), then `cargo publish --dry-run -p libtea-cli --locked`.
+13. `cargo publish -p libtea-cli --locked`.
+14. **Publish the GitHub draft: publish the release by hand** (CLI releases
+    only; the workflow never does).
+15. **Post-publish checks:** the commands are in "Post-publish checks" below.
 
 **If something fails.** Before the first `cargo publish` (steps 5 to 7: the
 workflow, or the verification of the draft): the maintainer deletes the draft
-release and the tag (`gh release delete v0.1.0 --yes --cleanup-tag`, which needs
-the tag ruleset's bypass list), fixes the problem on a branch, merges it to
-`main` by pull request, records the new `RELEASE_SHA`, and tags that commit.
-After the first `cargo publish` succeeded, never move, delete or re-point a
-tag: the crates on crates.io are fixed, so bump the version instead and start
-again at step 1.
+release and the tag (`gh release delete v0.2.0 --yes --cleanup-tag`, which needs
+the tag ruleset's bypass list; for a `libs-v` tag, which has no release,
+`git push origin :refs/tags/libs-v0.1.9`), fixes the problem on a branch,
+merges it to `main` by pull request, records the new `RELEASE_SHA`, and tags
+that commit. After the first `cargo publish` succeeded, never move, delete or
+re-point a tag: the crates on crates.io are fixed, so bump the version of the
+crate that needs the fix instead and start again at step 1.
 
 ## Publishing with a token
 
@@ -66,9 +102,10 @@ cargo publish -p libtea-core --locked
 unset CARGO_REGISTRY_TOKEN
 ```
 
-`read -rs` shows nothing as you paste. Publish `libtea-client` the same way
-after the index serves `libtea-core` (steps 9 to 11), then **revoke the token on
-crates.io**. Never paste a token into a chat, a ticket or a terminal log that is
+`read -rs` shows nothing as you paste. Publish `libtea-client` and
+`libtea-cli` the same way, each after the index serves the crate before it
+(steps 9 to 13), then **revoke the token on crates.io**. The first publish of
+`libtea-cli` creates a new crate, which needs the `publish-new` scope. Never paste a token into a chat, a ticket or a terminal log that is
 kept.
 
 ## Lessons from the first release
@@ -93,28 +130,34 @@ kept.
 
 ## Post-publish checks
 
-Run these after step 12, from a directory outside the repository.
+Run these after step 14, from a directory outside the repository, for the
+crates and versions you released.
+
+Libraries:
 
 ```sh
-cargo info libtea-core@0.1.0
-cargo info libtea-client@0.1.0
+cargo info libtea-core@0.1.9
+cargo info libtea-client@0.1.9
 cargo new --bin smoke && cd smoke
-cargo add libtea-client@0.1.0 libtea-core@0.1.0
+cargo add libtea-client@0.1.9 libtea-core@0.1.9
 cargo add tokio --features macros,rt-multi-thread
 ```
 
-Replace `src/main.rs` with the library snippet from the client README, then:
+Replace `src/main.rs` with the library snippet from the client README, then
+`cargo build`.
+
+CLI:
 
 ```sh
-cargo build
-cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.1.0 --locked libtea-cli
+cargo info libtea-cli@0.2.0
+cargo install libtea-cli --version 0.2.0 --locked
 libtea --version
-gh release view v0.1.0 --repo Mehrn0ush/libtea-rs --json isDraft,assets
+gh release view v0.2.0 --repo Mehrn0ush/libtea-rs --json isDraft,assets
 ```
 
-Verify one archive as `docs/installing.md` describes. Then open
-https://docs.rs/libtea-core/0.1.0 and https://docs.rs/libtea-client/0.1.0 and
-check that both build and show the independence, no-certification and
+Verify one archive as `docs/installing.md` describes. For a library release,
+open https://docs.rs/libtea-core/0.1.9 and https://docs.rs/libtea-client/0.1.9
+and check that both build and show the independence, no-certification and
 checksum-is-not-authenticity statements. The crates.io pages show the README
 packaged with the release; README changes made later appear there only with the
 next publish.
@@ -131,6 +174,7 @@ cargo deny check
 cargo audit
 cargo package -p libtea-core --locked
 cargo package -p libtea-client --locked --no-verify --list
+cargo package -p libtea-cli --locked --no-verify --list
 ```
 
 ## Claims
@@ -152,9 +196,11 @@ here is exercised by the test suite; check each item by hand.
    with the tag pattern `v*` only. Each privileged job asks for approval, so a
    release needs **two approvals** (one for `attest`, one for `draft-release`).
 2. **Tag ruleset** (Settings, Rules, Rulesets, New tag ruleset). Target tags
-   `v*`. Enforcement: Active. Rules: restrict creations, restrict updates,
+   `v*` and `libs-v*`. Enforcement: Active. Rules: restrict creations, restrict updates,
    restrict deletions, block force pushes. Bypass list: only the maintainers who
    may release. Without it anyone with write access can create a `v*` tag.
+   A `libs-v*` tag starts no workflow, but it names what was published, so it
+   gets the same protection.
 3. **Branch protection for `main`** (a branch ruleset works too): require a pull
    request (0 approvals when you are the only maintainer, see
    "Solo maintainer" below), require status checks (the CI jobs), block
@@ -222,13 +268,13 @@ gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
 }
 JSON
 
-# v* tags: create, update, delete and force push blocked; repository admins bypass.
+# v* and libs-v* tags: create, update, delete and force push blocked; repository admins bypass.
 gh api -X POST "repos/$REPO/rulesets" --input - <<'JSON'
 {
   "name": "release tags",
   "target": "tag",
   "enforcement": "active",
-  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "conditions": { "ref_name": { "include": ["refs/tags/v*", "refs/tags/libs-v*"], "exclude": [] } },
   "bypass_actors": [ { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" } ],
   "rules": [
     { "type": "creation" }, { "type": "update" },
@@ -254,6 +300,17 @@ jq '{name,target,enforcement,conditions,bypass_actors,rules: (.rules | map(if .t
 gh api -X PUT "repos/$REPO/rulesets/$ID" --input ruleset-new.json
 ```
 
+The `libs-v*` pattern was added for library-only releases (issue #14). To add
+it to an existing `release tags` ruleset before the first such tag:
+
+```sh
+gh api "repos/$REPO/rulesets/$ID" >tag-ruleset.json
+jq '{name,target,enforcement,conditions: (.conditions | .ref_name.include += ["refs/tags/libs-v*"]),bypass_actors,rules}' tag-ruleset.json >tag-ruleset-new.json
+gh api -X PUT "repos/$REPO/rulesets/$ID" --input tag-ruleset-new.json
+```
+
+`scripts/check-repo-settings.sh` checks the `v*` pattern only.
+
 `cargo audit` is required as well; it reads the same RustSec database as
 `cargo deny` and is a second opinion on it. A new advisory against a
 dependency then blocks every pull request until the dependency is updated or
@@ -275,7 +332,7 @@ settings keep the protections that still mean something:
 - **Ruleset for `main`:** require the CI status checks (the jobs named in step 2
   of the order above), **0** required approvals, block force pushes and
   deletion. Changes reach `main` only through a pull request whose checks passed.
-- **Tag ruleset (`v*`):** restrict creation, updates and deletion, and put
+- **Tag ruleset (`v*`, `libs-v*`):** restrict creation, updates and deletion, and put
   yourself on the bypass list, so you can create the release tag and, before the
   first `cargo publish`, delete a failed one.
 
@@ -308,22 +365,23 @@ lists the pins and how to refresh them.
    Then follow `docs/installing.md` on the downloaded files (checksums,
    `gh attestation verify ... --source-ref "refs/tags/v$VERSION"`, run the binary
    on at least one platform you have, open the SBOM).
-3. The release stays a draft until step 12 of the crate order. A tag with a
+3. The release stays a draft until step 14 of the order. A tag with a
    suffix (for example `v0.1.1-rc.1`) produces a draft *prerelease* with file
    names carrying the whole tag version; that is kept for future use and is not
    part of the first release. Every tag, suffix or not, must be on `main`.
 
-## How the CLI is distributed, and what folding conformance in would involve
+## How the CLI is distributed
 
-`libtea-cli` is not on crates.io in 0.1.x. The CLI
-ships two ways: the release binaries from the workflow above, and
-`cargo install --git https://github.com/Mehrn0ush/libtea-rs --locked libtea-cli`
-(builds from source at the ref you give with `--tag`; no checksum or attestation
-check is involved in that route). Neither goes through crates.io.
+The CLI ships three ways:
 
-Until 0.1.8 the CLI depended on the unpublished `libtea-conformance` crate,
-and a published crate may not depend on an unpublished one. That code now lives
-in the CLI (`crates/tea-cli/src/conformance.rs`), and the README doctests live
-in the unpublished `libtea-doctests`, which nothing depends on, and
-`libtea-cli` has its crates.io metadata. Publishing it at 0.2.0 is planned in
-`docs/design/cli-publish.md` (issue #14) and not done yet.
+- the release archives from the workflow above, with `SHA256SUMS` and a
+  build-provenance attestation;
+- from 0.2.0, `cargo install libtea-cli --locked` from crates.io (published by
+  hand in steps 12 and 13; no checksum file or attestation);
+- `cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag vX.Y.Z --locked libtea-cli`,
+  which builds the tagged source (no checksum or attestation either).
+
+`docs/installing.md` describes each. Until 0.1.8 the CLI depended on the
+unpublished `libtea-conformance` crate, which kept it off crates.io; that code
+now lives in `crates/tea-cli/src/conformance.rs` (`docs/design/cli-publish.md`,
+issue #14).
