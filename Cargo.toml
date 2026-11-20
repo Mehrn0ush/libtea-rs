@@ -3,8 +3,8 @@ resolver = "3"
 members = [
     "crates/tea-core",
     "crates/tea-client",
-    "crates/tea-conformance",
     "crates/tea-cli",
+    "crates/doctests",
 ]
 exclude = ["fuzz"]
 
@@ -17,7 +17,6 @@ repository = "https://github.com/Mehrn0ush/libtea-rs"
 [workspace.dependencies]
 libtea-core = { version = "0.1.8", path = "crates/tea-core" }
 libtea-client = { version = "0.1.8", path = "crates/tea-client" }
-libtea-conformance = { version = "0.1.8", path = "crates/tea-conformance" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

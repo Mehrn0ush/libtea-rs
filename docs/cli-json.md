@@ -29,7 +29,8 @@ Object: `domain`, `type`, `identifier`, `well_known`, `publication_issues`
 
 The flag is accepted for uniformity; the report is always JSON. Object:
 `spec_commit`, `spec_version`, `is_certification` (always `false`), `cases`
-(array of `{id, passed, detail}`). It is an offline smoke report, not a
+(array of `{id, passed, detail}`), `warnings` (always an empty array: no
+command runs the strict-schema lints yet). It is an offline smoke report, not a
 certification.
 
 ## `discover <tei> --json` and `discover --purl <purl> --base <url> --json`

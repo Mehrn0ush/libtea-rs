@@ -22,7 +22,7 @@ It is not a TEA server, does not sign or publish anything, does not scan for vul
 | `libtea-core` | TEI, version negotiation, models, checksums, destination rules, lock file format. No network code. |
 | `libtea-client` | Async client (`tokio`, `reqwest`, `rustls`). |
 | `libtea-cli` | The `libtea` command. Not published to crates.io. |
-| `libtea-conformance` | Offline smoke checks used by `libtea conformance`. Not published. |
+| `libtea-doctests` | Compiles this README's Rust snippets. Not published. |
 
 ## Install
 

@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-conformance` (unpublished) is removed. Its checks are now part of the CLI (`crates/tea-cli/src/conformance.rs`, crate-private), and the doctests that compile the workspace README live in the new unpublished `libtea-doctests`. `libtea conformance` prints the same report byte for byte (`crates/tea-cli/tests/conformance_report.rs` compares it with a fixture taken from 0.1.8). Every unit and report test moved with the code. The three `#[non_exhaustive]` guards for `Report`, `CaseResult` and `LintWarning` were dropped, because those types are no longer public. No published crate changes. First step of #14 (`docs/design/cli-publish.md`).
+- Documentation: `docs/cli-json.md` lists the `warnings` member of the `conformance` report, which the report has always had.
 - Documentation: the release workflow ran for `v0.1.8` (run 44584585018); the docs that list the tags it has run for now include it. `docs/cli-json.md` and the CLE and PURL design notes say the new commands shipped in 0.1.8, and `docs/compatibility.md` is reviewed for 0.1.8 and notes that those commands are tested against mock servers only.
 - Documentation: `inspect`, `search`, `discover --purl` and `cle` were run against Vulnetix and the ReARM demo on Linux, macOS and Windows (`docs/interop/cli-0.1.8-2026-11-20.md`). All passed, except that ReARM does not resolve a PURL without a version (`OBJECT_UNKNOWN`). `docs/interoperability.md` and `docs/compatibility.md` record the run.
 

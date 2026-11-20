@@ -1,0 +1,43 @@
+{
+  "spec_commit": "962a0228af1bfcc1232ac3f79239317ff33fdb04",
+  "spec_version": "1.0.0",
+  "is_certification": false,
+  "cases": [
+    {
+      "id": "TEA-TEI-001",
+      "passed": true,
+      "detail": "registry examples parse, validate, and keep their original spelling"
+    },
+    {
+      "id": "TEA-TEI-002",
+      "passed": true,
+      "detail": "TEI comparison is case-sensitive and does not rewrite the domain"
+    },
+    {
+      "id": "TEA-DISC-001",
+      "passed": true,
+      "detail": "highest equal version is ordered by priority, with the normative example"
+    },
+    {
+      "id": "TEA-DISC-002",
+      "passed": true,
+      "detail": "an empty discovery array is not a successful resolution"
+    },
+    {
+      "id": "TEA-DISC-003",
+      "passed": true,
+      "detail": "an unknown error string still identifies a TEA error and is not a failover trigger"
+    },
+    {
+      "id": "TEA-ART-001",
+      "passed": true,
+      "detail": "a mismatched checksum is not reported as verified"
+    },
+    {
+      "id": "TEA-ART-002",
+      "passed": true,
+      "detail": "a SHA-1-only match is Weak, not Verified, unless the caller opts in"
+    }
+  ],
+  "warnings": []
+}

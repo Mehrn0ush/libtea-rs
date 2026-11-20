@@ -1,6 +1,12 @@
 # Folding `libtea-conformance` into the CLI and publishing `libtea-cli` 0.2: plan
 
-**Status:** plan for issue #14, for review. Nothing here is done.
+**Status:** plan for issue #14. Decisions taken (2026-11-20): crate name
+`libtea-cli`; a tiny unpublished `libtea-doctests` crate for the README
+doctests; independent versions (the CLI at 0.2.0, the libraries stay on 0.1.x).
+Steps 1 and 2 are done: the conformance code is in `crates/tea-cli/src/conformance.rs`,
+the README doctests are in `crates/doctests`, and `libtea-conformance` is
+removed. Its `#[non_exhaustive]` guards were dropped with it: the types are
+`pub(crate)` in a binary now, so there is nothing for a caller to construct.
 
 ## Why
 
