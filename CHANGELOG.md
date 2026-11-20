@@ -6,6 +6,7 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-core`: **changed** `purl` (**Experimental**): `Purl::canonical` applies the purl-spec `pypi` type rules to `pypi` PURLs. The name is lowercased and each run of `-`, `_` and `.` becomes one `-` (PEP 503), and the version is lowercased. So `pkg:pypi/Zope.Interface@5.0` and `pkg:pypi/zope-interface@5.0` are now the same package under `same_package_url`, and the canonical text of such PURLs changes. **Added** `PurlRules::Pypi`, which `CanonicalPurl::rules` returns for them, and `PartialOrd`/`Ord` for `PurlRules`. `Purl`'s accessors and `as_str` still return what was written, and nothing sent, stored, locked or printed is rewritten. Six more purl-spec suite cases pass (380). Part of #60 (`docs/design/purl.md`, "Stage 2: pypi").
 - Documentation: the release workflow ran for `v0.2.0` (run 44691175896), and `libtea-cli` 0.2.0 is on crates.io. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for the libraries 0.1.8 and the CLI 0.2.0. The plan in `docs/design/cli-publish.md` is marked done.
 
 ## libtea-cli 0.2.0 — 2026-11-20
