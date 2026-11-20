@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- Documentation: the release workflow ran for `v0.2.0` (run 44691175896), and `libtea-cli` 0.2.0 is on crates.io. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for the libraries 0.1.8 and the CLI 0.2.0. The plan in `docs/design/cli-publish.md` is marked done.
+
 ## libtea-cli 0.2.0 — 2026-11-20
 
 The first `libtea-cli` on crates.io (`cargo install libtea-cli --locked`), and the first CLI version separate from the libraries. `libtea-core` and `libtea-client` stay at 0.1.8 and are not republished; the CLI depends on them. **No command, flag, exit code, `--json` shape or lock-file format changed** since 0.1.8: the only source change is the conformance code moved into the CLI (`git diff --stat v0.1.8 v0.2.0 -- crates/tea-cli/src`), and `conformance --json` is byte-identical (`crates/tea-cli/tests/conformance_report.rs`). The release archives, `SHA256SUMS` and attestation are produced as before, under the tag `v0.2.0`; the crates.io route has no checksum file or attestation (`docs/installing.md`). The GitHub Action takes `version: "0.2.0"`. Issue #14.
