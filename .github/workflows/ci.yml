@@ -105,10 +105,26 @@ jobs:
       # registry dependency cannot succeed. List packaged files only.
       - name: List libtea-client files
         run: cargo package -p libtea-client --locked --no-verify --list
-      - name: Confirm the CLI and the doctests crate stay unpublished
+      # The CLI's dependencies are path + version, so a full verify would build
+      # against libtea-client from crates.io, which fails while a release PR
+      # bumps the libraries to a version not yet published. The full
+      # `cargo package -p libtea-cli` is a release step (docs/release-checklist.md).
+      # Here: only Rust sources and the fixed files, so no test, fixture or
+      # script is shipped, and the README, LICENSE and lock file are present.
+      - name: Check the libtea-cli file list
         run: |
-          grep -q 'publish = false' crates/tea-cli/Cargo.toml
-          grep -q 'publish = false' crates/doctests/Cargo.toml
+          set -euo pipefail
+          cargo package -p libtea-cli --locked --no-verify --list > cli-files.txt
+          cat cli-files.txt
+          if grep -vxE '\.cargo_vcs_info\.json|Cargo\.lock|Cargo\.toml|Cargo\.toml\.orig|LICENSE|README\.md|src/[A-Za-z0-9_/]+\.rs' cli-files.txt; then
+            echo "::error::libtea-cli would ship the files above; see 'include' in crates/tea-cli/Cargo.toml"
+            exit 1
+          fi
+          for required in Cargo.lock LICENSE README.md src/main.rs; do
+            grep -qxF "$required" cli-files.txt || { echo "::error::libtea-cli package lacks $required"; exit 1; }
+          done
+      - name: Confirm the doctests crate stays unpublished
+        run: grep -q 'publish = false' crates/doctests/Cargo.toml
 
   deny:
     name: cargo deny

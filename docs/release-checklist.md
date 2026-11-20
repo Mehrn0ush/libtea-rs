@@ -1,6 +1,6 @@
 # Release checklist (libtea-core → libtea-client)
 
-Do **not** publish `libtea-cli` or `libtea-doctests` (`publish = false`).
+Do **not** publish `libtea-cli` before its 0.2.0 release (`docs/design/cli-publish.md`). `libtea-doctests` is never published (`publish = false`).
 
 A green **local** `cargo doc` is **not** sufficient. CI must be green on the
 feature branch and again on `main` before anything is tagged or published.
@@ -315,7 +315,7 @@ lists the pins and how to refresh them.
 
 ## How the CLI is distributed, and what folding conformance in would involve
 
-`libtea-cli` stays `publish = false` in 0.1.x. The CLI
+`libtea-cli` is not on crates.io in 0.1.x. The CLI
 ships two ways: the release binaries from the workflow above, and
 `cargo install --git https://github.com/Mehrn0ush/libtea-rs --locked libtea-cli`
 (builds from source at the ref you give with `--tag`; no checksum or attestation
@@ -324,6 +324,6 @@ check is involved in that route). Neither goes through crates.io.
 Until 0.1.8 the CLI depended on the unpublished `libtea-conformance` crate,
 and a published crate may not depend on an unpublished one. That code now lives
 in the CLI (`crates/tea-cli/src/conformance.rs`), and the README doctests live
-in the unpublished `libtea-doctests`, which nothing depends on. Publishing
-`libtea-cli` 0.2 on crates.io is planned in `docs/design/cli-publish.md`
-(issue #14) and not done yet.
+in the unpublished `libtea-doctests`, which nothing depends on, and
+`libtea-cli` has its crates.io metadata. Publishing it at 0.2.0 is planned in
+`docs/design/cli-publish.md` (issue #14) and not done yet.
