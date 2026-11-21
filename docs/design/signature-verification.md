@@ -1,7 +1,7 @@
 # Signature verification — design (libtea-rs)
 
 **Status:** stage 1 (0.1.7, issue #12): format detection and
-`download --signature`. Stage 2 (issue #62, next library and CLI releases): the
+`download --signature`. Stage 2 (issue #62, libraries 0.2.0 and `libtea-cli` 0.2.2): the
 trait answers questions 2, 3 and 6 below, and `KeyVerifier` (feature
 `signature-keys`) checks raw detached Ed25519 and ECDSA P-256 signatures under
 caller-supplied keys. See "Stage 2" at the end.
