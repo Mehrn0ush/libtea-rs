@@ -15,7 +15,7 @@ sources are identical between the `v0.1.0` and `v0.1.6` tags). In 0.1.7,
 was renamed or removed. In 0.1.8, `discover --purl` (same array as
 `discover <tei>`), `cle`, `search` and `inspect` were added; existing outputs did not change.
 In `libtea-cli` 0.2.1, `cle` gained `--scheme` and a `scheme` member next to
-`version`; nothing was renamed or removed. In the next CLI release, the
+`version`; nothing was renamed or removed. In `libtea-cli` 0.2.2, the
 `signature` member of `download --json` gains `outcome`, `policy`, `detail`
 and `saved_to`, and `verified` can be `true` (with `--signature-key`).
 
@@ -216,7 +216,7 @@ after the checksum check) and `--json` is rejected with exit status 2.
 - `etag` is a validator, not a checksum.
 
 With `--signature` (added in 0.1.7), `--signature-key` or `--signature-output`
-(both added in the next CLI release), the object also has a `signature`
+(both added in `libtea-cli` 0.2.2), the object also has a `signature`
 member. Without any of them the member is absent and no signature request is
 made.
 

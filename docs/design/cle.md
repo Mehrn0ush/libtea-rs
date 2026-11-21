@@ -222,7 +222,7 @@ What agrees:
   ("Selection") retains such events as applying "to the component as a whole",
   and that rule is the one followed.
 
-What changed after reading it (next library release):
+What changed after reading it (libraries 0.2.0):
 
 - **Withdrawn withdrawals (7.9, 9.5).** A withdrawn event is ignored "as if it
   never existed", so a `withdrawn` event that is itself withdrawn cancels

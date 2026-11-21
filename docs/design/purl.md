@@ -2,7 +2,7 @@
 
 **Status:** stage 1 shipped in 0.1.7 (issue #10): `libtea_core::purl`. Stage 2
 (#60): `pypi` shipped in 0.1.9 ("Stage 2: pypi"), and the rules every type
-definition gives as data follow in the next library release ("Stage 2: rules
+definition gives as data shipped in 0.2.0 ("Stage 2: rules
 from the type definitions", at the end).
 The proposal below is kept as written; "What was built" at the end says where
 the implementation differs and which statements in it turned out to be wrong.
