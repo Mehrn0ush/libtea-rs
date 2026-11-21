@@ -10,9 +10,12 @@ fuzz_target!(|data: &[u8]| {
     let Ok(text) = std::str::from_utf8(rest) else {
         return;
     };
+    // The ECMA-428 parse accepts more, never less, and agrees where both accept.
+    let lenient = VersRange::parse_cle(text);
     let Ok(range) = VersRange::parse(text) else {
         return;
     };
+    assert_eq!(lenient.as_ref(), Ok(&range), "parse_cle disagrees with parse");
     // Re-encoding the parsed constraints gives a string that parses to the
     // same constraints.
     let mut rebuilt = format!("vers:{}/", range.version_type());
