@@ -66,7 +66,7 @@ pub use model::{
 };
 pub use pep440::{Pep440Error, Pep440Version};
 pub use policy::{classify_ip, origin_key, parse_api_base, DestinationPolicy, IpClass};
-pub use purl::{same_package_url, CanonicalPurl, Purl, PurlError, PurlRules};
+pub use purl::{same_package_url, CanonicalPurl, Purl, PurlError, PurlRules, PurlTypeError};
 pub use signature_format::{detect_signature_format, SignatureFormat};
 pub use tei::{encode_query_component, Tei};
 pub use version::{

@@ -7,7 +7,10 @@
 | Commit | `26671718c3da7225c582a94da319c0c6c3a60cf7` |
 | License | MIT (`spec/purl/LICENSE`, unmodified) |
 
-Unmodified copies of the specification and per-type test files, used by
+Unmodified copies of the specification and per-type test files, and of the
+per-type definitions (`types/*-definition.json`, read for their
+`case_sensitive`, `requirement`, `permitted_characters` and required qualifier
+fields), used by
 `crates/tea-core/tests/purl_spec_suite.rs` to check `libtea_core::purl`. They
 are not packaged into any published crate. Fetched with
 `gh api -H 'Accept: application/vnd.github.raw'
@@ -67,3 +70,45 @@ re-pin replaces the files and this table together.
 | `spec/purl/tests/types/vcpkg-test.json` | `tests/types/vcpkg-test.json` | `da8c9b02666e38a8a61612c532b2b39c414d5dd18d9770a3f34a391cbce7acf7` |
 | `spec/purl/tests/types/vscode-extension-test.json` | `tests/types/vscode-extension-test.json` | `23f9413163d7d5c3ffece71dc995e44694a6545468062a49b01109e5bc319d3d` |
 | `spec/purl/tests/types/yocto-test.json` | `tests/types/yocto-test.json` | `f450741ae6b5ea0e64add94c61ce2a69b378ee32c9d6f25cb57081981904b8f0` |
+| `spec/purl/types/alpm-definition.json` | `types/alpm-definition.json` | `004da4440f57555ad3b66f0a6e8f999a9166f8b0c8255d0f396a53bd90322141` |
+| `spec/purl/types/apk-definition.json` | `types/apk-definition.json` | `3275dc59a544252841220dce0de16c5ba312637312a212c0d83e6f351f6a0c47` |
+| `spec/purl/types/bazel-definition.json` | `types/bazel-definition.json` | `b0bd498eb1893d9db13cc4adcc6b9d6e98b9a1a4397835ff731e9fe9c93e3b81` |
+| `spec/purl/types/bitbucket-definition.json` | `types/bitbucket-definition.json` | `211660d7d7772a8992958f0c9fa6b089d959ca70500420124f2529570d3a5a51` |
+| `spec/purl/types/bitnami-definition.json` | `types/bitnami-definition.json` | `2936f485be51880640ca0b54189c845aa5865cda586408162b5e70f42595977b` |
+| `spec/purl/types/brew-definition.json` | `types/brew-definition.json` | `fd330acdb9b2970e1ece91748c0b126039465b87d33197d83e32e023f2fc6725` |
+| `spec/purl/types/cargo-definition.json` | `types/cargo-definition.json` | `6dd6cc2b8d906dcddfada09a395276e141186f4cf8a9627bbf1ef3b612fb83ab` |
+| `spec/purl/types/chrome-extension-definition.json` | `types/chrome-extension-definition.json` | `e40f95755b66984bd8d947e1304859c4f3986f98ed2e4f63a63eba48caf1e597` |
+| `spec/purl/types/cocoapods-definition.json` | `types/cocoapods-definition.json` | `0a6578c3bb035101ebe3055ba7b5edff169ac3917866d4d46afeaabd740bc51d` |
+| `spec/purl/types/composer-definition.json` | `types/composer-definition.json` | `0f3e5450b1688ab7c68d26418f1287863e251faff3c40d7d79632f4ff96656a0` |
+| `spec/purl/types/conan-definition.json` | `types/conan-definition.json` | `f32df2052ab6f61c3701578d4ae227cfc0e402fe604b619be5e904cbcaa715e8` |
+| `spec/purl/types/conda-definition.json` | `types/conda-definition.json` | `01775daaaa79253f840b52daf5b89754ea76782cdf0dde5b0901e08b98400dc9` |
+| `spec/purl/types/cpan-definition.json` | `types/cpan-definition.json` | `cb862b345cfc122677f69da6f8bbc1d697acbbc099b549fce73ccc7269168264` |
+| `spec/purl/types/cran-definition.json` | `types/cran-definition.json` | `eafcec94a74cbe8ff9b83cb3244f19387441d7569ea5b5be47fed56592059bf3` |
+| `spec/purl/types/deb-definition.json` | `types/deb-definition.json` | `0eb1841949a19309fdbfa25f52f42ebea073bd4cbf8ccf9d0470279a7b696d15` |
+| `spec/purl/types/docker-definition.json` | `types/docker-definition.json` | `9adaee3b5ec2fe8a23f63e7c7f9e28262ee771ad82f85f242101e877bb817387` |
+| `spec/purl/types/gem-definition.json` | `types/gem-definition.json` | `2fd7f21d76132bccfe8db7e218d75291725628b1aba97e7840c510fd3542c1bb` |
+| `spec/purl/types/generic-definition.json` | `types/generic-definition.json` | `ba3cfdb29ec2793966f1c98365e5d70e422b44ef50cd1c468952ff0f19a7a5c6` |
+| `spec/purl/types/git-definition.json` | `types/git-definition.json` | `c37eae4004457274d727fd4dce4c195fe0d640e7f2ebf83a5fa728036e9c4a3e` |
+| `spec/purl/types/github-definition.json` | `types/github-definition.json` | `72708ea3c3636d2d44ea626e13618c2f739b74fe5e23715e51f111f3401c36ae` |
+| `spec/purl/types/golang-definition.json` | `types/golang-definition.json` | `42447a95400f905204ced0517ede501a4d1c5437498232537446469e3696cf06` |
+| `spec/purl/types/hackage-definition.json` | `types/hackage-definition.json` | `cdf4754d2421ac38a003553e66f51867b719be1f65f590c1c0b1d5ea5ec0fcf1` |
+| `spec/purl/types/hex-definition.json` | `types/hex-definition.json` | `153fb3499e0788b408f09a4fad1b3ec2a2b39ea08ef19bc777218bbdbe726007` |
+| `spec/purl/types/huggingface-definition.json` | `types/huggingface-definition.json` | `ce29d4840b1eda705c6adbce6ef6545328901b88693e4b3d04fee1a09b563131` |
+| `spec/purl/types/julia-definition.json` | `types/julia-definition.json` | `93b8e73f19040acd97ab71250c1cc37c5712c7dd76d675f2465b8e0e991ff145` |
+| `spec/purl/types/luarocks-definition.json` | `types/luarocks-definition.json` | `876cd9d974bf396f29a154a84185b970ce535daaaeb5e95eecac42311593d56d` |
+| `spec/purl/types/maven-definition.json` | `types/maven-definition.json` | `dc99b7d08eebf2fa5fc66831e78891be118f3c6012b2db83dd89dcffb85ff7e5` |
+| `spec/purl/types/mlflow-definition.json` | `types/mlflow-definition.json` | `ce4d7449702417ddec1dd1ae92d62f8c5cf8b937c97abfc00b681e9dc17c6661` |
+| `spec/purl/types/npm-definition.json` | `types/npm-definition.json` | `64c31b4eb4f542fecff9c39dd8a2b9764236b316454c95ff8cfa38d08d0d8e98` |
+| `spec/purl/types/nuget-definition.json` | `types/nuget-definition.json` | `6fb9bbd915e2230e381a9d9a0b11b83a9c1cf45404f97dcaa8f4847a96d48f1b` |
+| `spec/purl/types/oci-definition.json` | `types/oci-definition.json` | `75bc102a90ed348fce6c1f5d907d61132a430828db5a10445d15951c79c89778` |
+| `spec/purl/types/opam-definition.json` | `types/opam-definition.json` | `de9c3257e390d3de285aa0e7b403607720f9a903d9574759ebec306bcdeedf76` |
+| `spec/purl/types/otp-definition.json` | `types/otp-definition.json` | `cf367cc3860638f0119ea44b5b37d5c75475b03f3108c76618dd1df6ed250550` |
+| `spec/purl/types/pub-definition.json` | `types/pub-definition.json` | `90782999141dac8e67c4299b082acee245af499b41fb65c429e45bcd8e8d50d5` |
+| `spec/purl/types/pypi-definition.json` | `types/pypi-definition.json` | `885f90643fd5ad0e1f58650f644f0fd37a62986462202725f0bdfff8a8f36fb9` |
+| `spec/purl/types/qpkg-definition.json` | `types/qpkg-definition.json` | `1ac71b010de2a0d5facd52c6fc9b18c79d79c8278ba28532347e27dc72b1702d` |
+| `spec/purl/types/rpm-definition.json` | `types/rpm-definition.json` | `deddedde07c0181d4640cdac4ea36928d79531627c7097a540520cdf99f8546a` |
+| `spec/purl/types/swid-definition.json` | `types/swid-definition.json` | `14627a8ab84ef21859ca559ce593ff0dd1d0bbb643e25571a977ab500d758ef8` |
+| `spec/purl/types/swift-definition.json` | `types/swift-definition.json` | `4d9a6cdec234ac8429eb5fd5033535f14b80d5005f83260645a6200d6a7f393a` |
+| `spec/purl/types/vcpkg-definition.json` | `types/vcpkg-definition.json` | `dcc7ed2efe751bd77ece94ab73e150e751169cc48e1b6c6aee73ef23eece2ed2` |
+| `spec/purl/types/vscode-extension-definition.json` | `types/vscode-extension-definition.json` | `04452a054245c9ab298e5b022115f653da483c3eb28bb7274bb631ecbd03845b` |
+| `spec/purl/types/yocto-definition.json` | `types/yocto-definition.json` | `e18418d544c60ea1a7cfdce6780c65d95dc912f7be41e39a968997cb07f89afe` |

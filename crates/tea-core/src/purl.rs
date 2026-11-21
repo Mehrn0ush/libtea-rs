@@ -13,10 +13,19 @@
 //! The rules ECMA-427 gives for every type are always applied
 //! ([`PurlRules::Generic`]): lowercase scheme, type and qualifier keys;
 //! percent-encoding normalized; empty qualifier values dropped and keys sorted;
-//! empty, `.` and `..` subpath segments dropped. Type-specific rules are
-//! applied only for the types [`PurlRules`] names (so far `pypi`); for every
-//! other type, two spellings that a type-aware tool would treat as the same
-//! package may compare unequal. [`CanonicalPurl::rules`] says which applied.
+//! empty, `.` and `..` subpath segments dropped. On top of those, the
+//! components a purl-spec type definition marks case-insensitive are
+//! lowercased ([`PurlRules::CaseInsensitive`]), and `pypi` names follow
+//! PEP 503 ([`PurlRules::Pypi`]). Rules the definitions give only in prose
+//! (for example `hackage`'s "kebab-case", `pub`'s underscores or `cpan`'s
+//! uppercase author) are not applied, so two spellings that a type-aware tool
+//! would treat as the same package may still compare unequal.
+//! [`CanonicalPurl::rules`] says which rules applied.
+//!
+//! [`Purl::check_type`] checks the requirements the definitions give as data:
+//! a required or prohibited namespace, required qualifiers, and the
+//! permitted characters of a name or version. [`Purl::parse`] does not apply
+//! them, so a PURL its type does not allow still parses.
 //!
 //! See `docs/design/purl.md` and the test-suite data under `spec/purl/`.
 
@@ -84,16 +93,160 @@ pub enum PurlRules {
     /// case-insensitive, is lowercased. Only ASCII letters are lowercased;
     /// valid PyPI names and versions are ASCII.
     Pypi,
+    /// The generic rules, plus lowercasing every component (namespace, name,
+    /// version or subpath) that the purl-spec type definition marks
+    /// `"case_sensitive": false`, for example the namespace and name of
+    /// `github`, `deb` and `composer` PURLs. Only ASCII letters are lowercased.
+    CaseInsensitive,
 }
 
 impl PurlRules {
     /// The rules for a lowercased type.
     fn for_type(package_type: &str) -> Self {
-        match package_type {
-            "pypi" => Self::Pypi,
+        match (package_type, type_rule(package_type)) {
+            ("pypi", _) => Self::Pypi,
+            (_, Some(rule)) if rule.lowercase != 0 => Self::CaseInsensitive,
             _ => Self::Generic,
         }
     }
+}
+
+/// Why a PURL breaks a rule of its purl-spec type definition
+/// ([`Purl::check_type`]).
+///
+/// **Experimental:** may change in a 0.x minor release.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum PurlTypeError {
+    /// The type requires a namespace and there is none.
+    #[error("this Package URL type requires a namespace")]
+    NamespaceRequired,
+    /// The type has no namespace and one is given.
+    #[error("this Package URL type does not allow a namespace")]
+    NamespaceProhibited,
+    /// A qualifier the type requires is missing.
+    #[error("this Package URL type requires the qualifier `{0}`")]
+    QualifierRequired(&'static str),
+    /// The name has characters the type does not permit.
+    #[error("the Package URL name has characters this type does not permit")]
+    NameCharacters,
+    /// The version has characters the type does not permit.
+    #[error("the Package URL version has characters this type does not permit")]
+    VersionCharacters,
+}
+
+const NAMESPACE: u8 = 1;
+const NAME: u8 = 2;
+const VERSION: u8 = 4;
+const SUBPATH: u8 = 8;
+
+#[derive(Clone, Copy)]
+enum Requirement {
+    Required,
+    Prohibited,
+    Optional,
+}
+
+/// What a purl-spec type definition (`spec/purl/types/`) gives as data,
+/// except `permitted_characters` (see [`check_characters`]). Sorted by type.
+/// `tests/purl_spec_suite.rs` checks it against the vendored definitions.
+struct TypeRule {
+    package_type: &'static str,
+    /// The components marked `"case_sensitive": false`.
+    lowercase: u8,
+    namespace: Requirement,
+    required_qualifiers: &'static [&'static str],
+}
+
+#[rustfmt::skip]
+const TYPE_RULES: &[TypeRule] = &[
+    TypeRule { package_type: "alpm", lowercase: NAMESPACE | NAME, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "apk", lowercase: NAMESPACE | NAME, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "bazel", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "bitbucket", lowercase: NAMESPACE | NAME, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "bitnami", lowercase: NAME, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "brew", lowercase: NAMESPACE | NAME, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "cargo", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "chrome-extension", lowercase: NAME, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "cocoapods", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "composer", lowercase: NAMESPACE | NAME, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "conan", lowercase: 0, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "conda", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "cpan", lowercase: 0, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "cran", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "deb", lowercase: NAMESPACE | NAME, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "docker", lowercase: 0, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "gem", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "generic", lowercase: 0, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "git", lowercase: 0, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "github", lowercase: NAMESPACE | NAME, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "golang", lowercase: 0, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "hackage", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "hex", lowercase: NAMESPACE | NAME, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "huggingface", lowercase: VERSION, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "julia", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &["uuid"] },
+    TypeRule { package_type: "luarocks", lowercase: NAMESPACE | NAME, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "maven", lowercase: 0, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "mlflow", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "npm", lowercase: 0, namespace: Requirement::Optional, required_qualifiers: &[] },
+    TypeRule { package_type: "nuget", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "oci", lowercase: NAME | VERSION, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "opam", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "otp", lowercase: NAME | SUBPATH, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "pub", lowercase: NAME, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "pypi", lowercase: NAME | VERSION, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "qpkg", lowercase: NAMESPACE, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "rpm", lowercase: NAMESPACE, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "swid", lowercase: 0, namespace: Requirement::Optional, required_qualifiers: &["tag_id"] },
+    TypeRule { package_type: "swift", lowercase: 0, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "vcpkg", lowercase: 0, namespace: Requirement::Prohibited, required_qualifiers: &[] },
+    TypeRule { package_type: "vscode-extension", lowercase: NAMESPACE | NAME | VERSION, namespace: Requirement::Required, required_qualifiers: &[] },
+    TypeRule { package_type: "yocto", lowercase: NAMESPACE, namespace: Requirement::Optional, required_qualifiers: &[] },
+];
+
+fn type_rule(package_type: &str) -> Option<&'static TypeRule> {
+    TYPE_RULES
+        .binary_search_by(|rule| rule.package_type.cmp(package_type))
+        .ok()
+        .map(|index| &TYPE_RULES[index])
+}
+
+/// The `permitted_characters` patterns of the definitions, written out:
+/// `chrome-extension` name `^[a-p]{32}$` and version `^\d+(\.\d+){0,3}$`, and
+/// `pub` name `^[a-z0-9_]` (as written, it constrains the first character
+/// only). The name is checked after case folding, as the definitions mark both
+/// names case-insensitive.
+fn check_characters(
+    package_type: &str,
+    name: &str,
+    version: Option<&str>,
+) -> Result<(), PurlTypeError> {
+    let name = name.to_ascii_lowercase();
+    let name_ok = match package_type {
+        "chrome-extension" => name.len() == 32 && name.bytes().all(|b| (b'a'..=b'p').contains(&b)),
+        "pub" => name
+            .bytes()
+            .next()
+            .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'),
+        _ => true,
+    };
+    if !name_ok {
+        return Err(PurlTypeError::NameCharacters);
+    }
+    let version_ok = match (package_type, version) {
+        ("chrome-extension", Some(version)) => {
+            let parts: Vec<_> = version.split('.').collect();
+            parts.len() <= 4
+                && parts
+                    .iter()
+                    .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+        }
+        _ => true,
+    };
+    if !version_ok {
+        return Err(PurlTypeError::VersionCharacters);
+    }
+    Ok(())
 }
 
 /// A parsed Package URL. Holds the original text and never rewrites it.
@@ -318,24 +471,30 @@ impl Purl {
     #[must_use]
     pub fn canonical(&self) -> CanonicalPurl {
         let rules = PurlRules::for_type(&self.package_type);
+        let lowercase = type_rule(&self.package_type).map_or(0, |rule| rule.lowercase);
+        let fold = |text: &str, component: u8, out: &mut String| {
+            if lowercase & component == 0 {
+                percent_encode_into(text, out);
+            } else {
+                percent_encode_into(&text.to_ascii_lowercase(), out);
+            }
+        };
         let mut out = String::with_capacity(self.original.len());
         out.push_str("pkg:");
         out.push_str(&self.package_type);
         out.push('/');
         for segment in &self.namespace {
-            percent_encode_into(segment, &mut out);
+            fold(segment, NAMESPACE, &mut out);
             out.push('/');
         }
-        match rules {
-            PurlRules::Pypi => percent_encode_into(&pypi_name(&self.name), &mut out),
-            PurlRules::Generic => percent_encode_into(&self.name, &mut out),
+        if rules == PurlRules::Pypi {
+            percent_encode_into(&pypi_name(&self.name), &mut out);
+        } else {
+            fold(&self.name, NAME, &mut out);
         }
         if let Some(version) = &self.version {
             out.push('@');
-            match rules {
-                PurlRules::Pypi => percent_encode_into(&version.to_ascii_lowercase(), &mut out),
-                PurlRules::Generic => percent_encode_into(version, &mut out),
-            }
+            fold(version, VERSION, &mut out);
         }
         for (index, (key, value)) in self.qualifiers.iter().enumerate() {
             out.push(if index == 0 { '?' } else { '&' });
@@ -345,9 +504,46 @@ impl Purl {
         }
         for (index, segment) in self.subpath.iter().enumerate() {
             out.push(if index == 0 { '#' } else { '/' });
-            percent_encode_into(segment, &mut out);
+            fold(segment, SUBPATH, &mut out);
         }
         CanonicalPurl { text: out, rules }
+    }
+
+    /// Check the rules the purl-spec type definition gives as data: whether a
+    /// namespace is required or prohibited, which qualifiers are required, and
+    /// the permitted characters of the name and version. A type without a
+    /// definition passes. Rules given only in prose are not checked.
+    ///
+    /// ```
+    /// use libtea_core::purl::{Purl, PurlTypeError};
+    ///
+    /// assert_eq!(Purl::parse("pkg:github/package-url/purl-spec").unwrap().check_type(), Ok(()));
+    /// let purl = Purl::parse("pkg:github/purl-spec").unwrap();
+    /// assert_eq!(purl.check_type(), Err(PurlTypeError::NamespaceRequired));
+    /// let purl = Purl::parse("pkg:julia/Dates").unwrap();
+    /// assert_eq!(purl.check_type(), Err(PurlTypeError::QualifierRequired("uuid")));
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// The first rule the PURL breaks, as a [`PurlTypeError`].
+    pub fn check_type(&self) -> Result<(), PurlTypeError> {
+        let Some(rule) = type_rule(&self.package_type) else {
+            return Ok(());
+        };
+        match (rule.namespace, self.namespace.is_empty()) {
+            (Requirement::Required, true) => return Err(PurlTypeError::NamespaceRequired),
+            (Requirement::Prohibited, false) => return Err(PurlTypeError::NamespaceProhibited),
+            _ => {}
+        }
+        if let Some(key) = rule
+            .required_qualifiers
+            .iter()
+            .find(|key| !self.qualifiers.contains_key(**key))
+        {
+            return Err(PurlTypeError::QualifierRequired(key));
+        }
+        check_characters(&self.package_type, &self.name, self.version.as_deref())
     }
 }
 
@@ -602,5 +798,83 @@ mod tests {
         assert!(same_package_url(&a, &b));
         // The accessors keep what was written.
         assert_eq!(a.name(), "Zope.Interface");
+    }
+
+    #[test]
+    fn case_insensitive_components_follow_the_type_definition() {
+        for (input, canonical) in [
+            (
+                "pkg:github/Package-URL/Purl-Spec@244FD47",
+                "pkg:github/package-url/purl-spec@244FD47",
+            ),
+            (
+                "pkg:deb/Debian/CURL@7.50.3-1?Arch=I386",
+                "pkg:deb/debian/curl@7.50.3-1?arch=I386",
+            ),
+            ("pkg:rpm/Fedora/Curl@7.50", "pkg:rpm/fedora/Curl@7.50"),
+            ("pkg:oci/Debian@SHA256%3AABC", "pkg:oci/debian@sha256:abc"),
+            (
+                "pkg:otp/Hex@2.1.1#Src/Hex.erl",
+                "pkg:otp/hex@2.1.1#src/hex.erl",
+            ),
+            (
+                "pkg:huggingface/EleutherAI/GPT@797ABC",
+                "pkg:huggingface/EleutherAI/GPT@797abc",
+            ),
+        ] {
+            let purl = Purl::parse(input).unwrap();
+            assert_eq!(purl.as_str(), input);
+            assert_eq!(purl.canonical().as_str(), canonical, "{input}");
+            assert_eq!(purl.canonical().rules(), PurlRules::CaseInsensitive);
+            let again = Purl::parse(canonical).unwrap().canonical();
+            assert_eq!(again.as_str(), canonical, "idempotent: {input}");
+        }
+        // golang and swift are case-sensitive in their definitions.
+        for input in [
+            "pkg:golang/GitHub.com/Sirupsen/Logrus",
+            "pkg:swift/github.com/Alamofire/Alamofire",
+        ] {
+            let purl = Purl::parse(input).unwrap();
+            assert_eq!(purl.canonical().as_str(), input);
+            assert_eq!(purl.canonical().rules(), PurlRules::Generic);
+        }
+        let a = Purl::parse("pkg:github/Package-url/purl-Spec").unwrap();
+        let b = Purl::parse("pkg:github/package-url/purl-spec").unwrap();
+        assert!(same_package_url(&a, &b));
+        assert_eq!(a.namespace().as_deref(), Some("Package-url"));
+    }
+
+    #[test]
+    fn check_type_applies_the_definition_requirements() {
+        let check = |text: &str| Purl::parse(text).unwrap().check_type();
+        assert_eq!(check("pkg:maven/org.apache/commons-io@2.11.0"), Ok(()));
+        assert_eq!(
+            check("pkg:maven/commons-io"),
+            Err(PurlTypeError::NamespaceRequired)
+        );
+        assert_eq!(
+            check("pkg:cargo/rust-lang/serde"),
+            Err(PurlTypeError::NamespaceProhibited)
+        );
+        assert_eq!(check("pkg:npm/left-pad"), Ok(()));
+        assert_eq!(check("pkg:npm/%40babel/core"), Ok(()));
+        assert_eq!(
+            check("pkg:julia/Dates"),
+            Err(PurlTypeError::QualifierRequired("uuid"))
+        );
+        assert_eq!(
+            check("pkg:julia/Dates?uuid=ade2ca70-3891-5945-98fb-dc099432e06a"),
+            Ok(())
+        );
+        assert_eq!(
+            check("pkg:swid/Acme/example.com/Enterprise+Server@1.0.0"),
+            Err(PurlTypeError::QualifierRequired("tag_id"))
+        );
+        // A type without a definition, or one the parser lowercased, is checked by its type.
+        assert_eq!(check("pkg:notatype/a/b"), Ok(()));
+        assert_eq!(
+            check("pkg:GitHub/purl-spec"),
+            Err(PurlTypeError::NamespaceRequired)
+        );
     }
 }
