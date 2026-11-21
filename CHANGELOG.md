@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- Documentation: the release workflow ran for `v0.2.2` (run 44895512012); `libtea-core` and `libtea-client` 0.2.0 and `libtea-cli` 0.2.2 are on crates.io, and `libs-v0.2.0` is on the same commit as `v0.2.2`. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for the libraries 0.2.0 and the CLI 0.2.2 and says `download --signature-key` is tested against fixtures and mock servers only. `docs/release-checklist.md` notes that docs.rs shows a new version only after its build leaves the queue.
+
 ## libtea-cli 0.2.2 — 2026-11-21
 
 Tagged `v0.2.2`, on the same commit as `libs-v0.2.0`. It depends on `libtea-core` and `libtea-client` 0.2.0, published first. The new options are additive: no existing command, flag or exit status changes, except that `download --signature` without a key now says on stderr "signature not verified (no --signature-key given)". New exit status 8. The GitHub Action takes `version: "0.2.2"`.
