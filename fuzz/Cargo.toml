@@ -90,3 +90,17 @@ path = "fuzz_targets/pep440_version.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "purl_parse"
+path = "fuzz_targets/purl_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "signature_format"
+path = "fuzz_targets/signature_format.rs"
+test = false
+doc = false
+bench = false
