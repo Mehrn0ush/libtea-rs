@@ -21,7 +21,7 @@ path = "src/main.rs"
 
 [dependencies]
 libtea-core.workspace = true
-libtea-client.workspace = true
+libtea-client = { workspace = true, features = ["signature-keys"] }
 clap.workspace = true
 anyhow.workspace = true
 tokio.workspace = true

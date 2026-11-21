@@ -62,6 +62,7 @@ fn doc_name(constant: &str) -> &'static str {
         "NOT_FOUND" => "not found",
         "INTEGRITY" => "integrity",
         "CHANGES_DETECTED" => "changes detected",
+        "SIGNATURE" => "signature",
         other => panic!("exit constant `{other}` has no documented name; document it"),
     }
 }
@@ -72,7 +73,7 @@ fn exit_status_tables_match_the_code_constants() {
         .into_iter()
         .map(|(code, name)| (code, doc_name(&name).to_owned()))
         .collect();
-    assert_eq!(from_code.len(), 8, "{from_code:?}");
+    assert_eq!(from_code.len(), 9, "{from_code:?}");
     for file in ["docs/cli-exit-codes.md", "SKILLS.md"] {
         let rows = table_rows(&read(file));
         assert_eq!(rows, from_code, "{file} disagrees with the exit constants");
@@ -93,7 +94,7 @@ fn skills_guide_stays_short_and_keeps_the_security_defaults() {
         "Do not add `--allow-weak-checksums`",
         "never print, log or",
         "not authenticity",
-        "does not verify signatures",
+        "only under a public key you pass",
     ] {
         assert!(flat.contains(&squash(needed)), "SKILLS.md lacks `{needed}`");
     }

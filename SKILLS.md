@@ -10,8 +10,9 @@ Use libtea to read a Transparency Exchange API (TEA) server: resolve a TEI,
 fetch a product release or its collection, download an artifact and check its
 declared checksums, and record the result in a lock file that CI can compare.
 
-libtea does not run a server, publish, sign, verify signatures, scan for
-vulnerabilities or decide whether a component is trustworthy.
+libtea does not run a server, publish, sign, scan for vulnerabilities or
+decide whether a component is trustworthy. It verifies a signature only under a
+public key you pass (`download --signature-key`), never under a key it found.
 
 ## Calling the CLI without a terminal
 
@@ -38,6 +39,7 @@ The numbers are fixed by the CLI contract (`docs/cli-exit-codes.md`).
 | 5 | not found | HTTP 404, or the identifier did not resolve. |
 | 6 | integrity | A checksum did not match, could not be computed, or none was declared with `--require-checksums`. Nothing is written. |
 | 7 | changes detected | `sync --check` or `diff` found a difference. |
+| 8 | signature | `download --signature-key` was given and the signature did not verify (invalid, unsupported format, or not published). |
 
 Exit 7 is a normal result for drift checks, not an error in libtea.
 
@@ -91,7 +93,9 @@ Exit 7 is a normal result for drift checks, not an error in libtea.
 
 ## What libtea does not do
 
-- It does not verify signatures or establish who published an artifact.
+- It does not establish who published an artifact. Without
+  `--signature-key` it verifies no signature, and with it the trust comes only
+  from the key you pass.
 - It does not follow every TEA server's quirks. Evidence of interoperability is
   limited to the deployments named in `docs/interoperability.md`.
 - It does not claim conformance or certification.

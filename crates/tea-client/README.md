@@ -3,7 +3,8 @@
 Independent async Rust client for the [CycloneDX Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api).
 
 **Independent implementation.** Not an official CycloneDX project. No conformance
-certification. No cryptographic signature verification. Checksum
+certification. No default trust: signatures are verified only under public keys the caller
+supplies (feature `signature-keys`). Checksum
 `IntegrityOutcome::Verified` is **not** publisher authenticity.
 
 Implemented against Transparency Exchange API commit
@@ -51,6 +52,6 @@ A match on SHA-1 checksums only is `IntegrityOutcome::Weak`, not `Verified`, and
 
 By default the client requires an advertised API version equal to a supported one (1.0.0). `ClientBuilder::lenient_versions(true)` also accepts `1` / `1.0` and any *stable* version with the same major (pre-releases only on an exact match), for servers that advertise those forms; exact matches are always tried before same-major ones. **Risk:** the models were checked against the 1.0.0 schemas only, so a server that matches on version may still send responses this client misreads. Leave it off unless you need it.
 
-Checksum `IntegrityOutcome::Verified` covers decoded artifact bytes only. It does not establish publisher authenticity. Detached signature and Sigstore verification are not implemented in 0.1.x; signature downloads are not cryptographically interpreted.
+Checksum `IntegrityOutcome::Verified` covers decoded artifact bytes only. It does not establish publisher authenticity. With the `signature-keys` feature, `signature::KeyVerifier` checks raw Ed25519 and ECDSA P-256 detached signatures over the decoded bytes under `PublicKey`s the caller supplies, and nothing else; OpenPGP, CMS and Sigstore verification are not implemented. Without the feature, signature downloads are not cryptographically interpreted.
 
 The workspace guide is at <https://github.com/Mehrn0ush/libtea-rs>.

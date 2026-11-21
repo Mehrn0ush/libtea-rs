@@ -1,7 +1,12 @@
 # Signature verification — design (libtea-rs)
 
-**Status for 0.1.0:** design + extension point only.  
-**Ship rule:** no built-in verifier returns “Verified”.
+**Status:** stage 1 (0.1.7, issue #12): format detection and
+`download --signature`. Stage 2 (issue #62, next library and CLI releases): the
+trait answers questions 2, 3 and 6 below, and `KeyVerifier` (feature
+`signature-keys`) checks raw detached Ed25519 and ECDSA P-256 signatures under
+caller-supplied keys. See "Stage 2" at the end.
+**Ship rule:** no verifier returns “Verified” except under keys the caller
+supplied; nothing trusts a key by default or fetches one.
 
 Checksum `IntegrityOutcome::Verified` means declared digests matched **decoded**
 artifact bytes. It does **not** mean a publisher signed the bytes.
@@ -165,3 +170,103 @@ What it deliberately does not do: verify anything, fetch keys, or return
 2. Whether to change the trait (questions 2, 3 and 6) before anyone implements
    it. It is marked Experimental, so a 0.x minor release may change it; doing
    so before a second implementation exists is cheapest.
+
+## Stage 2: the trait, and a verifier with caller-supplied keys (issue #62)
+
+Question 1 (which formats publishers use) is still open: no public TEA
+server in `docs/interop/` serves signatures. Stage 2 therefore adds the
+smallest verifier that is useful without that answer: one that checks
+signatures made by standard tools under keys the caller already trusts. It
+also fixes the trait shape before a second implementation exists. Decisions
+taken earlier for this stage: `ring` (already in the dependency tree through
+rustls, so no new crate), raw public keys, PEM and DER only as exact
+fixed-prefix matches for Ed25519 and P-256 (no general ASN.1 parser), raw
+detached signatures over the decoded bytes, no Base64 signatures, caller
+trust anchors only, and Sigstore deferred.
+
+### The trait (questions 2, 3 and 6)
+
+```rust
+pub trait SignatureVerifier: Send + Sync {
+    fn verify(&self, request: &VerifyRequest<'_>) -> SignatureVerification;
+}
+pub struct VerifyRequest<'a> { content: SignedContent<'a>, signature: &'a [u8], media_type: Option<&'a str> }
+pub enum SignedContent<'a> { Bytes(&'a [u8]), File(&'a Path) }
+pub struct SignatureVerification { outcome: SignatureVerifyOutcome, policy: String, detail: Option<String> }
+```
+
+All of these are `#[non_exhaustive]` and Experimental. Each question gets an
+answer:
+
+- **2, what is signed.** The decoded artifact bytes, which are the same bytes
+  the checksums cover. A format whose signature carries its own subject (a
+  Sigstore bundle, an in-toto statement) still receives the content and
+  compares the subject's digest with it. That is a later variant of
+  `SignedContent` or a check inside such a verifier, not a different trait.
+- **3, which policy produced the outcome.** `SignatureVerification::policy` names
+  the verifier and its policy, and for `Verified` the key that verified, by the
+  SHA-256 of its DER `SubjectPublicKeyInfo` (`caller key ed25519 sha256:...`).
+  A result can be audited later.
+- **6, large artifacts.** `SignedContent::File` passes the file that
+  `download_format_to_file` wrote. The verifier decides how to read it. Ed25519
+  and ECDSA in `ring` need the whole message, so `KeyVerifier` reads the file
+  whole. A streaming format can read it incrementally without a trait change.
+  The trait stays synchronous: verification is CPU work on local data.
+- New outcome `ContentUnavailable` (the file could not be read). Outcomes have
+  stable names (`SignatureVerifyOutcome::as_str`), as used in `--json`.
+
+### `KeyVerifier`
+
+- `PublicKey::parse` accepts a PEM `PUBLIC KEY` block or DER
+  `SubjectPublicKeyInfo` for Ed25519 (44 bytes) or P-256 with an uncompressed
+  point (91 bytes), or the raw 32-byte Ed25519 key or 65-byte P-256 point. Each
+  form is recognised by exact length and fixed header bytes. Anything else is
+  `KeyError`.
+- Signatures: Ed25519, the 64-byte value (`openssl pkeyutl -sign -rawin`);
+  P-256 with SHA-256, DER (`openssl dgst -sha256 -sign`) or the 64-byte
+  `r || s` form. Tested against vectors made with OpenSSL 3.6.4
+  (`crates/tea-client/tests/fixtures/signature/`), and against keys generated
+  in the tests.
+- Order: empty signature is `MissingSignature`; no keys is `NoTrustAnchor`;
+  an unreadable file is `ContentUnavailable`. Then every key is tried, and the
+  first that verifies gives `Verified`. Only after that is the format looked
+  at: an OpenPGP, CMS or Sigstore container (or over 1 MiB) is `Unsupported`,
+  and anything else is `Invalid`. Trying the keys first means that raw bytes
+  which happen to resemble a container still verify.
+- Behind the `libtea-client` feature `signature-keys`, so a library user who
+  does not verify does not compile it. The CLI enables it.
+
+### CLI and recording (question 4)
+
+- `download --signature-key <path>` (repeatable) verifies with those keys and
+  exits **8** (new: `signature`) unless the signature verifies. That includes
+  an invalid signature, an unsupported format, and one that is not published.
+  Without `--output`, nothing is printed unless it verifies. With `--output`,
+  the file was already written and its checksums matched. The message says not
+  to use it, because removing a file the caller named, or restoring one that
+  `--force` replaced, would be a second surprise.
+- `--signature-output <path>` saves the signature bytes. It is refused if the
+  path exists or is a symbolic link (created with `create_new`). It implies
+  `--signature`, as `--signature-key` does.
+- `--json`: the `signature` member gains `outcome`, `policy`, `detail` and
+  `saved_to`, and `verified` is `true` only for `Verified`
+  (`docs/cli-json.md`). On exit 8 no success object is printed.
+- **Lock files record nothing.** `lock-v1` records what the server returned.
+  A signature outcome depends on keys the caller holds, so it is not a property
+  of the server's data, and two people with different keys would write
+  different locks. A caller that needs the record can keep the `--json`
+  output.
+
+### External `signatureUrl` (question 5)
+
+Accepted, under the same destination policy as any other URL and without a
+TEA token. With `--signature-key` the trust comes from the caller's key, not
+from where the bytes were fetched, so the origin of the signature does not
+change what `Verified` means. Without a key nothing is verified either way.
+
+### Not done
+
+- OpenPGP, CMS and Sigstore verification: `Unsupported` until a publisher's
+  format is known (question 1). Sigstore additionally needs a log and identity
+  policy.
+- Key discovery of any kind: never from the TEA server, by design.

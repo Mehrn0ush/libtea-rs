@@ -19,6 +19,8 @@ Do **not** open a public issue for unfixed vulnerabilities.
 ## Non-goals that affect security expectations
 
 - Checksum verification is **not** publisher authenticity.
-- Signature bytes may be downloaded; cryptographic verification is not provided
-  in 0.1.x (see `docs/design/signature-verification.md`).
+- Signature bytes may be downloaded. They are verified only as raw Ed25519 or
+  ECDSA P-256 signatures under public keys the caller supplies; no key is
+  trusted by default or fetched, and OpenPGP, CMS and Sigstore are not verified
+  (see `docs/design/signature-verification.md`).
 - TLS certificate verification cannot be disabled in `libtea-client`.
