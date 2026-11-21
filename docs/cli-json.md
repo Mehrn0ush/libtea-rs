@@ -91,7 +91,8 @@ and is sent exactly as given, not in canonical form.
   `reason` `unsupported_scheme` (`detail`: the `vers` type), `malformed`
   (`detail`: what was wrong) or `unknown_event_type` (`detail`: the type).
   Check `unevaluated` before reading a `null` as "does not apply".
-- `withdrawn_events` lists the ids cancelled by `withdrawn` events.
+- `withdrawn_events` lists the ids cancelled by `withdrawn` events. A
+  `withdrawn` event that is itself withdrawn cancels nothing (ECMA-428 7.9).
 
 Without `--json`, `cle` prints the CLE document as indented JSON, or with
 `--version` one `name<TAB>value` line per field above (`-` for none), plus

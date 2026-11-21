@@ -6,12 +6,14 @@
 //! version, and [`Cle::status_for_pypi`] to one PEP 440 version, as
 //! `docs/design/cle.md` describes:
 //!
-//! 1. A `withdrawn` event cancels the event its `eventId` names.
+//! 1. A `withdrawn` event cancels the older event its `eventId` names, unless
+//!    it is itself withdrawn: ECMA-428 7.9 ignores a withdrawn event "as if it
+//!    never existed".
 //! 2. An event with no `versions` (and, for `released`, no `version`) applies
 //!    to the component as a whole. Otherwise it applies when one of its
 //!    specifiers matches: `{ version }` by equality under the scheme,
-//!    `{ range }` by [`VersRange::contains_semver`] or
-//!    [`VersRange::contains_pypi`].
+//!    `{ range }`, parsed by [`VersRange::parse_cle`] (ECMA-428 Annex A.4), by
+//!    [`VersRange::contains_semver`] or [`VersRange::contains_pypi`].
 //! 3. Of the applying events of one type, the highest `id` wins.
 //!
 //! An event that cannot be evaluated (a `vers` type the scheme does not
@@ -157,18 +159,35 @@ impl Cle {
 
     fn status<S: Scheme>(&self, version: &S::Version) -> LifecycleStatus {
         let mut status = LifecycleStatus::default();
-        let cancelled: BTreeSet<i64> = self
+        // ECMA-428 7.9: a withdrawn event is ignored "as if it never existed",
+        // so a `withdrawn` event that is itself withdrawn cancels nothing.
+        // Newest first, so a withdrawal is known to be withdrawn before it is
+        // applied; it can only name an older event (clause 9: ids increase in
+        // the order events are added).
+        let mut withdrawals: Vec<&CleEvent> = self
             .events
             .iter()
             .filter(|event| event.event_type == CleEventType::Withdrawn)
-            .filter_map(|event| event.event_id)
             .collect();
-        for event in &self.events {
-            if event.event_type == CleEventType::Withdrawn && event.event_id.is_none() {
-                status.unevaluated.push(Unevaluated::Malformed {
+        withdrawals.sort_by_key(|event| std::cmp::Reverse(event.id));
+        let mut cancelled = BTreeSet::new();
+        for event in withdrawals {
+            match event.event_id {
+                None => status.unevaluated.push(Unevaluated::Malformed {
                     event_id: event.id,
                     detail: "withdrawn event has no eventId".into(),
-                });
+                }),
+                Some(target) if target >= event.id => {
+                    status.unevaluated.push(Unevaluated::Malformed {
+                        event_id: event.id,
+                        detail: "withdrawn event names an event that is not older than itself"
+                            .into(),
+                    });
+                }
+                Some(_) if cancelled.contains(&event.id) => {}
+                Some(target) => {
+                    cancelled.insert(target);
+                }
             }
         }
         status.withdrawn_events = self
@@ -331,7 +350,7 @@ fn matches<S: Scheme>(
             .ok_or_else(|| malformed(event_id, S::NOT_A_VERSION)),
         (None, Some(range)) => {
             let parsed =
-                VersRange::parse(range).map_err(|err| malformed(event_id, &err.to_string()))?;
+                VersRange::parse_cle(range).map_err(|err| malformed(event_id, &err.to_string()))?;
             S::contains(&parsed, version).map_err(|err| match err {
                 VersError::UnsupportedType => Unevaluated::UnsupportedScheme {
                     event_id,
@@ -444,6 +463,68 @@ mod tests {
         assert_eq!(with.end_of_support, without.end_of_support);
         assert_eq!(date(&with.end_of_support), Some("2026-01-01T00:00:00Z"));
         assert_eq!(with.withdrawn_events, vec![3]);
+    }
+
+    #[test]
+    fn a_withdrawn_withdrawal_cancels_nothing() {
+        // ECMA-428 7.9: event 2 is ignored as if it never existed, so event 1
+        // applies again.
+        let doc = cle(vec![
+            event(3, "withdrawn", serde_json::json!({"eventId": 2})),
+            event(2, "withdrawn", serde_json::json!({"eventId": 1})),
+            event(
+                1,
+                "endOfLife",
+                serde_json::json!({"versions": [{"range": "vers:semver/<2.0.0"}]}),
+            ),
+        ]);
+        let status = doc.status_for_semver(&v("1.0.0"));
+        assert_eq!(date(&status.end_of_life), Some("2026-01-01T00:00:00Z"));
+        assert_eq!(status.withdrawn_events, vec![2]);
+        assert!(status.unevaluated.is_empty());
+
+        // Three deep: 4 withdraws 3, so 2 stands and 1 stays withdrawn.
+        let doc = cle(vec![
+            event(4, "withdrawn", serde_json::json!({"eventId": 3})),
+            event(3, "withdrawn", serde_json::json!({"eventId": 2})),
+            event(2, "withdrawn", serde_json::json!({"eventId": 1})),
+            event(1, "endOfLife", serde_json::json!({})),
+        ]);
+        let status = doc.status_for_semver(&v("1.0.0"));
+        assert_eq!(status.end_of_life, None);
+        assert_eq!(status.withdrawn_events, vec![1, 3]);
+    }
+
+    #[test]
+    fn a_withdrawal_of_a_newer_event_is_malformed_and_ignored() {
+        let doc = cle(vec![
+            event(2, "endOfLife", serde_json::json!({})),
+            event(1, "withdrawn", serde_json::json!({"eventId": 2})),
+        ]);
+        let status = doc.status_for_semver(&v("1.0.0"));
+        assert_eq!(date(&status.end_of_life), Some("2026-01-02T00:00:00Z"));
+        assert!(status.withdrawn_events.is_empty());
+        assert_eq!(
+            status.unevaluated,
+            vec![Unevaluated::Malformed {
+                event_id: 1,
+                detail: "withdrawn event names an event that is not older than itself".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn ranges_are_parsed_as_ecma_428_annex_a_says() {
+        // A.4: spaces and tabs removed, empty `|` segments ignored.
+        let doc = cle(vec![event(
+            1,
+            "endOfSupport",
+            serde_json::json!({"versions": [{"range": "vers:npm/ >= 1.0.0 ||\t< 2.0.0 |"}]}),
+        )]);
+        let status = doc.status_for_semver(&v("1.5.0"));
+        assert_eq!(date(&status.end_of_support), Some("2026-01-01T00:00:00Z"));
+        assert!(status.unevaluated.is_empty());
+        assert_eq!(doc.status_for_semver(&v("2.0.0")).end_of_support, None);
     }
 
     #[test]

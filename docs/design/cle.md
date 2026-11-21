@@ -2,7 +2,9 @@
 
 **Status:** stage 1 shipped in 0.1.7 (issue #11): `libtea_core::vers` and
 `Cle::status_for_semver`. Stage 2 (#61): the CLI command shipped in 0.1.8, and
-`pypi` is evaluated from 0.1.9 ("Stage 2: pypi" at the end). The proposal below is kept as written; "What was
+`pypi` is evaluated from 0.1.9 ("Stage 2: pypi"), the CLI's `--scheme pypi`
+shipped in `libtea-cli` 0.2.1, and the evaluation has been checked against the
+ECMA-428 text ("Checked against ECMA-428", at the end). The proposal below is kept as written; "What was
 built" at the end says where the implementation differs.
 
 ## What exists
@@ -157,9 +159,8 @@ tests under `spec/vers/`, `spec/vers/PINNED.md`):
 - The registered npm type's example `vers:npm/>=2.0.0|<2.1.0|>=2.1.0|<2.2.0`
   repeats `2.1.0`, which section 5.4 forbids; this implementation rejects it.
   Not reported upstream yet.
-- The ECMA-428 text itself is still not vendored, and no CLE document from a
-  real server has been evaluated: the tests use the OpenAPI examples and
-  hand-built events.
+- (Superseded below.) When this was written, the ECMA-428 text had not been
+  read and no CLE document from a real server had been evaluated.
 
 ## Stage 2: pypi
 
@@ -199,3 +200,59 @@ tests under `spec/vers/`, `spec/vers/PINNED.md`):
   existing commands do not change). `--json` gains a `scheme` member.
 - Not done: real CLE data with `pypi` ranges (no server tested serves any).
 
+## Checked against ECMA-428
+
+Read: ECMA-428 1st edition (December 2025), the PDF from Ecma International,
+SHA-256 `3e742fc698a87aeb8b5c1ee66e3e9045c411cb4ea06e3f539a6884e04588c38a`.
+It is not vendored (Ecma's copyright); the clauses below are cited by number.
+
+What agrees:
+
+- Clause 7 event types and their required fields, and clause 8's categories.
+  `released` uses `version`; the end-of events use `versions`; `supersededBy`
+  has `supersededByVersion` and optional `versions`.
+- Clause 9: events ordered by `id` descending and processed oldest to newest.
+  Taking the highest `id` of each type that applies is the same result.
+- Annex A.4.2 containment: an inclusive constraint on the tested version
+  includes it, a `!=` on it excludes it, and the rest are intervals. A
+  comparison across two versioning schemes is an error, here
+  `UnsupportedScheme`.
+- An event that names no version applies to every version. ECMA-428 makes
+  `versions` required on the end-of events. The TEA OpenAPI's `cle` schema
+  ("Selection") retains such events as applying "to the component as a whole",
+  and that rule is the one followed.
+
+What changed after reading it (next library release):
+
+- **Withdrawn withdrawals (7.9, 9.5).** A withdrawn event is ignored "as if it
+  never existed", so a `withdrawn` event that is itself withdrawn cancels
+  nothing, and the event it named applies again. Before, every `eventId`
+  named by any `withdrawn` event was cancelled. Withdrawals are now applied
+  newest first. A `withdrawn` event that names an event not older than itself
+  is `Malformed` and ignored, because ids increase in the order events are
+  added (9.3) and a withdrawal names a "previously published" event.
+- **Range parsing (A.3, A.4).** Annex A removes "all spaces and tabs" before
+  parsing, and treats consecutive `|` as one and leading or trailing `|` as
+  absent. vers-spec v1.2.1, whose tests are vendored, makes all of these
+  errors. CLE ranges follow Annex A, so the new `VersRange::parse_cle`
+  normalizes as A.4 says and then parses strictly. Lifecycle evaluation uses
+  it. `VersRange::parse` stays as vers-spec has it, and the vendored suite
+  passes unchanged. The `vers_range` fuzz target checks that `parse_cle`
+  accepts whatever `parse` accepts, with the same result.
+
+What stays different, on purpose:
+
+- A.4.2 read literally puts no version inside a range with a single bound
+  (`>=1.0.0`), because its pairwise loop has no pair. As before, a lone bound is
+  open to the other side, which is the evident intent and what upstream's PyPI
+  containment tests expect.
+- The CLE document envelope (`$schema`, `identifier`, `updatedAt`, `index`,
+  `next`, clause 6.2 and clause 10) is not modelled. The TEA OpenAPI says its
+  `cle` response "is not a CLE document" and carries none of it.
+
+**Real data.** The 0.1.8 interop run (`docs/interop/cli-0.1.8-2026-11-20.md`)
+fetched CLE from both public servers and evaluated ReARM's with
+`status_for_semver` (`26.11.17`: `released`, nothing unevaluated). Vulnetix's
+versions (`image-ee234cacfad1`) are neither SemVer nor PEP 440, so they are
+parsed but not evaluated. No server tested serves `vers:pypi` ranges. A
+scheme is added only when a server uses it.

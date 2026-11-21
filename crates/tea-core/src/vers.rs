@@ -242,6 +242,39 @@ impl VersRange {
         })
     }
 
+    /// Parse a range as ECMA-428 (CLE, 1st edition) Annex A, clause A.4, says
+    /// to: remove every space and tab, ignore leading, trailing and repeated
+    /// `|`, then parse as [`Self::parse`]. CLE ranges follow Annex A, which is
+    /// more lenient here than the vers-spec text [`Self::parse`] follows; the
+    /// lifecycle evaluation in [`crate::lifecycle`] uses this method.
+    ///
+    /// **Experimental:** may change in a 0.x minor release.
+    ///
+    /// ```
+    /// use libtea_core::vers::{VersError, VersRange};
+    ///
+    /// let lenient = VersRange::parse_cle("vers:npm/ >= 1.0.0 || < 2.0.0 |").unwrap();
+    /// assert_eq!(lenient, VersRange::parse("vers:npm/>=1.0.0|<2.0.0").unwrap());
+    /// assert_eq!(VersRange::parse("vers:npm/>=1.0.0| <2.0.0"), Err(VersError::Whitespace));
+    /// assert_eq!(VersRange::parse_cle("vers:npm/||"), Err(VersError::Empty));
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::parse`], except that spaces, tabs and empty `|` segments are
+    /// not errors. Other whitespace (a line break) still is.
+    pub fn parse_cle(text: &str) -> Result<Self, VersError> {
+        if text.len() > MAX_VERS_BYTES {
+            return Err(VersError::TooLong);
+        }
+        let compact: String = text.chars().filter(|c| !matches!(c, ' ' | '\t')).collect();
+        let Some((head, constraints)) = compact.split_once('/') else {
+            return Self::parse(&compact);
+        };
+        let segments: Vec<&str> = constraints.split('|').filter(|s| !s.is_empty()).collect();
+        Self::parse(&format!("{head}/{}", segments.join("|")))
+    }
+
     /// The `vers` type, such as `npm` or `semver`.
     #[must_use]
     pub fn version_type(&self) -> &str {
@@ -639,6 +672,33 @@ mod tests {
                 "{range}"
             );
         }
+    }
+
+    #[test]
+    fn parse_cle_follows_ecma_428_annex_a() {
+        let strict = VersRange::parse("vers:npm/>=1.0.0|<2.0.0|!=1.5.0").unwrap();
+        for lenient in [
+            "vers:npm/>=1.0.0|<2.0.0|!=1.5.0",
+            " vers : npm / >= 1.0.0 | < 2.0.0 | != 1.5.0 ",
+            "vers:npm/|>=1.0.0||<2.0.0|!=1.5.0|",
+            "vers:npm/>=1.0.0|\t<2.0.0|||!=1.5.0",
+        ] {
+            assert_eq!(VersRange::parse_cle(lenient).unwrap(), strict, "{lenient}");
+        }
+        assert!(VersRange::parse_cle("vers:npm/ * ").unwrap().is_any());
+        // Still errors: nothing left, a line break, an invalid range.
+        for (text, error) in [
+            ("vers:npm/||", VersError::Empty),
+            ("vers:npm/ ", VersError::Empty),
+            ("vers:npm/1.0.0|\n2.0.0", VersError::Whitespace),
+            ("vers:npm/=1.0.0", VersError::LeadingEquals),
+            ("vers:npm", VersError::Type),
+        ] {
+            assert_eq!(VersRange::parse_cle(text), Err(error), "{text:?}");
+        }
+        // An encoded space survives, as in `parse`.
+        let range = VersRange::parse_cle("vers:lexicographic/1%202").unwrap();
+        assert_eq!(range.constraints()[0].version(), "1 2");
     }
 
     #[test]
