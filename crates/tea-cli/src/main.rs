@@ -65,6 +65,10 @@ mod exit {
     pub const INTEGRITY: u8 = 6;
     /// A comparison found changes (`sync --check`, `diff`).
     pub const CHANGES_DETECTED: u8 = 7;
+    /// `download --signature-key` was given and the signature did not verify
+    /// under any of the keys (or was not published, or is in a format that is
+    /// not checked).
+    pub const SIGNATURE: u8 = 8;
 }
 
 /// A failure with a chosen exit status, raised by the CLI itself.
@@ -141,6 +145,7 @@ fn kind_for(status: u8) -> &'static str {
         exit::NOT_FOUND => "not_found",
         exit::INTEGRITY => "integrity",
         exit::CHANGES_DETECTED => "changes_detected",
+        exit::SIGNATURE => "signature",
         _ => "error",
     }
 }
@@ -156,7 +161,7 @@ Do not mix a CLI id with an environment secret (or the reverse). Precedence: com
 
 Exit status: 0 success; 1 failure; 2 usage or bad input; 3 authentication or authorization; \
 4 only weak (SHA-1) checksums matched; 5 not found or not resolved; 6 integrity not established; \
-7 changes detected (sync --check, diff). With --json a failure is one JSON object on stderr. \
+7 changes detected (sync --check, diff); 8 signature not verified (download --signature-key). With --json a failure is one JSON object on stderr. \
 See docs/cli-exit-codes.md and docs/cli-json.md."
 )]
 struct Cli {
@@ -371,10 +376,22 @@ enum Command {
         require_checksums: bool,
         /// After the artifact, also fetch the detached signature published for
         /// the selected format and report which container it looks like
-        /// (OpenPGP, CMS, Sigstore bundle). The signature is NOT verified: this
-        /// tool checks no signature, key or signer. The bytes are not saved.
+        /// (OpenPGP, CMS, Sigstore bundle). Without --signature-key the
+        /// signature is NOT verified.
         #[arg(long)]
         signature: bool,
+        /// Verify the signature under this public key (PEM or DER
+        /// SubjectPublicKeyInfo, or a raw key; Ed25519 or ECDSA P-256). Repeat
+        /// for several keys; one must verify. Only raw detached signatures over
+        /// the decoded artifact bytes are checked. Implies --signature. Exit
+        /// status 8 when the signature does not verify; with --output the
+        /// file has then already been written.
+        #[arg(long, value_name = "PATH")]
+        signature_key: Vec<PathBuf>,
+        /// Save the signature bytes to this new file (refused if it exists or is
+        /// a symbolic link). Implies --signature.
+        #[arg(long, value_name = "PATH")]
+        signature_output: Option<PathBuf>,
         /// Print one JSON object describing the download on stdout. Requires
         /// --output, so that stdout carries only the JSON.
         #[arg(long, requires = "output")]
@@ -1046,11 +1063,23 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             allow_weak_checksums,
             require_checksums,
             signature,
+            signature_key,
+            signature_output,
             json,
             credentials,
             allow_origin,
             cache,
         } => {
+            // Keys and the signature path are checked before any request.
+            let keys = load_signature_keys(&signature_key)?;
+            if let Some(path) = &signature_output {
+                check_output_target(path, false)?;
+            }
+            let signature_check = SignatureCheck {
+                keys,
+                output: signature_output,
+            };
+            let signature = signature || signature_check.requested();
             let client = with_cache(configured_builder(&credentials, allow_origin)?, &cache)?
                 .allow_weak_checksums(allow_weak_checksums)
                 .build()?;
@@ -1097,10 +1126,16 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                     download.bytes_written,
                 );
                 let signature = if signature {
-                    Some(fetch_signature(&service, &metadata, &selected).await?)
+                    let report = fetch_signature(&service, &metadata, &selected).await?;
+                    let content = libtea_client::SignedContent::File(&path);
+                    Some(signature_check.run(report, content, &selected)?)
                 } else {
                     None
                 };
+                // A failure prints nothing on stdout, so this comes first.
+                if let Some(report) = &signature {
+                    signature_check.enforce(report, Some(&path))?;
+                }
                 if json {
                     let mut value = download_json(&artifact, revision, &selected, &path, download);
                     if let Some(report) = &signature {
@@ -1119,10 +1154,18 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
                     return Err(coded(exit::FAILURE, "artifact was not modified"));
                 };
                 note_integrity(&body.integrity, body.strong_etag, body.bytes.len() as u64);
+                // With keys, nothing is printed unless the signature verifies.
+                let report = if signature {
+                    let report = fetch_signature(&service, &metadata, &selected).await?;
+                    let content = libtea_client::SignedContent::Bytes(&body.bytes);
+                    let report = signature_check.run(report, content, &selected)?;
+                    signature_check.enforce(&report, None)?;
+                    Some(report)
+                } else {
+                    None
+                };
                 std::io::stdout().write_all(&body.bytes)?;
-                if signature {
-                    fetch_signature(&service, &metadata, &selected).await?;
-                }
+                drop(report);
             }
         }
         Command::Sync {
@@ -1248,33 +1291,53 @@ fn redact_url(url: &str) -> String {
     }
 }
 
-/// What `download --signature` found. Nothing in it is a verification result.
+/// What `download --signature` found, and with `--signature-key` the result
+/// of checking it.
 enum SignatureReport {
     Present {
         format: libtea_client::SignatureFormat,
-        bytes: usize,
+        bytes: Vec<u8>,
         content_type: Option<String>,
         final_url: String,
+        verification: Option<libtea_client::SignatureVerification>,
+        saved_to: Option<PathBuf>,
     },
     NotPublished,
 }
 
 impl SignatureReport {
+    fn verified(&self) -> bool {
+        matches!(
+            self,
+            Self::Present {
+                verification: Some(v),
+                ..
+            } if v.outcome == libtea_client::SignatureVerifyOutcome::Verified
+        )
+    }
+
     /// The `signature` member of `download --json` (`docs/cli-json.md`).
     fn json(&self) -> serde_json::Value {
+        let verified = self.verified();
         match self {
             Self::Present {
                 format,
                 bytes,
                 content_type,
                 final_url,
+                verification,
+                saved_to,
             } => serde_json::json!({
                 "status": "present",
                 "format": format.as_str(),
-                "bytes": bytes,
+                "bytes": bytes.len(),
                 "content_type": content_type,
                 "final_url": redact_url(final_url),
-                "verified": false,
+                "verified": verified,
+                "outcome": verification.as_ref().map_or("not_checked", |v| v.outcome.as_str()),
+                "policy": verification.as_ref().map(|v| v.policy.clone()),
+                "detail": verification.as_ref().and_then(|v| v.detail.clone()),
+                "saved_to": saved_to.as_ref().map(|p| p.display().to_string()),
             }),
             Self::NotPublished => serde_json::json!({
                 "status": "not_published",
@@ -1283,9 +1346,129 @@ impl SignatureReport {
                 "content_type": null,
                 "final_url": null,
                 "verified": false,
+                "outcome": "not_checked",
+                "policy": null,
+                "detail": null,
+                "saved_to": null,
             }),
         }
     }
+}
+
+/// `download --signature-key` and `--signature-output`.
+struct SignatureCheck {
+    keys: Vec<libtea_client::signature::PublicKey>,
+    output: Option<PathBuf>,
+}
+
+impl SignatureCheck {
+    fn requested(&self) -> bool {
+        !self.keys.is_empty() || self.output.is_some()
+    }
+
+    /// Save and verify the signature as asked, and say on stderr what happened.
+    fn run(
+        &self,
+        mut report: SignatureReport,
+        content: libtea_client::SignedContent<'_>,
+        media_type: &str,
+    ) -> anyhow::Result<SignatureReport> {
+        use libtea_client::SignatureVerifier;
+        if let SignatureReport::Present {
+            bytes,
+            verification,
+            saved_to,
+            ..
+        } = &mut report
+        {
+            if let Some(path) = &self.output {
+                write_new_file(path, bytes)?;
+                err!("signature saved to {}", path.display());
+                *saved_to = Some(path.clone());
+            }
+            if self.keys.is_empty() {
+                err!("signature not verified (no --signature-key given)");
+            } else {
+                let verifier = libtea_client::signature::KeyVerifier::new(self.keys.clone());
+                let request =
+                    libtea_client::VerifyRequest::new(content, bytes).with_media_type(media_type);
+                let result = verifier.verify(&request);
+                err!(
+                    "signature {}\t{}{}",
+                    result.outcome.as_str(),
+                    result.policy,
+                    result
+                        .detail
+                        .as_deref()
+                        .map(|d| format!("\t{d}"))
+                        .unwrap_or_default()
+                );
+                *verification = Some(result);
+            }
+        }
+        Ok(report)
+    }
+
+    /// With keys, fail unless the signature verified.
+    fn enforce(&self, report: &SignatureReport, written: Option<&Path>) -> anyhow::Result<()> {
+        if self.keys.is_empty() || report.verified() {
+            return Ok(());
+        }
+        let what = match report {
+            SignatureReport::NotPublished => "no signature is published for this format".to_owned(),
+            SignatureReport::Present { verification, .. } => format!(
+                "the signature is {}",
+                verification
+                    .as_ref()
+                    .map_or("not checked", |v| v.outcome.as_str())
+            ),
+        };
+        let note = written.map_or_else(
+            || " (nothing was written to stdout)".to_owned(),
+            |path| {
+                format!(
+                    "; {} was written (its checksums matched), do not use it",
+                    path.display()
+                )
+            },
+        );
+        Err(coded(
+            exit::SIGNATURE,
+            format!("signature not verified: {what}{note}"),
+        ))
+    }
+}
+
+/// Read every `--signature-key` file. A bad key is a usage error.
+fn load_signature_keys(
+    paths: &[PathBuf],
+) -> anyhow::Result<Vec<libtea_client::signature::PublicKey>> {
+    paths
+        .iter()
+        .map(|path| {
+            let bytes = std::fs::read(path)
+                .map_err(|error| usage(format!("cannot read {}: {error}", path.display())))?;
+            libtea_client::signature::PublicKey::parse(&bytes)
+                .map_err(|error| usage(format!("{}: {error}", path.display())))
+        })
+        .collect()
+}
+
+/// Create `path` (it must not exist; a symbolic link is not followed) and
+/// write `bytes` to it.
+fn write_new_file(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            coded(
+                exit::FAILURE,
+                format!("refusing to write {}: {error}", path.display()),
+            )
+        })?;
+    file.write_all(bytes)
+        .with_context(|| format!("writing {}", path.display()))
 }
 
 /// Fetch the signature for one format, say on stderr what was found, and
@@ -1301,9 +1484,11 @@ async fn fetch_signature(
     {
         libtea_client::SignatureFetch::Present(body) => SignatureReport::Present {
             format: libtea_client::detect_signature_format(&body.bytes),
-            bytes: body.bytes.len(),
+            bytes: body.bytes.to_vec(),
             content_type: body.content_type.clone(),
             final_url: body.final_url.clone(),
+            verification: None,
+            saved_to: None,
         },
         libtea_client::SignatureFetch::NotPublished => SignatureReport::NotPublished,
         _ => {
@@ -1315,8 +1500,9 @@ async fn fetch_signature(
     };
     match &report {
         SignatureReport::Present { format, bytes, .. } => err!(
-            "signature present\tformat {}\tbytes {bytes}\tnot verified (this tool checks no signature, key or signer)",
-            format.as_str()
+            "signature present\tformat {}\tbytes {}",
+            format.as_str(),
+            bytes.len()
         ),
         SignatureReport::NotPublished => {
             err!("signature not published for this format");

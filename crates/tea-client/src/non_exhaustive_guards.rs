@@ -122,6 +122,7 @@ pub(crate) struct ControlPageFollowStop;
 ///         libtea_client::SignatureVerifyOutcome::Unsupported => 0,
 ///         libtea_client::SignatureVerifyOutcome::NoTrustAnchor => 0,
 ///         libtea_client::SignatureVerifyOutcome::MissingSignature => 0,
+///         libtea_client::SignatureVerifyOutcome::ContentUnavailable => 0,
 ///     }
 /// }
 /// ```
@@ -138,6 +139,7 @@ pub(crate) struct GuardSignatureVerifyOutcome;
 ///         libtea_client::SignatureVerifyOutcome::Unsupported => 0,
 ///         libtea_client::SignatureVerifyOutcome::NoTrustAnchor => 0,
 ///         libtea_client::SignatureVerifyOutcome::MissingSignature => 0,
+///         libtea_client::SignatureVerifyOutcome::ContentUnavailable => 0,
 ///         _ => 1,
 ///     }
 /// }
@@ -665,3 +667,134 @@ pub(crate) struct GuardFormatOnlyVerifier;
 /// ```
 #[allow(dead_code)]
 pub(crate) struct ControlFormatOnlyVerifier;
+
+/// `SignedContent` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_client::SignedContent<'static>) -> u8 {
+///     match x {
+///         libtea_client::SignedContent::Bytes(_) => 0,
+///         libtea_client::SignedContent::File(_) => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardSignedContent;
+
+/// Control for `GuardSignedContent`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_client::SignedContent<'static>) -> u8 {
+///     match x {
+///         libtea_client::SignedContent::Bytes(_) => 0,
+///         libtea_client::SignedContent::File(_) => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlSignedContent;
+
+/// `VerifyRequest` is `#[non_exhaustive]`: struct-update syntax from outside the crate must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::VerifyRequest<'static>) {
+///     let _ = libtea_client::VerifyRequest { content: base.content.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardVerifyRequest;
+
+/// Control for `GuardVerifyRequest`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::VerifyRequest<'static>) {
+///     let kept = base.content.clone();
+///     let libtea_client::VerifyRequest { content, .. } = base;
+///     let _ = (kept, content);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlVerifyRequest;
+
+/// `SignatureVerification` is `#[non_exhaustive]`: struct-update syntax from outside the crate must not compile.
+///
+/// ```compile_fail,E0639
+/// fn f(base: libtea_client::SignatureVerification) {
+///     let _ = libtea_client::SignatureVerification { outcome: base.outcome.clone(), ..base };
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardSignatureVerification;
+
+/// Control for `GuardSignatureVerification`: the field read and a `..` pattern compile.
+///
+/// ```
+/// fn f(base: libtea_client::SignatureVerification) {
+///     let kept = base.outcome.clone();
+///     let libtea_client::SignatureVerification { outcome, .. } = base;
+///     let _ = (kept, outcome);
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlSignatureVerification;
+
+/// `KeyAlgorithm` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_client::signature::KeyAlgorithm) -> u8 {
+///     match x {
+///         libtea_client::signature::KeyAlgorithm::Ed25519 => 0,
+///         libtea_client::signature::KeyAlgorithm::EcdsaP256Sha256 => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+#[cfg(feature = "signature-keys")]
+pub(crate) struct GuardKeyAlgorithm;
+
+/// Control for `GuardKeyAlgorithm`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_client::signature::KeyAlgorithm) -> u8 {
+///     match x {
+///         libtea_client::signature::KeyAlgorithm::Ed25519 => 0,
+///         libtea_client::signature::KeyAlgorithm::EcdsaP256Sha256 => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+#[cfg(feature = "signature-keys")]
+pub(crate) struct ControlKeyAlgorithm;
+
+/// `KeyError` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_client::signature::KeyError) -> u8 {
+///     match x {
+///         libtea_client::signature::KeyError::TooLong => 0,
+///         libtea_client::signature::KeyError::Pem => 0,
+///         libtea_client::signature::KeyError::Unrecognized => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+#[cfg(feature = "signature-keys")]
+pub(crate) struct GuardKeyError;
+
+/// Control for `GuardKeyError`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_client::signature::KeyError) -> u8 {
+///     match x {
+///         libtea_client::signature::KeyError::TooLong => 0,
+///         libtea_client::signature::KeyError::Pem => 0,
+///         libtea_client::signature::KeyError::Unrecognized => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+#[cfg(feature = "signature-keys")]
+pub(crate) struct ControlKeyError;

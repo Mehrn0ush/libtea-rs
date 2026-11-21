@@ -15,6 +15,7 @@ the CLI contract: a change needs a CHANGELOG entry. The same table is in
 | 5 | not found | HTTP `404`, or `/discovery` did not resolve the identifier (TEI or PURL). A `404` from discovery is not evidence that no updates exist. For `cle`, `404 NOT_IMPLEMENTED` is not 5: it is reported and exits 0. |
 | 6 | integrity | A checksum did not match (also during `sync` and `sync --check`; no lock is written), could not be computed, matched only in part, or `--require-checksums` was given and the format declares none. Nothing is written. |
 | 7 | changes detected | `libtea sync --check` found that the server differs from the lock, or `libtea diff` found two locks that differ (`fetchedAt` is ignored). A checksum mismatch during `--check` is 6, not 7. |
+| 8 | signature | `download --signature-key` was given and the signature did not verify under any of the keys: it is invalid, in a format that is not checked (OpenPGP, CMS, Sigstore bundle), or not published for the format. Nothing is printed on stdout. With `--output` the artifact file was already written (its checksums matched) and the message says not to use it. Checksum failures come first and are 4 or 6. |
 
 Notes:
 
@@ -24,6 +25,7 @@ Notes:
 - Network failures and destination-policy refusals (for example a redirect to
   another origin) are both 1. They are not separated yet.
 - Code 0 for `download` is checksum integrity of the decoded bytes. It is not
-  publisher authenticity, and no signature is checked.
+  publisher authenticity. Only with `--signature-key` is a signature checked,
+  and then 0 also means it verified under one of the keys given.
 - With `--json` a failure also prints one JSON object on stderr; see
   `docs/cli-json.md`. The exit code is the same.

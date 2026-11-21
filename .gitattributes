@@ -11,3 +11,6 @@
 *.json      text eol=lf
 *.sha256    text eol=lf
 LICENSE     text eol=lf
+# Signed test bytes: never convert line endings, or the signatures fail.
+crates/tea-client/tests/fixtures/signature/artifact.txt -text
+*.sig       binary

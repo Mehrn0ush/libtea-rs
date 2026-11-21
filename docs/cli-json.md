@@ -15,7 +15,9 @@ sources are identical between the `v0.1.0` and `v0.1.6` tags). In 0.1.7,
 was renamed or removed. In 0.1.8, `discover --purl` (same array as
 `discover <tei>`), `cle`, `search` and `inspect` were added; existing outputs did not change.
 In `libtea-cli` 0.2.1, `cle` gained `--scheme` and a `scheme` member next to
-`version`; nothing was renamed or removed.
+`version`; nothing was renamed or removed. In the next CLI release, the
+`signature` member of `download --json` gains `outcome`, `policy`, `detail`
+and `saved_to`, and `verified` can be `true` (with `--signature-key`).
 
 ## `spec --json`
 
@@ -213,8 +215,9 @@ after the checksum check) and `--json` is rejected with exit status 2.
   authenticity and no signature is checked.
 - `etag` is a validator, not a checksum.
 
-With `--signature` (added in 0.1.7), the object also has a `signature`
-member. Without the flag the member is absent and no signature request is
+With `--signature` (added in 0.1.7), `--signature-key` or `--signature-output`
+(both added in the next CLI release), the object also has a `signature`
+member. Without any of them the member is absent and no signature request is
 made.
 
 ```json
@@ -224,7 +227,11 @@ made.
   "bytes": 228,
   "content_type": "application/pgp-signature",
   "final_url": "https://host/path",
-  "verified": false
+  "verified": false,
+  "outcome": "not_checked",
+  "policy": null,
+  "detail": null,
+  "saved_to": null
 }
 ```
 
@@ -236,9 +243,25 @@ made.
   `libtea_core::detect_signature_format`: `openpgp_armored`, `openpgp_binary`,
   `cms`, `sigstore_bundle`, `empty`, `too_large` (over 1 MiB, not inspected) or
   `unknown`. The server's `Content-Type` is reported but does not affect it.
-- `verified` is always `false`. The CLI checks no signature, key or signer; a
-  recognized format says nothing about whether the signature is valid.
-- The signature bytes are not saved.
+- `verified` is `true` only when `--signature-key` was given and the signature
+  verified under one of those keys (`outcome` `verified`). A recognized format
+  says nothing about whether the signature is valid.
+- `outcome` is `not_checked` without `--signature-key`. With it: `verified`,
+  `invalid` (it does not verify under any key), `unsupported` (OpenPGP, CMS, a
+  Sigstore bundle or over 1 MiB: formats that are not checked),
+  `missing_signature` (empty bytes) or `content_unavailable` (the written file
+  could not be read back). Only raw detached Ed25519 and ECDSA P-256 signatures
+  over the decoded artifact bytes are checked (`docs/design/signature-verification.md`).
+  Anything but `verified` exits 8, and then this object is not printed: stdout
+  is empty and the error object says what failed.
+- `policy` names what produced the outcome: `caller key <algorithm>
+  sha256:<fingerprint>` for the key that verified, or `caller keys (<n>):
+  <fingerprints>` otherwise. The fingerprint is the SHA-256 of the key's DER
+  `SubjectPublicKeyInfo` (`openssl pkey -pubin -outform DER | sha256sum`).
+  `null` without `--signature-key`.
+- `detail` says why the outcome is not `verified`, or is `null`.
+- `saved_to` is the `--signature-output` path the bytes were written to, or
+  `null`.
 
 ## Errors (`--json` given)
 

@@ -3,7 +3,8 @@
 `libtea`, a command-line client for the [CycloneDX Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA), built on `libtea-client` and `libtea-core`.
 
 **Independent implementation.** Not an official CycloneDX project. No conformance
-certification. No cryptographic signature verification. A checksum match is
+certification. A signature is verified only under a public key you pass
+(`download --signature-key`). A checksum match is
 integrity of the downloaded bytes, **not** publisher authenticity.
 
 Implemented against Transparency Exchange API commit
