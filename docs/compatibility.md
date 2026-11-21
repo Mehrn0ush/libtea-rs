@@ -72,7 +72,8 @@ build-provenance attestation (`docs/installing.md`).
 | crates.io (`libtea-core`, `libtea-client`) | crates.io checksums; no attestation |
 | crates.io (`libtea-cli`, from 0.2.0) | `cargo install libtea-cli --locked` builds from source; crates.io checksums; no attestation |
 | `cargo binstall libtea-cli` (after 0.2.2) | Downloads the release archive; no SHA-256 or attestation check. Quick-install (third-party builds) is turned off |
+| Homebrew `mehrn0ush/tap/libtea` (from 0.2.2) | Release archives (darwin; musl on Linux); Homebrew checks the SHA-256 copied from the attested `SHA256SUMS`; no attestation check |
 | `cargo install --git ... --tag vX.Y.Z libtea-cli` | Builds from source; no checksum or attestation |
 
-The CLI 0.1.x is not on crates.io; 0.2.0 and later are (issue #14). There is no Homebrew formula or
-container image (issue #17).
+The CLI 0.1.x is not on crates.io; 0.2.0 and later are (issue #14). There is no container
+image (issue #17).
