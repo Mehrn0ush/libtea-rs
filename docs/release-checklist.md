@@ -81,6 +81,9 @@ versions it needs, so check that those are on crates.io before tagging.
 14. **Publish the GitHub draft: publish the release by hand** (CLI releases
     only; the workflow never does).
 15. **Post-publish checks:** the commands are in "Post-publish checks" below.
+16. **Homebrew formula** (CLI releases only): regenerate `Formula/libtea.rb`
+    from the verified `SHA256SUMS` and open a pull request to
+    `Mehrn0ush/homebrew-tap` (see "Homebrew tap" below).
 
 **If something fails.** Before the first `cargo publish` (steps 5 to 7: the
 workflow, or the verification of the draft): the maintainer deletes the draft
@@ -394,7 +397,30 @@ The CLI ships three ways:
 - from 0.2.0, `cargo install libtea-cli --locked` from crates.io (published by
   hand in steps 12 and 13; no checksum file or attestation);
 - `cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag vX.Y.Z --locked libtea-cli`,
-  which builds the tagged source (no checksum or attestation either).
+  which builds the tagged source (no checksum or attestation either);
+- from 0.2.2, `brew install mehrn0ush/tap/libtea` from the
+  `Mehrn0ush/homebrew-tap` repository. It installs the release archives, and
+  Homebrew checks the SHA-256 in the formula.
+
+### Homebrew tap
+
+`Formula/libtea.rb` in `Mehrn0ush/homebrew-tap` is generated, never edited
+by hand. After step 14, in a new empty directory:
+
+```sh
+gh release download vX.Y.Z --repo Mehrn0ush/libtea-rs --pattern SHA256SUMS
+gh attestation verify SHA256SUMS --repo Mehrn0ush/libtea-rs --signer-workflow Mehrn0ush/libtea-rs/.github/workflows/release.yml --source-ref refs/tags/vX.Y.Z
+python3 -I /path/to/libtea-rs/scripts/make-homebrew-formula.py --version X.Y.Z --sums SHA256SUMS >libtea.rb
+```
+
+Copy `libtea.rb` to `Formula/libtea.rb` on a branch of the tap, open a pull
+request, and after the merge check with `brew update`,
+`brew upgrade mehrn0ush/tap/libtea` (or `brew install`), `brew test libtea`,
+and `libtea --version`. macOS gets the darwin archives, and Linux gets the
+statically linked musl archives. The `x86_64-apple-darwin` archive is
+cross-compiled and not run by the release smoke test, so `brew test` on an
+Intel Mac is its first run. Nothing updates the tap automatically: that
+would need a token that can push to it.
 
 `docs/installing.md` describes each. Until 0.1.8 the CLI depended on the
 unpublished `libtea-conformance` crate, which kept it off crates.io; that code

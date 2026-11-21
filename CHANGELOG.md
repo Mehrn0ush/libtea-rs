@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- Homebrew (not part of any crate): `scripts/make-homebrew-formula.py` writes `Formula/libtea.rb` for the `Mehrn0ush/homebrew-tap` repository from a release's `SHA256SUMS`, so `brew install mehrn0ush/tap/libtea` installs the release archives (darwin on macOS, musl on Linux). Homebrew checks the SHA-256 but not the attestation; the checklist verifies `SHA256SUMS` with `gh attestation verify` before generating the formula. Tests cover the generated URLs and hashes, the refusals, and the archive layout the formula relies on. `docs/release-checklist.md` gains step 16 (issue #17).
+
 - CLI packaging: `libtea-cli` carries `[package.metadata.binstall]`, so `cargo binstall libtea-cli` downloads the release archive for the target instead of compiling. It takes effect with the next CLI release published to crates.io. cargo-binstall does not check `SHA256SUMS` or the attestation, and the crate turns off its quick-install strategy (third-party builds). A test renders the URL and binary path against an archive made by `scripts/package-release.py` (issue #17).
 
 - Documentation: the release workflow ran for `v0.2.2` (run 44895512012); `libtea-core` and `libtea-client` 0.2.0 and `libtea-cli` 0.2.2 are on crates.io, and `libs-v0.2.0` is on the same commit as `v0.2.2`. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for the libraries 0.2.0 and the CLI 0.2.2 and says `download --signature-key` is tested against fixtures and mock servers only. `docs/release-checklist.md` notes that docs.rs shows a new version only after its build leaves the queue.

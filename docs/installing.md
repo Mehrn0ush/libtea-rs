@@ -155,6 +155,23 @@ strategy, which would fetch a binary built by a third party rather than by
 `cargo install`, which is the crates.io route above. For 0.2.2 and earlier the
 crate has no binstall metadata, and binstall finds no archive.
 
+## With Homebrew (0.2.2 and later)
+
+On macOS and Linux:
+
+```sh
+brew install mehrn0ush/tap/libtea
+libtea --version
+```
+
+The formula in `Mehrn0ush/homebrew-tap` downloads the release archive for
+your platform: darwin on macOS, and the statically linked musl build on
+Linux. Homebrew checks the archive against the SHA-256 written in the
+formula. Those values are copied from the release's `SHA256SUMS` after it
+passes `gh attestation verify`, but Homebrew does not check the attestation
+itself. To check it, verify the archive as described above. The tap is
+updated by hand after each release, so it can lag behind a new release.
+
 ## Build from source instead
 
 ```sh

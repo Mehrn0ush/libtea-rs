@@ -353,3 +353,110 @@ print("\n".join(names))
         assert!(names.lines().any(|n| n == bin), "{bin} not in {names}");
     }
 }
+
+fn homebrew_formula(dir: &Path, version: &str, sums: &str) -> Output {
+    let path = dir.join("SHA256SUMS");
+    std::fs::write(&path, sums).unwrap();
+    Command::new("python3")
+        .arg("-I")
+        .arg(root().join("scripts/make-homebrew-formula.py"))
+        .args(["--version", version, "--sums"])
+        .arg(&path)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn homebrew_formula_uses_the_darwin_and_musl_archives_from_sha256sums() {
+    if python().is_none() {
+        return;
+    }
+    let dir = Dir::new("brew");
+    let targets = [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "aarch64-unknown-linux-musl",
+        "x86_64-unknown-linux-musl",
+    ];
+    let mut sums = String::new();
+    for (index, target) in targets.iter().enumerate() {
+        sums.push_str(&format!(
+            "{:064x}  libtea-0.1.0-{target}.tar.gz\n",
+            index + 1
+        ));
+    }
+    sums.push_str(&format!(
+        "{:064x}  libtea-0.1.0-x86_64-unknown-linux-gnu.tar.gz\n",
+        9
+    ));
+    sums.push_str(&format!(
+        "{:064x}  libtea-0.1.0-x86_64-pc-windows-msvc.zip\n",
+        9
+    ));
+
+    let out = homebrew_formula(&dir.0, "0.1.0", &sums);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let formula = String::from_utf8(out.stdout).unwrap();
+    for (index, target) in targets.iter().enumerate() {
+        let url = format!(
+            "url \"https://github.com/Mehrn0ush/libtea-rs/releases/download/v0.1.0/libtea-0.1.0-{target}.tar.gz\"\n      sha256 \"{:064x}\"",
+            index + 1
+        );
+        assert!(formula.contains(&url), "{target} missing:\n{formula}");
+    }
+    assert!(!formula.contains("gnu"), "{formula}");
+    assert!(!formula.contains(&format!("{:064x}", 9)), "{formula}");
+    assert!(formula.contains("  version \"0.1.0\"\n"));
+    assert!(formula.contains("  license \"Apache-2.0\"\n"));
+    assert!(formula.contains("bin.install \"libtea\""));
+
+    // Each refusal: an archive missing, a bad line, a bad version.
+    let missing = sums.replace("libtea-0.1.0-x86_64-apple-darwin.tar.gz", "other");
+    for (version, sums) in [
+        ("0.1.0", missing),
+        ("0.1.0", format!("{sums}not a line\n")),
+        ("0.1.0\"; system \"x", sums.clone()),
+        ("v0.1.0", sums.clone()),
+    ] {
+        let out = homebrew_formula(&dir.0, version, &sums);
+        assert!(!out.status.success(), "accepted {version:?}");
+        assert!(out.stdout.is_empty());
+    }
+}
+
+#[test]
+fn release_archives_unpack_to_one_directory_holding_libtea() {
+    // Homebrew enters the single top-level directory before `bin.install
+    // "libtea"`, so the formula depends on this layout.
+    let Some(py) = python() else { return };
+    let dir = Dir::new("brewpkg");
+    let binary = dir.0.join("libtea");
+    std::fs::write(&binary, b"not really").unwrap();
+    let out = package(&dir.0, &binary, "aarch64-apple-darwin", "out");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let archive = PathBuf::from(String::from_utf8(out.stdout).unwrap().trim());
+    let listing = Command::new(py)
+        .arg("-I")
+        .arg("-c")
+        .arg("import sys, tarfile; print('\\n'.join(tarfile.open(sys.argv[1]).getnames()))")
+        .arg(&archive)
+        .output()
+        .unwrap();
+    let names = String::from_utf8_lossy(&listing.stdout).into_owned();
+    let tops: std::collections::BTreeSet<&str> = names
+        .lines()
+        .map(|n| n.split('/').next().unwrap())
+        .collect();
+    assert_eq!(tops.len(), 1, "{names}");
+    assert!(names
+        .lines()
+        .any(|n| n == "libtea-0.1.0-aarch64-apple-darwin/libtea"));
+}
