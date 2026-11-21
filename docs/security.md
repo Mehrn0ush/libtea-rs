@@ -70,7 +70,7 @@ The lockfile is committed. `deny.toml` allows common permissive licenses and den
 
 ## Out of scope
 
-This SDK does not verify detached signature technology, trust anchors, Sigstore trust policy, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. Callers who need that assurance have to verify signatures themselves. The client can download signature bytes and does not interpret them.
+This SDK does not evaluate trust anchors, Sigstore trust policy, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. The one signature check it offers is `KeyVerifier` (feature `signature-keys`, and `libtea download --signature-key`): raw Ed25519 or ECDSA P-256 detached signatures over the decoded bytes, under public keys the caller supplies. It never takes a key from the TEA server and trusts none by default, so a server cannot make its own signature verify. What `Verified` then shows is that someone holding one of those keys signed the bytes; who that is, is the caller's knowledge. OpenPGP, CMS and Sigstore signatures are detected and reported as unsupported.
 
 ## Persistent cache
 

@@ -16,7 +16,7 @@ repository = "https://github.com/Mehrn0ush/libtea-rs"
 
 [workspace.dependencies]
 libtea-core = { version = "0.1.9", path = "crates/tea-core" }
-libtea-client = { version = "0.1.9", path = "crates/tea-client" }
+libtea-client = { version = "0.2.0", path = "crates/tea-client" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -32,6 +32,9 @@ blake2 = "0.11"
 blake3 = "1"
 digest = "0.11"
 base64 = "0.23"
+# Only for the optional `signature-keys` feature of libtea-client; already in
+# the tree through rustls.
+ring = { version = "0.17", default-features = false, features = ["alloc"] }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync", "fs"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }

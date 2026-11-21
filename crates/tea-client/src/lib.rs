@@ -73,8 +73,8 @@ pub use error::ClientError;
 pub use page_stream::{follow_pages, FollowedPage, PageFollowLimits, PageFollowStop};
 pub use service::{ArtifactFetch, CleFetch, DownloadedArtifact, Service, SignatureFetch};
 pub use signature::{
-    detect_signature_format, FormatOnlyVerifier, SignatureFormat, SignatureVerifier,
-    SignatureVerifyOutcome,
+    detect_signature_format, FormatOnlyVerifier, SignatureFormat, SignatureVerification,
+    SignatureVerifier, SignatureVerifyOutcome, SignedContent, VerifyRequest,
 };
 pub use transport::{ApiKey, Client, ClientBuilder, Limits};
 

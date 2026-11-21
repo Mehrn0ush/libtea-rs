@@ -15,7 +15,7 @@ Independent Rust client libraries and a command-line tool for the [Transparency 
 
 libtea-rs is an independent client for TEA servers. It resolves a Transparency Exchange Identifier (TEI), fetches product releases, collections and artifacts, and checks the checksums a server declares. It can write a lock file so a CI job can tell when what a server publishes has changed.
 
-It is not a TEA server, does not sign or publish anything, does not scan for vulnerabilities, and does not verify signatures. It is not an official CycloneDX or Ecma project, has no affiliation with them or with any TEA server vendor, and is not a conformance certificate. It has been tried against two deployments (see [docs/interoperability.md](docs/interoperability.md)); that is not universal compatibility.
+It is not a TEA server, does not sign or publish anything, does not scan for vulnerabilities, and verifies a signature only under a public key you supply (`download --signature-key`). It is not an official CycloneDX or Ecma project, has no affiliation with them or with any TEA server vendor, and is not a conformance certificate. It has been tried against two deployments (see [docs/interoperability.md](docs/interoperability.md)); that is not universal compatibility.
 
 | Crate | Role |
 | --- | --- |
@@ -175,6 +175,7 @@ Add `--json` for machine-readable output ([docs/cli-json.md](docs/cli-json.md)).
 | 5 | not found or not resolved |
 | 6 | integrity not established |
 | 7 | changes detected (`sync --check`, `diff`) |
+| 8 | signature not verified (`download --signature-key`) |
 
 Details: [docs/cli-exit-codes.md](docs/cli-exit-codes.md).
 
@@ -262,13 +263,14 @@ Pass the key through the two `api-key-*` inputs. Do not put `TEA_API_KEY_*` in `
 - **Size limits.** Defaults: 1 MiB for discovery documents, 8 MiB for JSON, 256 MiB for an artifact, 5 redirects. Configurable through `Limits`.
 - **Proxies.** `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` are honored. Behind a proxy the proxy resolves hostnames, so the address checks do not apply; use `ClientBuilder::ignore_env_proxies(true)` where they matter.
 - **What "verified" means.** Every checksum the server declared for an artifact matched the decoded bytes. This shows integrity relative to what the server declared. It is not publisher authenticity: a server that serves a wrong artifact with matching checksums passes.
-- **Not verified.** Signatures (detached signature bytes can be downloaded; nothing checks them), who published an artifact, and the contents of an artifact.
+- **Signatures.** `download --signature-key <public key>` checks a raw Ed25519 or ECDSA P-256 detached signature over the decoded bytes under the keys you pass, and exits 8 if it does not verify. Nothing trusts a key by default or fetches one, so a server cannot make its own signature verify. OpenPGP, CMS and Sigstore signatures are detected but not checked.
+- **Not verified.** Without `--signature-key`, signatures (the bytes can be downloaded and saved; nothing checks them). Who published an artifact, beyond holding a key you trust, and the contents of an artifact.
 
 Details and reasoning: [docs/security.md](docs/security.md). Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
 ## Scope and non-goals
 
-Not in 0.1.x: a publisher API; official CycloneDX or ECMA certification (the offline suite is a smoke test); signature verification (see `docs/design/signature-verification.md`); universal server compatibility; HTTPS SVCB lookup; OAuth beyond API-key `client_credentials`.
+Not in 0.1.x: a publisher API; official CycloneDX or ECMA certification (the offline suite is a smoke test); OpenPGP, CMS or Sigstore signature verification (see `docs/design/signature-verification.md`); universal server compatibility; HTTPS SVCB lookup; OAuth beyond API-key `client_credentials`.
 
 ## Documentation
 
