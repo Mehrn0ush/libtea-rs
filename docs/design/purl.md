@@ -1,7 +1,9 @@
 # PURL canonicalization (ECMA-427): design
 
 **Status:** stage 1 shipped in 0.1.7 (issue #10): `libtea_core::purl`. Stage 2
-(#60) is type by type; `pypi` shipped in 0.1.9 ("Stage 2: pypi" at the end).
+(#60): `pypi` shipped in 0.1.9 ("Stage 2: pypi"), and the rules every type
+definition gives as data follow in the next library release ("Stage 2: rules
+from the type definitions", at the end).
 The proposal below is kept as written; "What was built" at the end says where
 the implementation differs and which statements in it turned out to be wrong.
 
@@ -202,3 +204,65 @@ case-insensitive with no normalization rule.
 - **Behaviour change, Experimental API:** two `pypi` PURLs that differ only in
   name case or separators, or in version case, now compare equal under
   `same_package_url`, and their canonical text changes.
+
+## Stage 2: rules from the type definitions
+
+The 42 purl-spec type definitions at the pinned commit are now vendored
+(`spec/purl/types/*-definition.json`, digests in `spec/purl/PINNED.md`). The
+module applies what they give as **data**, and nothing they give only in prose:
+
+- **Case.** Every component (namespace, name, version, subpath) marked
+  `"case_sensitive": false` is lowercased by `Purl::canonical`, for 21 types
+  (`alpm`, `apk`, `bitbucket`, `bitnami`, `brew`, `chrome-extension`,
+  `composer`, `deb`, `github`, `hex`, `huggingface` (version only),
+  `luarocks`, `oci`, `otp` (name and subpath), `pub`, `pypi`, `qpkg`, `rpm`
+  (namespace only), `vscode-extension`, `yocto`). `CanonicalPurl::rules()` is
+  the new `PurlRules::CaseInsensitive` for them, `Pypi` for `pypi`, and
+  `Generic` for types whose definition marks nothing case-insensitive (`npm`,
+  `maven`, `cargo`, `golang`, `swift`, ...) and for types without a
+  definition. Only ASCII letters are lowercased. This replaces the hand-written
+  candidate list in issue #60: `golang` and `git` are case-sensitive in their
+  definitions, so they are not folded.
+- **Type checks.** `Purl::check_type()` returns a `PurlTypeError` for a
+  missing required namespace or a namespace the type prohibits (the
+  `requirement` of `namespace_definition`), a missing required qualifier
+  (`julia`'s `uuid`, `swid`'s `tag_id`), and characters outside the
+  `permitted_characters` patterns. There are three such patterns, written out
+  by hand because the module has no regular-expression engine:
+  `chrome-extension` names `^[a-p]{32}$` (after case folding) and versions
+  `^\d+(\.\d+){0,3}$`, and `pub` names `^[a-z0-9_]`, which as written
+  constrains only the first character. `Purl::parse` does not call it: a PURL
+  its type does not allow still parses, and the caller decides.
+- **The table is checked against the data.** `definitions_match_the_module`
+  in `crates/tea-core/tests/purl_spec_suite.rs` builds a PURL of every
+  defined type and checks which components `canonical` lowercases, which
+  `rules()` it reports, and what `check_type` says with and without a
+  namespace and each required qualifier. It also fails if a definition's
+  `permitted_characters` change, so a re-pin cannot silently disagree with the
+  code.
+- **Not applied (prose only):** `pub`'s "replace non-[a-z] letters, non-[0-9]
+  digits with underscore", `hackage`'s "kebab-case", `alpm`'s `vercmp`
+  version normalization, `cpan`'s uppercase author and "no `::` in a
+  distribution name", `mlflow`'s "lowercased for Databricks", and `git`'s
+  host-then-path split. Each would need its own reading of the text.
+- **Suite:** 402 cases pass (380 before). 12 entries are listed (35 before),
+  covering 13 cases, because the suite has one `swift` case twice. The 177
+  `build` cases are skipped as before. Of the 12 entries, 7 need a prose rule:
+  3 `cpan`, 2 `git` and the 2 `mlflow` cases that need the Databricks rule.
+  The other 5 are upstream problems:
+  - the `gem` and `rpm` `parse` cases, which contradict their `validate` pair;
+  - the `pypi` subpath sentence;
+  - the `git` `validate` case, which lowercases a namespace and name that its
+    definition marks case-sensitive;
+  - the `swift` case `pkg:swift/github.com/Alamofire/@5.4.3`, which expects no
+    name, where the generic rules drop the trailing `/` and leave `Alamofire`.
+
+  None are reported upstream yet.
+- **Behaviour change, Experimental API:** PURLs of the 21 types that differ
+  only in the case of a case-insensitive component now compare equal under
+  `same_package_url`, and their canonical text changes
+  (`pkg:github/Package-url/purl-Spec` is `pkg:github/package-url/purl-spec`).
+  Nothing sent, stored, locked or printed changes. `PurlTypeError`,
+  `Purl::check_type` and `PurlRules::CaseInsensitive` are additive.
+- **Not done, on purpose:** a builder from components (the suite's `build`
+  cases). Nothing in the SDK or the CLI needs one.

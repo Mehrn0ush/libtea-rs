@@ -1454,6 +1454,39 @@ pub(crate) struct GuardPep440Error;
 #[allow(dead_code)]
 pub(crate) struct ControlPep440Error;
 
+/// `PurlTypeError` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
+///
+/// ```compile_fail,E0004
+/// fn f(x: libtea_core::purl::PurlTypeError) -> u8 {
+///     match x {
+///         libtea_core::purl::PurlTypeError::NamespaceRequired => 0,
+///         libtea_core::purl::PurlTypeError::NamespaceProhibited => 0,
+///         libtea_core::purl::PurlTypeError::QualifierRequired(_) => 0,
+///         libtea_core::purl::PurlTypeError::NameCharacters => 0,
+///         libtea_core::purl::PurlTypeError::VersionCharacters => 0,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct GuardPurlTypeError;
+
+/// Control for `GuardPurlTypeError`: the same arms plus a wildcard compile.
+///
+/// ```
+/// fn f(x: libtea_core::purl::PurlTypeError) -> u8 {
+///     match x {
+///         libtea_core::purl::PurlTypeError::NamespaceRequired => 0,
+///         libtea_core::purl::PurlTypeError::NamespaceProhibited => 0,
+///         libtea_core::purl::PurlTypeError::QualifierRequired(_) => 0,
+///         libtea_core::purl::PurlTypeError::NameCharacters => 0,
+///         libtea_core::purl::PurlTypeError::VersionCharacters => 0,
+///         _ => 1,
+///     }
+/// }
+/// ```
+#[allow(dead_code)]
+pub(crate) struct ControlPurlTypeError;
+
 /// `Comparator` is `#[non_exhaustive]`: a match on every variant without a wildcard must not compile.
 ///
 /// ```compile_fail,E0004

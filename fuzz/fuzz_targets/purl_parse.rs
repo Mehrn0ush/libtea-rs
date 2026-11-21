@@ -18,4 +18,6 @@ fuzz_target!(|data: &[u8]| {
     let reparsed = Purl::parse(canonical.as_str()).expect("canonical form parses");
     assert_eq!(reparsed.canonical(), canonical);
     assert!(same_package_url(&purl, &reparsed));
+    // The type rules do not depend on how the PURL was spelled.
+    assert_eq!(purl.check_type(), reparsed.check_type());
 });
