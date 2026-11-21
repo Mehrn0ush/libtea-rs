@@ -19,6 +19,21 @@ include = ["src/**/*.rs", "Cargo.toml", "README.md", "LICENSE"]
 name = "libtea"
 path = "src/main.rs"
 
+# cargo-binstall: fetch the release archive instead of compiling
+# (docs/installing.md). The names match scripts/package-release.py; the
+# release_scripts test renders them against a packaged archive. binstall does
+# not check SHA256SUMS or the attestation. The quick-install strategy is off:
+# it would fetch a binary built by a third party, not by release.yml.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/libtea-{ version }-{ target }.tar.gz"
+bin-dir = "libtea-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/libtea-{ version }-{ target }.zip"
+pkg-fmt = "zip"
+
 [dependencies]
 libtea-core.workspace = true
 libtea-client = { workspace = true, features = ["signature-keys"] }

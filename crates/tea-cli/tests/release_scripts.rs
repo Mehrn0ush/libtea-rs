@@ -275,3 +275,81 @@ done
         assert!(left.is_empty(), "{member}: left behind {left:?}");
     }
 }
+
+/// `key = "value"` from one `[section]` of the CLI's Cargo.toml.
+fn binstall_value(section: &str, key: &str) -> String {
+    let manifest = std::fs::read_to_string(root().join("crates/tea-cli/Cargo.toml")).unwrap();
+    let mut current = "";
+    for line in manifest.lines() {
+        if line.starts_with('[') {
+            current = line;
+        } else if current == section {
+            if let Some(rest) = line.strip_prefix(&format!("{key} = ")) {
+                return rest.trim_matches('"').to_owned();
+            }
+        }
+    }
+    panic!("{key} missing from {section}");
+}
+
+fn render(template: &str, target: &str, ext: &str) -> String {
+    template
+        .replace("{ repo }", "https://github.com/Mehrn0ush/libtea-rs")
+        .replace("{ version }", "0.1.0")
+        .replace("{ target }", target)
+        .replace("{ bin }", "libtea")
+        .replace("{ binary-ext }", ext)
+}
+
+#[test]
+fn binstall_metadata_names_the_release_archives() {
+    let Some(py) = python() else { return };
+    let base = "[package.metadata.binstall]";
+    let windows = "[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]";
+    assert_eq!(binstall_value(base, "pkg-fmt"), "tgz");
+    assert_eq!(binstall_value(windows, "pkg-fmt"), "zip");
+    assert_eq!(
+        binstall_value(base, "disabled-strategies"),
+        r#"["quick-install"]"#
+    );
+    let dir = Dir::new("binstall");
+    for (target, url_key, ext) in [
+        ("x86_64-unknown-linux-musl", base, ""),
+        ("x86_64-pc-windows-msvc", windows, ".exe"),
+    ] {
+        let binary = dir.0.join(format!("libtea{ext}"));
+        std::fs::write(&binary, b"not really").unwrap();
+        let out = package(&dir.0, &binary, target, target);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let archive = PathBuf::from(String::from_utf8(out.stdout).unwrap().trim());
+        let url = render(&binstall_value(url_key, "pkg-url"), target, ext);
+        assert_eq!(
+            url,
+            format!(
+                "https://github.com/Mehrn0ush/libtea-rs/releases/download/v0.1.0/{}",
+                archive.file_name().unwrap().to_str().unwrap()
+            )
+        );
+        let bin = render(&binstall_value(base, "bin-dir"), target, ext);
+        let listing = Command::new(py)
+            .arg("-I")
+            .arg("-c")
+            .arg(
+                r#"
+import sys, tarfile, zipfile
+p = sys.argv[1]
+names = zipfile.ZipFile(p).namelist() if p.endswith(".zip") else tarfile.open(p).getnames()
+print("\n".join(names))
+"#,
+            )
+            .arg(&archive)
+            .output()
+            .unwrap();
+        let names = String::from_utf8_lossy(&listing.stdout).into_owned();
+        assert!(names.lines().any(|n| n == bin), "{bin} not in {names}");
+    }
+}

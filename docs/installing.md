@@ -135,6 +135,26 @@ from. The crate is uploaded from a maintainer's machine, not by the release
 workflow. You compile the binary yourself, so nothing ties it to the attested
 archives. If you need the attestation, use the archives.
 
+## With cargo-binstall (after 0.2.2)
+
+From the first CLI release after 0.2.2, the `libtea-cli` crate tells
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall) where the
+release archives are, so it downloads the binary instead of compiling it:
+
+```sh
+cargo binstall libtea-cli --version X.Y.Z
+libtea --version
+```
+
+binstall takes the archive for your target from the GitHub release `vX.Y.Z`
+and installs the `libtea` binary from it. It does **not** check `SHA256SUMS`
+or the build-provenance attestation. To verify, download the archive and run
+the checks above instead. The crate turns off binstall's quick-install
+strategy, which would fetch a binary built by a third party rather than by
+`release.yml`. If no archive matches your target, binstall falls back to
+`cargo install`, which is the crates.io route above. For 0.2.2 and earlier the
+crate has no binstall metadata, and binstall finds no archive.
+
 ## Build from source instead
 
 ```sh
