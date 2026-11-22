@@ -428,6 +428,7 @@ fn print_diff(delta: &LockDiff, json: bool) -> anyhow::Result<()> {
                 "schema_version": 1,
                 "has_changes": !delta.is_empty(),
                 "header": delta.header,
+                "notes": delta.notes,
                 "added": delta.added,
                 "removed": delta.removed,
                 "modified": delta.modified,
@@ -437,6 +438,14 @@ fn print_diff(delta: &LockDiff, json: bool) -> anyhow::Result<()> {
     }
     for change in &delta.header {
         out!("~ {}: {} -> {}", change.field, change.old, change.new);
+    }
+    for note in &delta.notes {
+        err!(
+            "note: {}: {} -> {} (not a change: written by a client pinned to another TEA specification commit)",
+            note.field,
+            note.old,
+            note.new
+        );
     }
     for entry in &delta.added {
         out!(

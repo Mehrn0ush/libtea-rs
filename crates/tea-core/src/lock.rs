@@ -376,12 +376,18 @@ pub struct ChangedArtifact {
     pub fields: Vec<FieldChange>,
 }
 
-/// Differences between two locks. `fetchedAt` is ignored.
+/// Differences between two locks. `fetchedAt` is ignored, and a different
+/// `specCommit` is a note, not a change.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub struct LockDiff {
     /// Header fields that differ.
     pub header: Vec<FieldChange>,
+    /// Header fields that differ without counting as a change: `specCommit`.
+    /// It names the TEA specification commit the writing client was pinned
+    /// to, not anything the server served, so upgrading the client does not
+    /// make an existing lock out of date.
+    pub notes: Vec<FieldChange>,
     /// Entries only in the new lock.
     pub added: Vec<LockedArtifact>,
     /// Entries only in the old lock.
@@ -391,7 +397,8 @@ pub struct LockDiff {
 }
 
 impl LockDiff {
-    /// Whether the two locks are equal apart from `fetchedAt`.
+    /// Whether the two locks are equal apart from `fetchedAt` and the
+    /// fields in [`notes`](Self::notes).
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.header.is_empty()
@@ -440,8 +447,9 @@ pub fn diff(old: &LockFile, new: &LockFile) -> LockDiff {
         old.api_version.clone(),
         new.api_version.clone(),
     );
+    let mut notes = Vec::new();
     change(
-        &mut header,
+        &mut notes,
         "specCommit",
         old.spec_commit.clone(),
         new.spec_commit.clone(),
@@ -516,6 +524,7 @@ pub fn diff(old: &LockFile, new: &LockFile) -> LockDiff {
     }
     LockDiff {
         header,
+        notes,
         added,
         removed,
         modified,
@@ -691,6 +700,31 @@ mod tests {
             .collect();
         assert_eq!(fields, ["revision", "size", "checksums"]);
         assert!(!delta.is_empty());
+        assert!(delta.notes.is_empty());
+    }
+
+    #[test]
+    fn a_different_spec_commit_is_a_note_not_a_change() {
+        let old = lock(vec![entry(A1, "text/plain")]);
+        let mut repinned = old.clone();
+        repinned.spec_commit = "a338cc06".repeat(5);
+        let delta = diff(&old, &repinned);
+        assert!(
+            delta.is_empty(),
+            "a re-pinned client must not invalidate a lock"
+        );
+        assert!(delta.header.is_empty());
+        assert_eq!(delta.notes.len(), 1);
+        assert_eq!(delta.notes[0].field, "specCommit");
+        assert_eq!(delta.notes[0].old, old.spec_commit);
+        assert_eq!(delta.notes[0].new, repinned.spec_commit);
+
+        // A real change next to it is still a change.
+        repinned.collection_version += 1;
+        let delta = diff(&old, &repinned);
+        assert!(!delta.is_empty());
+        assert_eq!(delta.header[0].field, "collectionVersion");
+        assert_eq!(delta.notes.len(), 1);
     }
 
     #[test]

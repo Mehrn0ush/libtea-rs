@@ -252,6 +252,34 @@ async fn the_same_content_gives_the_same_bytes_and_an_unchanged_lock_is_not_rewr
 }
 
 #[tokio::test]
+async fn a_lock_written_under_another_spec_pin_still_checks_clean_and_is_kept() {
+    let server = MockServer::start().await;
+    mount(&server, 1, &two()).await;
+    let dir = Dir::new("repin");
+    let lock = dir.file("tea.lock");
+    assert_eq!(sync(&server, &lock, &[]).status.code(), Some(0));
+    let written = String::from_utf8(std::fs::read(&lock).unwrap()).unwrap();
+    let older = written.replace(
+        libtea_core::spec::COMMIT,
+        "0000000000000000000000000000000000000000",
+    );
+    assert_ne!(older, written, "the lock records the pinned commit");
+    std::fs::write(&lock, &older).unwrap();
+
+    let check = sync(&server, &lock, &["--check"]);
+    assert_eq!(check.status.code(), Some(0), "{}", text(&check.stderr));
+    assert!(text(&check.stdout).contains("up to date"));
+    assert!(text(&check.stderr).contains("note: specCommit"));
+
+    // A plain sync treats it as unchanged and keeps the bytes.
+    let again = sync(&server, &lock, &["--json"]);
+    assert_eq!(again.status.code(), Some(0), "{}", text(&again.stderr));
+    let summary: serde_json::Value = serde_json::from_slice(&again.stdout).unwrap();
+    assert_eq!(summary["previous"], "unchanged");
+    assert_eq!(std::fs::read_to_string(&lock).unwrap(), older);
+}
+
+#[tokio::test]
 async fn check_passes_then_reports_added_removed_and_changed_with_exit_7() {
     let server = MockServer::start().await;
     mount(&server, 1, &two()).await;
@@ -562,6 +590,7 @@ fn diff_compares_two_locks_offline() {
             "has_changes",
             "header",
             "modified",
+            "notes",
             "removed",
             "schema_version"
         ]
@@ -569,6 +598,47 @@ fn diff_compares_two_locks_offline() {
     assert_eq!(value["modified"][0]["fields"][0]["field"], "size");
     assert_eq!(value["header"][0]["old"], "1");
     assert_eq!(value["header"][0]["new"], "2");
+    assert_eq!(value["notes"], serde_json::json!([]));
+}
+
+#[test]
+fn a_lock_from_a_client_pinned_to_another_spec_commit_is_not_a_change() {
+    let dir = Dir::new("diffspec");
+    let old = lock_with(&dir, "old.lock", |_| {});
+    let repinned = lock_with(&dir, "repinned.lock", |v| {
+        v["specCommit"] = "a338cc06a338cc06a338cc06a338cc06a338cc06".into();
+    });
+    let diff = |json: bool| {
+        let mut args = vec![
+            "diff".to_owned(),
+            old.display().to_string(),
+            repinned.display().to_string(),
+        ];
+        if json {
+            args.push("--json".into());
+        }
+        libtea(&args)
+    };
+    let plain = diff(false);
+    assert_eq!(plain.status.code(), Some(0), "{}", text(&plain.stderr));
+    assert_eq!(text(&plain.stdout).trim(), "no differences");
+    assert!(
+        text(&plain.stderr)
+            .contains("note: specCommit: 962a0228af1bfcc1232ac3f79239317ff33fdb04 -> a338cc06"),
+        "{}",
+        text(&plain.stderr)
+    );
+
+    let json = diff(true);
+    assert_eq!(json.status.code(), Some(0), "{}", text(&json.stderr));
+    let value: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(value["has_changes"], false);
+    assert_eq!(value["header"], serde_json::json!([]));
+    assert_eq!(value["notes"][0]["field"], "specCommit");
+    assert_eq!(
+        value["notes"][0]["new"],
+        "a338cc06a338cc06a338cc06a338cc06a338cc06"
+    );
 }
 
 #[test]
