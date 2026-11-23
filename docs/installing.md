@@ -82,7 +82,10 @@ On Windows, download the `.zip`, check it with
 `SHA256SUMS`, run the same `gh attestation verify` (including `--source-ref`),
 and unzip.
 
-To read the SBOM: `libtea-X.Y.Z.cdx.json` is plain JSON.
+To read the SBOM: `libtea-X.Y.Z.cdx.json` is plain JSON. It names the
+supplier and links to the security contact and to the VEX document
+[`vex/libtea.vex.cdx.json`](../vex/libtea.vex.cdx.json), which says whether
+advisories against the CLI's dependencies affect a release.
 
 ## What each check proves, and what it does not
 
@@ -103,7 +106,9 @@ To read the SBOM: `libtea-X.Y.Z.cdx.json` is plain JSON.
   names (a tag `v1.2.3-rc.1` gives `libtea-1.2.3-rc.1-...`), and
   the release workflow refuses to attest any other set of file names.
 - **The SBOM** lists what `Cargo.lock` resolves for the CLI at the tagged
-  commit. It is an inventory, not a vulnerability assessment.
+  commit. It is an inventory, not a vulnerability assessment; the VEX
+  document records the assessments that were made. Third-party components
+  carry what `cargo-cyclonedx` writes, which includes no supplier.
 - **Not provided:** the binaries are not code-signed or notarized. macOS
   Gatekeeper and Windows SmartScreen may warn about them. The build is not
   claimed to be bit-for-bit reproducible (archives are deterministic given the

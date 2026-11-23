@@ -212,7 +212,9 @@ fn windows_gets_a_zip_with_an_exe_and_bad_arguments_are_refused() {
 
 /// `cargo-cyclonedx` writes one SBOM per workspace member whichever manifest it
 /// is pointed at (seen with 0.5.10 on this workspace: four files). The script
-/// must keep the CLI's, remove the others, and leave nothing behind.
+/// must keep the CLI's, remove the others, and leave nothing behind. It adds
+/// the supplier, the SBOM author and the contact links, which the tool does
+/// not write, to the document and the workspace's own crates only.
 #[test]
 fn make_sbom_keeps_the_cli_sbom_when_the_tool_writes_one_per_member() {
     if python().is_none() {
@@ -243,7 +245,7 @@ fn make_sbom_keeps_the_cli_sbom_when_the_tool_writes_one_per_member() {
         r#"#!/bin/sh
 [ "$1" = cyclonedx ] || exit 2
 for m in cli client core conformance; do
-  printf '{"bomFormat":"CycloneDX","specVersion":"1.5","metadata":{"component":{"name":"libtea-%s"}},"components":[{"name":"x"}]}' "$m" \
+  printf '{"bomFormat":"CycloneDX","specVersion":"1.5","metadata":{"component":{"name":"libtea-%s","purl":"pkg:cargo/libtea-%s@1.0.0?download_url=file://.","components":[{"name":"libtea"}]}},"components":[{"name":"libtea-core","purl":"pkg:cargo/libtea-core@1.0.0?download_url=file://../tea-core"},{"name":"x","purl":"pkg:cargo/x@1.0.0"}]}' "$m" "$m" \
     > "crates/tea-$m/libtea-$m.cdx.json"
 done
 "#,
@@ -265,8 +267,55 @@ done
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    let text = std::fs::read_to_string(&out).unwrap();
-    assert!(text.contains("\"name\":\"libtea-cli\""), "{text}");
+    let doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+    let product = &doc["metadata"]["component"];
+    assert_eq!(product["name"], "libtea-cli", "{doc}");
+
+    // Supplier and SBOM author for the document and the workspace's own crates.
+    let supplier = serde_json::json!({
+        "name": "libtea-rs project",
+        "url": ["https://github.com/Mehrn0ush/libtea-rs"],
+    });
+    assert_eq!(doc["metadata"]["supplier"], supplier);
+    assert_eq!(
+        doc["metadata"]["authors"][0]["name"],
+        "libtea-rs maintainers"
+    );
+    assert_eq!(product["supplier"], supplier);
+    assert_eq!(product["components"][0]["supplier"], supplier);
+    assert_eq!(doc["components"][0]["supplier"], supplier);
+    assert!(
+        doc["components"][1].get("supplier").is_none(),
+        "a third-party component keeps what the tool wrote: {doc}"
+    );
+    let refs: Vec<(&str, &str)> = product["externalReferences"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["type"].as_str().unwrap(), r["url"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        refs,
+        [
+            (
+                "security-contact",
+                "https://github.com/Mehrn0ush/libtea-rs/security/advisories/new"
+            ),
+            (
+                "advisories",
+                "https://github.com/Mehrn0ush/libtea-rs/security/advisories"
+            ),
+            (
+                "exploitability-statement",
+                "https://raw.githubusercontent.com/Mehrn0ush/libtea-rs/main/vex/libtea.vex.cdx.json"
+            ),
+        ]
+    );
+    assert!(
+        root().join("vex/libtea.vex.cdx.json").is_file(),
+        "the SBOM links to the VEX document"
+    );
     for member in ["tea-cli", "tea-client", "tea-core", "tea-conformance"] {
         let left: Vec<_> = std::fs::read_dir(tree.join("crates").join(member))
             .unwrap()
