@@ -64,7 +64,7 @@ Retries apply to transport failures, timeouts, and HTTP 429 and 503 on `GET`; a 
 
 ## Dependency and supply-chain notes
 
-The lockfile is committed. `deny.toml` allows common permissive licenses and denies unknown registries and yanked crates. CI runs `cargo deny`. Fuzz targets live under `fuzz/` and are not part of the library workspace.
+The lockfile is committed. `deny.toml` allows common permissive licenses and denies unknown registries and yanked crates. CI runs `cargo deny`. CodeQL (`.github/workflows/codeql.yml`) scans the Rust code, the workflows and the Python release scripts on every pull request; findings appear under code scanning. Fuzz targets live under `fuzz/` and are not part of the library workspace.
 
 `#![forbid(unsafe_code)]` is set on every library and on the CLI. The HTTP stack and hash crates may contain unsafe code in their own crates.
 
