@@ -15,8 +15,8 @@ is also on crates.io as `libtea-cli`, which has no checksum file or attestation
 | `libtea-X.Y.Z-<target>.tar.gz` / `.zip` | the binary, `LICENSE`, `README.md` |
 | `libtea-X.Y.Z.cdx.json` | CycloneDX 1.5 SBOM of the CLI's dependency tree |
 | `SHA256SUMS` | SHA-256 of every file above |
-| `libtea-X.Y.Z.sigstore.json` | the build-provenance attestation as a Sigstore bundle (after 0.2.2) |
-| `libtea-X.Y.Z.intoto.jsonl` | the same attestation's signed in-toto statement (DSSE envelope), one line (after 0.2.2) |
+| `libtea-X.Y.Z.sigstore.json` | the build-provenance attestation as a Sigstore bundle (from 0.2.3) |
+| `libtea-X.Y.Z.intoto.jsonl` | the same attestation's signed in-toto statement (DSSE envelope), one line (from 0.2.3) |
 
 Targets: `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-gnu`, `aarch64-unknown-linux-musl`,
@@ -35,8 +35,8 @@ distributions, on Alpine, and in minimal containers. The baseline is the runner
 image named in `release.yml`; a later release may raise it and will say so in
 the changelog.
 
-Every file is also covered by a GitHub build-provenance attestation. From the
-first release after 0.2.2 the attestation is also attached to the release, so
+Every file is also covered by a GitHub build-provenance attestation. From
+0.2.3 the attestation is also attached to the release, so
 it can be checked without fetching it from GitHub (below). The two attestation
 files are not listed in `SHA256SUMS`; the attestation signs `SHA256SUMS` and
 every file listed in it. A release
@@ -78,7 +78,7 @@ gh attestation verify "libtea-$VERSION-$TARGET.tar.gz" \
   --cert-identity "https://github.com/Mehrn0ush/libtea-rs/.github/workflows/release.yml@refs/tags/v$VERSION"
 ```
 
-From the first release after 0.2.2, the same check works with the attestation
+From 0.2.3, the same check works with the attestation
 attached to the release instead of the one GitHub stores (for example where
 only the release files were mirrored). `gh` still needs network access for
 Sigstore's trusted root:
@@ -163,9 +163,9 @@ from. The crate is uploaded from a maintainer's machine, not by the release
 workflow. You compile the binary yourself, so nothing ties it to the attested
 archives. If you need the attestation, use the archives.
 
-## With cargo-binstall (after 0.2.2)
+## With cargo-binstall (0.2.3 and later)
 
-From the first CLI release after 0.2.2, the `libtea-cli` crate tells
+From 0.2.3, the `libtea-cli` crate tells
 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) where the
 release archives are, so it downloads the binary instead of compiling it:
 

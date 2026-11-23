@@ -49,7 +49,7 @@ dependency ships in the next release.
   the supplier and the links above;
 - `SHA256SUMS` and a GitHub build-provenance attestation for every archive,
   attached to the release as `libtea-X.Y.Z.sigstore.json` and
-  `libtea-X.Y.Z.intoto.jsonl` from the first release after 0.2.2; how to
+  `libtea-X.Y.Z.intoto.jsonl` from 0.2.3; how to
   verify them is in [`docs/installing.md`](docs/installing.md);
 - release notes in [`CHANGELOG.md`](CHANGELOG.md).
 

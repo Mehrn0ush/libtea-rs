@@ -312,7 +312,7 @@ hold entries exactly as they appear in a lock file (camelCase,
 `docs/lock-file.md`). `field` names inside `header` and `fields` are the lock
 file's names (`collectionVersion`, `revision`, `size`, `checksums`, ...); `old`
 and `new` are strings. Exit status 7 when `has_changes` is true, 0 otherwise.
-`notes` (from the release after `libtea-cli` 0.2.2) lists header fields that differ
+`notes` (from `libtea-cli` 0.2.3) lists header fields that differ
 without counting as a change; today only `specCommit`. It is always present,
 usually empty, and never sets `has_changes`.
 
