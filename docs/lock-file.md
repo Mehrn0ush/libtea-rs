@@ -49,7 +49,7 @@ fragment removed, and the library refuses to write or read a lock whose
 | `tei` | The TEI that was resolved, as given on the command line. |
 | `server` | The API root that served the release (redacted as above). |
 | `apiVersion` | The advertised API version that was used. |
-| `specCommit` | The TEA specification commit this client is pinned to. |
+| `specCommit` | The TEA specification commit the client that wrote the lock was pinned to. Recorded, but not compared (see "What is compared"). |
 | `productRelease` | Product release UUID. |
 | `collectionVersion` | The collection version that was locked (the latest unless `--collection-version`). |
 | `artifacts[]` | One entry per artifact **format**, unique by `(uuid, mediaType)`. |
@@ -123,7 +123,14 @@ libtea diff old.lock new.lock                     # offline; exit 7 if they diff
 ## What is compared
 
 `diff` and `--check` compare the header (`tei`, `server`, `apiVersion`,
-`specCommit`, `productRelease`, `collectionVersion`) and, per `(uuid,
-mediaType)`: `revision`, `type`, `size`, `checksums`, `integrity`. A new
-revision of an artifact is a change, not a removal plus an addition.
-`fetchedAt` is ignored.
+`productRelease`, `collectionVersion`) and, per `(uuid, mediaType)`:
+`revision`, `type`, `size`, `checksums`, `integrity`. A new revision of an
+artifact is a change, not a removal plus an addition. `fetchedAt` is ignored.
+
+A different `specCommit` is reported as a note, never as a change: it says
+which TEA specification the writing client was pinned to, not what the
+server serves. Without this, upgrading libtea to a release pinned to a newer
+TEA commit would make every existing lock fail `sync --check` with exit 7.
+The note goes to stderr (`note: specCommit: OLD -> NEW ...`), or into
+`notes` with `--json`. A plain `sync` treats such a lock as unchanged and
+keeps its bytes, so the old `specCommit` stays until something else changes.

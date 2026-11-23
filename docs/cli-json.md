@@ -300,6 +300,7 @@ One object on stdout, whether or not there are differences:
 ```json
 {"schema_version": 1, "has_changes": true,
  "header":   [{"field": "collectionVersion", "old": "1", "new": "2"}],
+ "notes":    [{"field": "specCommit", "old": "...", "new": "..."}],
  "added":    [ <lock entry> ],
  "removed":  [ <lock entry> ],
  "modified": [{"uuid": "...", "media_type": "...",
@@ -311,6 +312,9 @@ hold entries exactly as they appear in a lock file (camelCase,
 `docs/lock-file.md`). `field` names inside `header` and `fields` are the lock
 file's names (`collectionVersion`, `revision`, `size`, `checksums`, ...); `old`
 and `new` are strings. Exit status 7 when `has_changes` is true, 0 otherwise.
+`notes` (from the release after `libtea-cli` 0.2.2) lists header fields that differ
+without counting as a change; today only `specCommit`. It is always present,
+usually empty, and never sets `has_changes`.
 
 ## `cache stat --json` and `cache clear --json`
 
