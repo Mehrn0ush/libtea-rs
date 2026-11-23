@@ -40,7 +40,9 @@ versions it needs, so check that those are on crates.io before tagging.
 2. **CI green on the feature branch** at that SHA: `test` (stable and MSRV
    1.89.0, including the `cargo doc` step with `RUSTDOCFLAGS=-D warnings`),
    `package`, `cargo deny` and `cargo audit` (both gate on RustSec advisories),
-   and the Windows and macOS test jobs. `cargo semver-checks` skips each crate only while crates.io returns
+   `coverage` (at least 90% of lines), `fuzz` (every fuzz target for 30
+   seconds, so each release is fuzzed before it is tagged), and the Windows
+   and macOS test jobs. `cargo semver-checks` skips each crate only while crates.io returns
    404 for it (first release). It fails on any other lookup error. Since 0.1.0
    was published it runs against the latest published version and is required.
 3. **Merge to `main` without squashing** (merge commit or fast-forward), so

@@ -195,3 +195,75 @@ jobs:
                 ;;
             esac
           done
+
+  # Line coverage of the workspace tests (cargo-llvm-cov). Fails below 90% of
+  # lines, so coverage cannot drop unnoticed. The figures are in the job summary.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 2026-10-16
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-llvm-cov@0.9.1
+      - name: Measure line coverage
+        run: |
+          set -euo pipefail
+          cargo llvm-cov --workspace --all-features --locked --summary-only --fail-under-lines 90 | tee coverage.txt
+          {
+            echo '```'
+            grep -E '^(Filename|TOTAL)' coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Every cargo-fuzz target (fuzz/fuzz_targets) for FUZZ_SECONDS, starting from
+  # its committed corpus, with debug assertions on. A crash fails the job and
+  # the crashing input is uploaded. The nightly and cargo-fuzz versions are
+  # exact (docs/release-pins.md).
+  fuzz:
+    name: fuzz
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      FUZZ_SECONDS: "30"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 2026-10-16
+        with:
+          toolchain: nightly-2026-11-08
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked --version 0.13.2
+      # cargo fuzz has no --locked; this fails first if fuzz/Cargo.lock is stale.
+      - name: Check the lock file
+        working-directory: fuzz
+        run: cargo check --locked
+      - name: Run every target
+        working-directory: fuzz
+        run: |
+          set -euo pipefail
+          targets="$(cargo fuzz list)"
+          [ -n "$targets" ] || { echo "::error::no fuzz targets found"; exit 1; }
+          for target in $targets; do
+            echo "::group::${target}"
+            cargo fuzz run "$target" -- -max_total_time="$FUZZ_SECONDS"
+            echo "::endgroup::"
+          done
+      - name: Upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
