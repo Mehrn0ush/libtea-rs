@@ -23,6 +23,19 @@ If you changed a workflow or a shell script, also run `actionlint` and
 gates; run it locally (`cargo install cargo-audit --locked`) when you change
 dependencies.
 
+CI also measures coverage and fuzzes; both gate. To run them locally:
+
+```sh
+cargo llvm-cov --workspace --all-features --locked --summary-only --fail-under-lines 90
+(cd fuzz && cargo +nightly fuzz run <target> -- -max_total_time=30)
+```
+
+`cargo install cargo-llvm-cov --locked` and `cargo install cargo-fuzz --locked`
+install the tools; `cargo +nightly fuzz list` names the targets. New
+functionality comes with tests that keep line coverage at 90% or more. A crash
+found by fuzzing is fixed with the crashing input added to that target's
+corpus under `fuzz/corpus/`.
+
 Do not lower a check, skip or ignore a test, or loosen a policy test to get a
 green result. If a test is wrong, say so in the pull request and fix the test
 for the right reason.
