@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- Release workflow (not part of any crate): the `attest` job saves the build-provenance attestation it makes as two more release files, `libtea-X.Y.Z.sigstore.json` (the Sigstore bundle, which `gh attestation verify --bundle` checks without fetching the attestation from GitHub) and `libtea-X.Y.Z.intoto.jsonl` (its DSSE envelope, the signed in-toto statement). The step checks the bundle's media type and payload type first and runs no build tool. They are not in `SHA256SUMS`, which the attestation signs. `docs/installing.md` shows the offline check and `docs/release-checklist.md` step 7 adds it. The first release with these files is the next CLI release after 0.2.2.
+
 - CI (not part of any crate): new `.github/workflows/codeql.yml` runs CodeQL on every pull request, on `main` and weekly, for Rust, the GitHub Actions workflows and the Python release scripts (`build-mode: none`), and reports to code scanning. It uses the `codeql-action` commit already pinned for Scorecard. OpenSSF Scorecard's SAST check counts it; it does not recognise clippy.
 
 - CI (not part of any crate): two new jobs in `ci.yml`. `coverage` measures line coverage with `cargo-llvm-cov` 0.9.1 and fails below 90% (2026-11-23: 92.0% of lines in CI, 91.6% locally without the inline unit-test modules). `fuzz` runs each of the 13 cargo-fuzz targets for 30 seconds from its committed corpus, with debug assertions, on a pinned nightly with `cargo-fuzz` 0.13.2, and uploads any crashing input. `docs/release-checklist.md` requires both on the release commit, and `CONTRIBUTING.md` says how to run them. The pins are in `docs/release-pins.md`.

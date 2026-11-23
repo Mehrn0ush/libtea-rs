@@ -15,6 +15,8 @@ is also on crates.io as `libtea-cli`, which has no checksum file or attestation
 | `libtea-X.Y.Z-<target>.tar.gz` / `.zip` | the binary, `LICENSE`, `README.md` |
 | `libtea-X.Y.Z.cdx.json` | CycloneDX 1.5 SBOM of the CLI's dependency tree |
 | `SHA256SUMS` | SHA-256 of every file above |
+| `libtea-X.Y.Z.sigstore.json` | the build-provenance attestation as a Sigstore bundle (after 0.2.2) |
+| `libtea-X.Y.Z.intoto.jsonl` | the same attestation's signed in-toto statement (DSSE envelope), one line (after 0.2.2) |
 
 Targets: `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`,
 `aarch64-unknown-linux-gnu`, `aarch64-unknown-linux-musl`,
@@ -33,7 +35,11 @@ distributions, on Alpine, and in minimal containers. The baseline is the runner
 image named in `release.yml`; a later release may raise it and will say so in
 the changelog.
 
-Every file is also covered by a GitHub build-provenance attestation. A release
+Every file is also covered by a GitHub build-provenance attestation. From the
+first release after 0.2.2 the attestation is also attached to the release, so
+it can be checked without fetching it from GitHub (below). The two attestation
+files are not listed in `SHA256SUMS`; the attestation signs `SHA256SUMS` and
+every file listed in it. A release
 is created as a **draft** by the workflow and published by a maintainer by hand
 after checking it; only published releases are meant for installation.
 
@@ -71,6 +77,23 @@ gh attestation verify "libtea-$VERSION-$TARGET.tar.gz" \
   --repo Mehrn0ush/libtea-rs \
   --cert-identity "https://github.com/Mehrn0ush/libtea-rs/.github/workflows/release.yml@refs/tags/v$VERSION"
 ```
+
+From the first release after 0.2.2, the same check works with the attestation
+attached to the release instead of the one GitHub stores (for example where
+only the release files were mirrored). `gh` still needs network access for
+Sigstore's trusted root:
+
+```sh
+curl -fLO "$BASE/libtea-$VERSION.sigstore.json"
+gh attestation verify "libtea-$VERSION-$TARGET.tar.gz" \
+  --repo Mehrn0ush/libtea-rs \
+  --bundle "libtea-$VERSION.sigstore.json" \
+  --signer-workflow Mehrn0ush/libtea-rs/.github/workflows/release.yml \
+  --source-ref "refs/tags/v$VERSION"
+```
+
+The `.intoto.jsonl` file holds the same signed statement for tools that read
+in-toto envelopes, such as OpenSSF Scorecard; `gh` uses the `.sigstore.json`.
 
 On macOS, a binary downloaded through a browser may be quarantined and refused
 at first run. After verifying it, remove the flag with

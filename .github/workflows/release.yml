@@ -11,8 +11,9 @@
 #   build (x7)     contents: read     builds and packages; no token, no secret
 #   sbom           contents: read     CycloneDX SBOM of the CLI's dependency tree
 #   attest         contents: read, id-token: write, attestations: write
-#                                     checksums + build-provenance attestation;
-#                                     runs no repository code
+#                                     checksums + build-provenance attestation,
+#                                     saved as release files too; runs no
+#                                     repository code
 #   draft-release  contents: write    creates the draft; has no source checkout
 
 name: Release
@@ -261,9 +262,24 @@ jobs:
           xargs sha256sum < ../files.txt > SHA256SUMS
           sha256sum --check --strict SHA256SUMS
       - name: Attest build provenance
+        id: provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*
+      # The same attestation, attached to the release so it can be verified
+      # offline: the Sigstore bundle as is, and its DSSE envelope (the signed
+      # in-toto statement) as a one-line .intoto.jsonl. They are not in
+      # SHA256SUMS; the bundle signs SHA256SUMS and every file listed in it.
+      - name: Save the provenance bundle
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          jq -e '.mediaType | startswith("application/vnd.dev.sigstore.bundle")' "$BUNDLE" >/dev/null
+          jq -e '.dsseEnvelope.payloadType == "application/vnd.in-toto+json"' "$BUNDLE" >/dev/null
+          cp "$BUNDLE" "dist/libtea-${VERSION}.sigstore.json"
+          jq -c '.dsseEnvelope' "$BUNDLE" > "dist/libtea-${VERSION}.intoto.jsonl"
       - name: Upload release files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
