@@ -6,6 +6,8 @@
 [![docs.rs: libtea-client](https://img.shields.io/docsrs/libtea-client?label=docs.rs%20client)](https://docs.rs/libtea-client)
 [![CI](https://github.com/Mehrn0ush/libtea-rs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mehrn0ush/libtea-rs/actions/workflows/ci.yml?query=branch%3Amain)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17030/badge)](https://www.bestpractices.dev/projects/17030)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Mehrn0ush/libtea-rs/badge)](https://scorecard.dev/viewer/?uri=github.com/Mehrn0ush/libtea-rs)
 
 Independent Rust client libraries and a command-line tool for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 

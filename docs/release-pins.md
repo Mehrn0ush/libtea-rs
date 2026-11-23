@@ -11,11 +11,13 @@ the SBOM tool has an exact version. Pinned on 2026-11-08:
 | `actions/attest-build-provenance` | `release.yml` | `4d101475d8b20a2381f78447822ac1eab6504dd8` | v4.2.2 |
 | `cargo-cyclonedx` | `release.yml`, `sbom` job `env:` | `0.5.10` (`cargo install --locked`) | 0.5.10 |
 | `actions/cache` | `action.yml` | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` | v6.1.0 |
-| `actions/checkout` | every workflow (12 uses) | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1 |
+| `actions/checkout` | every workflow (14 uses) | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1 |
 | `actions/upload-artifact` | `interop-manual.yml`, `spec-drift.yml` (as in `release.yml`) | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | v7.0.2 |
 | `EmbarkStudios/cargo-deny-action` | `ci.yml` | `3c6349835b2b7b196a839186cb8b78e02f7b5f25` | v2.1.1 |
 | `taiki-e/install-action` | `ci.yml` (2 uses, `with: tool:`) | `5488ac5a951645ce95062214902ac4b6bc1a1037` | v2.87.32 |
 | `dtolnay/rust-toolchain` | every workflow that builds (8 uses) | `683b588c487a69d01f6c6ddf40f036ff682cc2c8` | v1 |
+| `ossf/scorecard-action` | `scorecard.yml` | `fa7117db83c52d787ae5a89f350999701505d78e` | v2.5.0 |
+| `github/codeql-action/upload-sarif` | `scorecard.yml` | `33d7b85da1a04171e211befe2c739303b9a4c066` | v4.39.3 |
 | runner images | `release.yml` | `ubuntu-24.04`, `ubuntu-24.04-arm`, `macos-15`, `windows-2022` | |
 
 On 2026-11-09 `actions/checkout` and `actions/upload-artifact` were moved to
@@ -47,6 +49,12 @@ It is pinned to the commit `v1` pointed to on 2026-11-12
 patch release"; it was also the `master` tip), and the comment gives that date:
 `# v1 2026-10-16`. (Until 2026-11-12 the pin was a `master` commit whose comment
 said "no release tags"; that was wrong, the `v1` tag existed.)
+
+On 2026-11-23 `ossf/scorecard-action` v2.5.0 (released 2026-10-12) and
+`github/codeql-action` v4.39.3 (released 2026-11-04) were pinned for
+`scorecard.yml`; the commit and tag lookups agreed for each. The newest
+releases then, scorecard-action v2.6.0 (2026-11-19) and codeql-action v4.39.4
+(2026-11-20), were too new for the two-week rule.
 
 **Two-week rule.** A new pin is a release (or, for `rust-toolchain`, a commit)
 at least 14 days old, so that a compromised or broken release has had time to
