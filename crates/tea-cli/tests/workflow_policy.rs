@@ -926,6 +926,149 @@ fn the_name_check_runs_before_anything_is_checksummed_or_attested() {
         .any(|(k, v)| k == "VERSION" && v.contains("needs.meta.outputs.version")));
 }
 
+/// The attestation is also saved as two release files, after it is made and
+/// before the files are uploaded for the draft job.
+#[test]
+fn the_attest_job_saves_the_provenance_bundle_as_release_files() {
+    let jobs = jobs_of(&release());
+    let attest = steps_of(&job(&jobs, "attest").raw);
+    let at = |name: &str| {
+        attest
+            .iter()
+            .position(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    assert!(at("Attest build provenance") < at("Save the provenance bundle"));
+    assert!(at("Save the provenance bundle") < at("Upload release files"));
+    assert!(attest[at("Attest build provenance")]
+        .raw
+        .contains("id: provenance"));
+    let save = &attest[at("Save the provenance bundle")];
+    assert!(save.uses.is_none());
+    assert!(save
+        .env
+        .iter()
+        .any(|(k, v)| k == "BUNDLE" && v == "${{ steps.provenance.outputs.bundle-path }}"));
+    assert!(save
+        .env
+        .iter()
+        .any(|(k, v)| k == "VERSION" && v.contains("needs.meta.outputs.version")));
+    for name in [
+        "dist/libtea-${VERSION}.sigstore.json",
+        "dist/libtea-${VERSION}.intoto.jsonl",
+    ] {
+        assert!(save.run.contains(name), "the step writes {name}");
+    }
+}
+
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
+fn run_save_bundle(bundle: &serde_json::Value) -> (std::process::Output, PathBuf) {
+    let jobs = jobs_of(&release());
+    let attest = steps_of(&job(&jobs, "attest").raw);
+    let step = attest
+        .iter()
+        .find(|s| s.name == "Save the provenance bundle")
+        .expect("the attest job saves the bundle");
+    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "libtea-bundle-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("dist")).unwrap();
+    let path = dir.join("bundle.json");
+    std::fs::write(&path, serde_json::to_vec_pretty(bundle).unwrap()).unwrap();
+    let output = std::process::Command::new("bash")
+        .arg("-c")
+        .arg(&step.run)
+        .current_dir(&dir)
+        .env("VERSION", "0.1.0")
+        .env("BUNDLE", &path)
+        .output()
+        .unwrap();
+    (output, dir)
+}
+
+#[cfg(unix)]
+fn jq_available() -> bool {
+    std::process::Command::new("jq")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+#[cfg(unix)]
+fn sample_bundle() -> serde_json::Value {
+    serde_json::json!({
+        "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+        "verificationMaterial": { "certificate": { "rawBytes": "MIIB" } },
+        "dsseEnvelope": {
+            "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEifQ==",
+            "payloadType": "application/vnd.in-toto+json",
+            "signatures": [{ "sig": "MEUC" }]
+        }
+    })
+}
+
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
+#[test]
+fn the_saved_bundle_and_envelope_are_the_attestation() {
+    if !jq_available() {
+        eprintln!("skipped: jq is not installed");
+        return;
+    }
+    let bundle = sample_bundle();
+    let (out, dir) = run_save_bundle(&bundle);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let saved = std::fs::read(dir.join("bundle.json")).unwrap();
+    assert_eq!(
+        std::fs::read(dir.join("dist/libtea-0.1.0.sigstore.json")).unwrap(),
+        saved,
+        "the bundle is attached unchanged"
+    );
+    let envelope = std::fs::read_to_string(dir.join("dist/libtea-0.1.0.intoto.jsonl")).unwrap();
+    assert_eq!(envelope.lines().count(), 1, "one JSON object per line");
+    let envelope: serde_json::Value = serde_json::from_str(&envelope).unwrap();
+    assert_eq!(envelope, bundle["dsseEnvelope"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// Runs a bash snippet; CI runs these on Linux and macOS (bash on Windows is WSL or Git Bash, which these scripts never run under).
+#[cfg(unix)]
+#[test]
+fn the_bundle_step_rejects_anything_but_a_dsse_sigstore_bundle() {
+    if !jq_available() {
+        eprintln!("skipped: jq is not installed");
+        return;
+    }
+    let mut not_sigstore = sample_bundle();
+    not_sigstore["mediaType"] = "application/json".into();
+    let mut not_in_toto = sample_bundle();
+    not_in_toto["dsseEnvelope"]["payloadType"] = "text/plain".into();
+    let mut no_envelope = sample_bundle();
+    no_envelope.as_object_mut().unwrap().remove("dsseEnvelope");
+    for (bundle, what) in [
+        (not_sigstore, "another media type"),
+        (not_in_toto, "a non-in-toto payload"),
+        (no_envelope, "a bundle without a DSSE envelope"),
+    ] {
+        let (out, dir) = run_save_bundle(&bundle);
+        assert!(!out.status.success(), "{what} passed");
+        assert!(
+            !dir.join("dist/libtea-0.1.0.sigstore.json").exists(),
+            "{what}: nothing is attached"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 /// The manual interop workflow stops early, naming the accepted inputs, when
 /// nothing is selected to probe; and that step never sees the API key.
 #[test]

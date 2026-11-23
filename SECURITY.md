@@ -47,8 +47,10 @@ dependency ships in the next release.
 
 - a CycloneDX SBOM of the CLI's dependency tree (`libtea-X.Y.Z.cdx.json`), with
   the supplier and the links above;
-- `SHA256SUMS` and a GitHub build-provenance attestation for every archive;
-  how to verify them is in [`docs/installing.md`](docs/installing.md);
+- `SHA256SUMS` and a GitHub build-provenance attestation for every archive,
+  attached to the release as `libtea-X.Y.Z.sigstore.json` and
+  `libtea-X.Y.Z.intoto.jsonl` from the first release after 0.2.2; how to
+  verify them is in [`docs/installing.md`](docs/installing.md);
 - release notes in [`CHANGELOG.md`](CHANGELOG.md).
 
 The security design (assets, trust boundaries, transport and integrity rules)

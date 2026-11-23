@@ -66,7 +66,9 @@ versions it needs, so check that those are on crates.io before tagging.
    below). The `v` tag starts `release.yml`. Approve the two deployments (`attest`,
    `draft-release`), download the **draft** release, and verify it with
    `docs/installing.md`: checksums, `gh attestation verify` with
-   `--source-ref refs/tags/v$VERSION`, run the binary, open the SBOM. Do not go
+   `--source-ref refs/tags/v$VERSION`, the same check with
+   `--bundle libtea-$VERSION.sigstore.json` from the draft, run the binary,
+   open the SBOM. Do not go
    on until the checks succeed. Nothing has been published to crates.io at this point.
 8. Publish `libtea-core` if it is released (see "Publishing with a token" below):
    `cargo publish -p libtea-core --locked`.
