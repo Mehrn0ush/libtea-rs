@@ -333,7 +333,11 @@ repository's ruleset has had both since 2026-11-20.
 `cargo deny` and is a second opinion on it. A new advisory against a
 dependency then blocks every pull request until the dependency is updated or
 the advisory is assessed; do not silence it in `deny.toml` or `audit.toml`
-without a written reason. `.github/workflows/repo-settings.yml` runs the same check
+without a written reason. When an advisory affects a dependency in the
+`Cargo.lock` of a published release, record the assessment in
+`vex/libtea.vex.cdx.json` (SECURITY.md): add a statement for the supported
+releases, bump `version` and `metadata.timestamp`, and keep `analysis.detail`
+to what was checked. `crates/tea-cli/tests/vex.rs` checks its shape. `.github/workflows/repo-settings.yml` runs the same check
 on every push to `main` and weekly, and fails when a ruleset is missing or
 weakened. It reports; it cannot block anything, and someone with admin rights can
 change the rulesets or the workflow. The rulesets are the protection.

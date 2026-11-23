@@ -1,0 +1,80 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:bdb2257c-4da1-4198-9fee-7cc14121069f",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-23T00:00:00Z",
+    "supplier": {
+      "name": "libtea-rs project",
+      "url": ["https://github.com/Mehrn0ush/libtea-rs"]
+    },
+    "authors": [{ "name": "libtea-rs maintainers" }]
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "libtea-cli@0.2.2",
+      "name": "libtea-cli",
+      "version": "0.2.2",
+      "purl": "pkg:cargo/libtea-cli@0.2.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "libtea-client@0.2.0",
+      "name": "libtea-client",
+      "version": "0.2.0",
+      "purl": "pkg:cargo/libtea-client@0.2.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "libtea-core@0.2.0",
+      "name": "libtea-core",
+      "version": "0.2.0",
+      "purl": "pkg:cargo/libtea-core@0.2.0"
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "bom-ref": "RUSTSEC-2026-0592",
+      "id": "RUSTSEC-2026-0592",
+      "source": {
+        "name": "RustSec",
+        "url": "https://rustsec.org/advisories/RUSTSEC-2026-0592.html"
+      },
+      "references": [
+        {
+          "id": "GHSA-hrj5-67jp-wqp9",
+          "source": {
+            "name": "GitHub",
+            "url": "https://github.com/advisories/GHSA-hrj5-67jp-wqp9"
+          }
+        }
+      ],
+      "cwes": [674],
+      "description": "Stack overflow in url::Url::origin() on nested blob: URLs (url <= 2.5.8).",
+      "published": "2026-11-20T00:00:00Z",
+      "analysis": {
+        "state": "not_affected",
+        "justification": "code_not_reachable",
+        "detail": "The libtea-cli 0.2.2 release binaries are built with url 2.5.8. The advisory affects only url::Url::origin() and url::quirks::origin(). Nothing in the binary calls either: not libtea-core 0.2.0, libtea-client 0.2.0 or libtea-cli 0.2.2, and not reqwest 0.12.28 or tower-http 0.6.11, the other crates in its tree that depend on url (checked in the sources at tag v0.2.2). libtea-core and libtea-client do not call it either; applications that use them resolve their own url version and should update to 2.5.9 if their own code calls Url::origin(). main uses url 2.5.9 from #89.",
+        "firstIssued": "2026-11-23T00:00:00Z",
+        "lastUpdated": "2026-11-23T00:00:00Z"
+      },
+      "affects": [
+        {
+          "ref": "libtea-cli@0.2.2",
+          "versions": [{ "version": "0.2.2", "status": "unaffected" }]
+        },
+        {
+          "ref": "libtea-client@0.2.0",
+          "versions": [{ "version": "0.2.0", "status": "unaffected" }]
+        },
+        {
+          "ref": "libtea-core@0.2.0",
+          "versions": [{ "version": "0.2.0", "status": "unaffected" }]
+        }
+      ]
+    }
+  ]
+}
