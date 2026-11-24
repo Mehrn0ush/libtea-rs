@@ -25,6 +25,9 @@ release workflow's `v[0-9]+...` trigger and starts nothing. `libs-v0.1.9`
 (2026-11-20) was the first library-only release: `libtea-core` and
 `libtea-client` 0.1.9, no release run, no GitHub release. `libs-v0.2.0` and
 `v0.2.2` (2026-11-21) were the first "Both" release, on one commit.
+`libs-v0.2.1` and `v0.2.3` (2026-11-24) released `libtea-core` alone with the
+CLI; `libtea-client` stayed at 0.2.0. `v0.2.3` is the first release with the
+attestation attached (`.sigstore.json`, `.intoto.jsonl`).
 
 Publish in dependency order: `libtea-core`, then `libtea-client`, then
 `libtea-cli`, each only after the index serves the one before. Publish only
@@ -371,7 +374,7 @@ stolen tokens, not against the maintainer.
 `SHA256SUMS` and a CycloneDX SBOM, attests build provenance, and creates a
 **draft** GitHub release. It publishes nothing to crates.io, never publishes the
 GitHub release itself, and holds no secret. It has run for every tag from `v0.1.0` to
-`v0.2.2`, all successfully (`v0.1.6`: run 43182817134; `v0.1.7`: run 44500983192; `v0.1.8`: run 44584585018; `v0.2.0`: run 44691175896; `v0.2.1`: run 44783205174; `v0.2.2`: run 44895512012). Read `docs/release-pins.md` before changing it: it
+`v0.2.3`, all successfully (`v0.1.6`: run 43182817134; `v0.1.7`: run 44500983192; `v0.1.8`: run 44584585018; `v0.2.0`: run 44691175896; `v0.2.1`: run 44783205174; `v0.2.2`: run 44895512012; `v0.2.3`: run 45347624578). Read `docs/release-pins.md` before changing it: it
 lists the pins and how to refresh them.
 
 1. Before tagging, check the pins (`docs/release-pins.md`):
