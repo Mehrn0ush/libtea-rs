@@ -11,7 +11,7 @@
 
 Independent Rust client libraries and a command-line tool for the [Transparency Exchange API](https://github.com/CycloneDX/transparency-exchange-api) (TEA).
 
-**Status:** libraries 0.2.0, CLI 0.2.2. Releases 0.1.1 to 0.1.4 changed only documentation, CI and the GitHub Action; 0.1.5 added `libtea_client::core`, a re-export of `libtea-core`; 0.1.6 fixed a panic in `libtea_core::http_cache::parse_retry_after` and updated internal dependencies; 0.1.7 added Package URL parsing and comparison (`libtea_core::purl`), version ranges and CLE lifecycle evaluation for SemVer (`libtea_core::vers`, `libtea_core::lifecycle`), and signature format detection (`libtea_core::signature_format`, all Experimental), and fixed lost cache entries when several clients share a cache directory; 0.1.8 adds `Service::discover_purl` (`libtea-client`) and the CLI commands `discover --purl`, `cle`, `search` and `inspect`. From there the CLI is versioned separately: `libtea-cli` 0.2.0 is the first on crates.io and changes no command, flag, exit code or JSON output. Libraries 0.1.9 add PEP 440 versions (`libtea_core::pep440`), `vers:pypi` and CLE evaluation for them, and the `pypi` rules in `Purl::canonical` (all Experimental); `libtea-cli` 0.2.1 uses them and adds `cle --scheme pypi`. Libraries 0.2.0 apply the purl-spec type definitions' case and requirement rules (`Purl::check_type`), follow ECMA-428 for withdrawn events and CLE range parsing, and change the Experimental `SignatureVerifier` trait (breaking) and add `KeyVerifier` (feature `signature-keys`); `libtea-cli` 0.2.2 adds `download --signature-key` (exit 8 when the signature does not verify) and `--signature-output`. Supported TEA versions, Rust versions and platforms, and how each is tested: [`docs/compatibility.md`](docs/compatibility.md). `libtea-core`, `libtea-client` and `libtea-cli` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
+**Status:** `libtea-core` 0.2.1, `libtea-client` 0.2.0, CLI 0.2.3. Releases 0.1.1 to 0.1.4 changed only documentation, CI and the GitHub Action; 0.1.5 added `libtea_client::core`, a re-export of `libtea-core`; 0.1.6 fixed a panic in `libtea_core::http_cache::parse_retry_after` and updated internal dependencies; 0.1.7 added Package URL parsing and comparison (`libtea_core::purl`), version ranges and CLE lifecycle evaluation for SemVer (`libtea_core::vers`, `libtea_core::lifecycle`), and signature format detection (`libtea_core::signature_format`, all Experimental), and fixed lost cache entries when several clients share a cache directory; 0.1.8 adds `Service::discover_purl` (`libtea-client`) and the CLI commands `discover --purl`, `cle`, `search` and `inspect`. From there the CLI is versioned separately: `libtea-cli` 0.2.0 is the first on crates.io and changes no command, flag, exit code or JSON output. Libraries 0.1.9 add PEP 440 versions (`libtea_core::pep440`), `vers:pypi` and CLE evaluation for them, and the `pypi` rules in `Purl::canonical` (all Experimental); `libtea-cli` 0.2.1 uses them and adds `cle --scheme pypi`. Libraries 0.2.0 apply the purl-spec type definitions' case and requirement rules (`Purl::check_type`), follow ECMA-428 for withdrawn events and CLE range parsing, and change the Experimental `SignatureVerifier` trait (breaking) and add `KeyVerifier` (feature `signature-keys`); `libtea-cli` 0.2.2 adds `download --signature-key` (exit 8 when the signature does not verify) and `--signature-output`. `libtea-core` 0.2.1 and `libtea-cli` 0.2.3 stop counting a different `specCommit` as a lock change (`LockDiff::notes`). Supported TEA versions, Rust versions and platforms, and how each is tested: [`docs/compatibility.md`](docs/compatibility.md). `libtea-core`, `libtea-client` and `libtea-cli` are on crates.io and the `libtea` binaries are on GitHub Releases. Experimental until 0.9: expect breaking changes before 1.0. Written against TEA commit `962a0228af1bfcc1232ac3f79239317ff33fdb04` (OpenAPI 1.0.0; the TEA specification is still beta). Minimum supported Rust version: 1.89. License: Apache-2.0.
 
 ## What it is, and what it is not
 
@@ -41,7 +41,7 @@ This compiles the published source on your machine. Unlike the release binaries,
 **From a tag** (needs Rust 1.89 or later):
 
 ```sh
-cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.2.2 --locked libtea-cli
+cargo install --git https://github.com/Mehrn0ush/libtea-rs --tag v0.2.3 --locked libtea-cli
 ```
 
 This builds the `libtea` binary at the tagged release. Without `--tag` it builds the default branch. No checksum or attestation check is involved in this route either.
@@ -246,7 +246,7 @@ The repository has a composite action that downloads a release of `libtea`, veri
 ```yaml
 - uses: Mehrn0ush/libtea-rs@<commit-sha-of-a-release-tag>
   with:
-    version: "0.2.2"
+    version: "0.2.3"
     command: sync
     check: "true"
     tei: tei://example.com/uuid/2ff3ae7c-8eab-4e0b-9b8b-1a0c4c4c1c2d

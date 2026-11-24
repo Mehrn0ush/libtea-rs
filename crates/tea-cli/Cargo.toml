@@ -1,6 +1,6 @@
 [package]
 name = "libtea-cli"
-version = "0.2.2"
+version = "0.2.3"
 description = "The libtea command: discover, inspect and download CycloneDX Transparency Exchange API (TEA) artifacts with checksum checks"
 readme = "README.md"
 keywords = ["cyclonedx", "sbom", "tei", "transparency", "cli"]
