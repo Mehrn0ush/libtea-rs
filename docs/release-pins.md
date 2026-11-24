@@ -35,10 +35,10 @@ agreed. `upload-artifact` v7 and `download-artifact` v8 are the current releases
 of each; they are not the same major version. `cargo install cargo-cyclonedx
 --version 0.5.10 --locked` was run in a scratch directory and `scripts/make-sbom.sh`
 was run with it (157 components for the CLI). Since then the release workflow
-has run with these pins for every tag from `v0.1.0` to `v0.2.2`, except
+has run with these pins for every tag from `v0.1.0` to `v0.2.3`, except
 `dtolnay/rust-toolchain`: tags up to `v0.1.5` used the `master` commit
 `e2a55d2f`, and `v0.1.6` (run 43182817134) is the first with the `v1` commit
-`683b588c` (also `v0.1.7`, run 44500983192, `v0.1.8`, run 44584585018, `v0.2.0`, run 44691175896, `v0.2.1`, run 44783205174, and `v0.2.2`, run 44895512012).
+`683b588c` (also `v0.1.7`, run 44500983192, `v0.1.8`, run 44584585018, `v0.2.0`, run 44691175896, `v0.2.1`, run 44783205174, `v0.2.2`, run 44895512012, and `v0.2.3`, run 45347624578).
 
 Every third-party action is pinned by SHA. `taiki-e/install-action` (in
 `ci.yml`, for `cargo-audit` and `cargo-semver-checks`) is pinned to v2.87.32
