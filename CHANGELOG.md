@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- Project documentation (not part of any crate), for the OpenSSF Best Practices silver criteria: new `GOVERNANCE.md` (decision making, roles, how to become a maintainer, and that the project has one maintainer and no continuity plan yet), `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, with how to report), and `ROADMAP.md` (TEA 1.0 re-pin, container image, later work, out of scope). `docs/security.md` gains an assurance case: threat model, trust boundaries, the design principles applied, and the common weaknesses countered. README and `CONTRIBUTING.md` link them.
+
 - Documentation: the release workflow ran for `v0.2.3` (run 45347624578), the first run that attached the attestation to the release. `libtea-core` 0.2.1 and `libtea-cli` 0.2.3 are on crates.io, and `libs-v0.2.1` is on the same commit as `v0.2.3`. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for `libtea-core` 0.2.1, `libtea-client` 0.2.0 and `libtea-cli` 0.2.3, and lists the attached attestation. `docs/installing.md` records that the 0.2.3 files were checked with `--bundle`.
 
 ## libtea-cli 0.2.3 — 2026-11-24

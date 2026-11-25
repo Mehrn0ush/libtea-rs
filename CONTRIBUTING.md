@@ -61,6 +61,12 @@ for the right reason.
   them.
 - **Changelog.** User-visible changes get a line in `CHANGELOG.md`.
 
+## Conduct and decisions
+
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Who
+decides what, and how to become a maintainer, is in [GOVERNANCE.md](GOVERNANCE.md).
+Planned work is in [ROADMAP.md](ROADMAP.md).
+
 ## Vulnerabilities
 
 Do not open an issue or a pull request for a vulnerability. Report it privately

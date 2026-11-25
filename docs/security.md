@@ -72,6 +72,59 @@ The lockfile is committed. `deny.toml` allows common permissive licenses and den
 
 This SDK does not evaluate trust anchors, Sigstore trust policy, or publisher identity beyond TLS to the host it was told to use. A verified checksum shows that the bytes match the digest the server declared for that format. It does not show that a publisher signed the bytes, and it does not show that a third party published them. The one signature check it offers is `KeyVerifier` (feature `signature-keys`, and `libtea download --signature-key`): raw Ed25519 or ECDSA P-256 detached signatures over the decoded bytes, under public keys the caller supplies. It never takes a key from the TEA server and trusts none by default, so a server cannot make its own signature verify. What `Verified` then shows is that someone holding one of those keys signed the bytes; who that is, is the caller's knowledge. OpenPGP, CMS and Sigstore signatures are detected and reported as unsupported.
 
+## Assurance case
+
+Why the security requirements above are met, in four parts. Each claim points
+to the section that gives the detail and to the tests that check it.
+
+**Threat model.** The attacker controls, or sits between the client and, any
+server the client talks to: the TEI domain's well-known document, a discovered
+API endpoint, an artifact or signature host, a redirect target. They want to
+(1) obtain the API key or a bearer token, (2) make the client accept bytes that
+do not match what was declared, (3) use the client to reach internal addresses
+(SSRF), or (4) exhaust memory, disk or time. A local attacker who can write the
+cache directory is covered under "Persistent cache". Publisher identity is out
+of scope (see "Out of scope").
+
+**Trust boundaries.** Listed under "Trust boundaries": the caller-chosen origin
+is the only one that receives credentials by default; discovered endpoints,
+artifact URLs and redirect targets are untrusted, and each hop is re-checked.
+
+**Secure design principles applied.**
+
+- *Secure defaults and no unsafe switches:* TLS 1.2+ with verification that
+  cannot be turned off; HTTPS to public addresses only; weak-only checksums
+  rejected; no signature key trusted by default. Each relaxation is one named,
+  per-client opt-in (`allow_origin`, `allow_discovered_credentials`,
+  `allow_weak_checksums`).
+- *Least privilege:* the bearer token is attached only under the versioned API
+  prefix of an authorized origin, never to artifact or signature hosts; the
+  API key is sent only to `POST /token`.
+- *Complete mediation:* every request and every redirect hop goes through
+  `DestinationPolicy`, and DNS answers are filtered for the request in progress
+  (the proxy exception is documented under "Transport").
+- *Fail closed:* an unsupported algorithm, a missing digest, a truncated body,
+  an unknown content coding or an unverifiable signature is never success.
+- *Economy of mechanism:* `#![forbid(unsafe_code)]` on every crate; one HTTP
+  stack (reqwest with rustls); limits on every body, redirect chain and retry.
+
+**Common weaknesses countered.**
+
+| Weakness | Countered by |
+| --- | --- |
+| CWE-918 SSRF | `DestinationPolicy` and DNS filtering ("Transport") |
+| CWE-522 / CWE-532 credentials sent or logged | token scoping, redacted `Debug` and logs ("Authentication") |
+| CWE-295 certificate validation | rustls with webpki roots, no off switch ("Transport") |
+| CWE-328 / CWE-354 weak or missing integrity check | all declared checksums must match; SHA-1-only rejected ("Integrity", "Transport") |
+| CWE-400 / CWE-409 resource exhaustion, decompression bombs | size caps checked inside the decoder, timeouts, retry bounds ("Integrity", "Limits") |
+| CWE-22 / CWE-59 path traversal and symlinks in CLI output | file names never come from server data; `--output` refuses an existing path unless `--force`, and `--output` and `--signature-output` refuse a symbolic link as the final component (parent directories are not checked; `libtea download --help`) |
+| CWE-119 memory safety | Rust, `#![forbid(unsafe_code)]` |
+| CWE-1357 / CWE-829 untrusted dependencies and build tools | `cargo deny`, `cargo audit`, pinned actions and tools, SBOM and provenance per release ("Dependency and supply-chain notes", `docs/release-pins.md`) |
+
+How this is checked: unit and integration tests named in each section,
+13 fuzz targets run in CI, CodeQL, clippy with `-D warnings`, and at least 90%
+line coverage (`CONTRIBUTING.md`).
+
 ## Persistent cache
 
 The opt-in response cache (`docs/cache.md`) is not a trust boundary: its entries
