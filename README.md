@@ -283,7 +283,8 @@ Not in 0.1.x: a publisher API; official CycloneDX or ECMA certification (the off
 - [docs/interoperability.md](docs/interoperability.md): what has been tested against which server
 - [docs/release-checklist.md](docs/release-checklist.md), [docs/release-pins.md](docs/release-pins.md): for maintainers
 - [SKILLS.md](SKILLS.md): a short guide for agents and scripts that call libtea
-- [CHANGELOG.md](CHANGELOG.md)
+- [CHANGELOG.md](CHANGELOG.md), [ROADMAP.md](ROADMAP.md)
+- [GOVERNANCE.md](GOVERNANCE.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Building and testing
 
