@@ -1,6 +1,9 @@
 # Homebrew and Docker distribution: evaluation
 
-**Status:** evaluation for issue #17. Recommendation at the end. Nothing is set up.
+**Status:** evaluation for issue #17, kept as written. Since then the Homebrew
+tap shipped in 0.2.2 and `cargo-binstall` metadata in 0.2.3. The container
+image has its own design, `docs/design/container-image.md`, which replaces the
+"Docker image" section below where they differ.
 
 Today the CLI ships as release archives for seven targets, each covered by
 `SHA256SUMS` and a GitHub build-provenance attestation (`docs/installing.md`),
