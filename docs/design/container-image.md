@@ -1,7 +1,8 @@
 # Container image: design
 
-**Status:** proposal for issue #17, for review before any code. Nothing is
-built or pushed. The Homebrew part of #17 shipped in 0.2.2
+**Status:** design for issue #17, accepted 2026-11-26 with the four
+recommended decisions (end of this note). Nothing is built or pushed yet; step
+1 of the plan is next. The Homebrew part of #17 shipped in 0.2.2
 (`docs/design/distribution.md`). This note replaces that note's "Docker image"
 section where they differ.
 
@@ -239,20 +240,17 @@ digest. A fixed image is a new release.
    `actions/checkout` and `actions/attest-build-provenance` rows), and
    `docs/design/distribution.md` marked done. Then close #17.
 
-## Decisions for you
+## Decisions (2026-11-26)
 
-1. **Trigger.** A separate `image.yml` on `release: published` (recommended,
-   as above), or a job in `release.yml`. A job in `release.yml` would push the
-   image while the release is still a draft, and give the release workflow
-   `packages: write`.
-2. **Tags.** Only `X.Y.Z` (recommended), or also `X.Y` and `latest`. Moving
-   tags are convenient but mean a pull can change under you. Users who want
-   updates can follow the releases.
-3. **No backfill.** The first image comes with the next release (recommended).
-   An image for 0.2.3 could only be made by a dispatched run, whose
-   attestation names a branch, not the tag, and so needs a different verify
-   command from every later image. If you want 0.2.3 anyway, the docs would
-   have to give that command separately.
-4. **Environment approval.** Keep `environment: release` on the image job
-   (recommended). It means one more approval per release, but nothing gets
-   `packages: write` without a person approving.
+1. **Trigger:** a separate `image.yml` on `release: published`, as above. A
+   job in `release.yml` would have pushed the image while the release was
+   still a draft, and given the release workflow `packages: write`.
+2. **Tags:** only `X.Y.Z`. No `X.Y` and no `latest`: a moving tag means a pull
+   can change under you. Users who want updates follow the releases.
+3. **No backfill:** the first image comes with the next release. An image for
+   0.2.3 could only be made by a dispatched run, whose attestation names a
+   branch, not the tag, and so would need a different verify command from
+   every later image.
+4. **Environment approval:** the image job keeps `environment: release`. It
+   is one more approval per release, but nothing gets `packages: write`
+   without a person approving.
