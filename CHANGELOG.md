@@ -6,6 +6,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 ## Unreleased
 
+- `libtea-core` (**Experimental** `pep440`): `Pep440Version::parse` returns `Pep440Error::TooLong` when the normalized form is longer than `MAX_PEP440_BYTES` (1024), not only when the input is. Normalizing can lengthen a version (`1r` is `1.post0`), so an input just under the limit could parse while its `to_string()` did not parse again. Every version that parses now has a normalized form that parses to an equal version, as `Purl` already promises for its canonical form. The input that the `pep440_version` fuzz target found in CI is added to its corpus.
+
 - Documentation: new `docs/design/container-image.md`, the design for a container image of the CLI (issue #17), for review before any code. A separate `image.yml`, started when a release is published, verifies the musl archives against `SHA256SUMS` and the attached attestation, copies the binaries into a `scratch` image for `linux/amd64` and `linux/arm64`, pushes `ghcr.io/mehrn0ush/libtea:X.Y.Z` and attests it. `release.yml` does not change. `docs/design/distribution.md` and `ROADMAP.md` point to it.
 
 - Project documentation (not part of any crate), for the OpenSSF Best Practices silver criteria: new `GOVERNANCE.md` (decision making, roles, how to become a maintainer, and that the project has one maintainer and no continuity plan yet), `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, with how to report), and `ROADMAP.md` (TEA 1.0 re-pin, container image, later work, out of scope). `docs/security.md` gains an assurance case: threat model, trust boundaries, the design principles applied, and the common weaknesses countered. README and `CONTRIBUTING.md` link them.
