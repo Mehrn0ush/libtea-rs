@@ -28,7 +28,8 @@ use std::hash::{Hash, Hasher};
 
 use thiserror::Error;
 
-/// Inputs longer than this are rejected with [`Pep440Error::TooLong`].
+/// Inputs longer than this, or whose normalized form would be, are rejected
+/// with [`Pep440Error::TooLong`].
 pub const MAX_PEP440_BYTES: usize = 1024;
 
 /// Why a string is not a PEP 440 version.
@@ -130,8 +131,8 @@ impl Pep440Version {
     ///
     /// [`Pep440Error::Invalid`] for text that is not a version (including
     /// any whitespace or non-ASCII character), [`Pep440Error::NumberTooLarge`]
-    /// for a number above `u64::MAX`, and [`Pep440Error::TooLong`] for text
-    /// longer than [`MAX_PEP440_BYTES`].
+    /// for a number above `u64::MAX`, and [`Pep440Error::TooLong`] when the
+    /// text or its normalized form is longer than [`MAX_PEP440_BYTES`].
     pub fn parse(text: &str) -> Result<Self, Pep440Error> {
         if text.len() > MAX_PEP440_BYTES {
             return Err(Pep440Error::TooLong);
@@ -198,7 +199,7 @@ impl Pep440Version {
         if !cursor.rest.is_empty() {
             return Err(Pep440Error::Invalid);
         }
-        Ok(Self {
+        let version = Self {
             original: text.to_owned(),
             epoch,
             release,
@@ -206,7 +207,26 @@ impl Pep440Version {
             post,
             dev,
             local,
-        })
+        };
+        // Normalizing can lengthen a version (`1r` is `1.post0`). Refusing here
+        // keeps the promise that every normalized form parses again.
+        if version.normalized_len() > MAX_PEP440_BYTES {
+            return Err(Pep440Error::TooLong);
+        }
+        Ok(version)
+    }
+
+    /// The length of the normalized form, without building it.
+    fn normalized_len(&self) -> usize {
+        struct Count(usize);
+        impl fmt::Write for Count {
+            fn write_str(&mut self, text: &str) -> fmt::Result {
+                self.0 += text.len();
+                Ok(())
+            }
+        }
+        let mut count = Count(0);
+        fmt::write(&mut count, format_args!("{self}")).map_or(usize::MAX, |()| count.0)
     }
 
     /// Exactly the text that was parsed.
@@ -493,6 +513,23 @@ mod tests {
         );
         assert_eq!(
             Pep440Version::parse(&"1.".repeat(600)).err(),
+            Some(Pep440Error::TooLong)
+        );
+    }
+
+    #[test]
+    fn a_normalized_form_longer_than_the_limit_is_too_long() {
+        // `1r` normalizes to `1.post0`, five bytes longer.
+        let fits = format!("{}1r", "0.".repeat(508));
+        let version = Pep440Version::parse(&fits).expect("normalized form fits");
+        let normalized = version.to_string();
+        assert_eq!(normalized.len(), MAX_PEP440_BYTES - 1);
+        assert_eq!(Pep440Version::parse(&normalized), Ok(version));
+
+        let over = format!("{}1r", "0.".repeat(510));
+        assert!(over.len() < MAX_PEP440_BYTES);
+        assert_eq!(
+            Pep440Version::parse(&over).err(),
             Some(Pep440Error::TooLong)
         );
     }
