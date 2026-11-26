@@ -13,9 +13,10 @@ or design note before it is built.
   different `specCommit` is a note, not a change.
 - **Container image** (issue #17). An image built from the release archives
   after they pass the `SHA256SUMS` and attestation checks, with its own
-  build-provenance attestation. A design note comes first, because publishing
-  an image needs a new permission in the release workflow. The Homebrew part of
-  #17 shipped in 0.2.2.
+  build-provenance attestation. The design is `docs/design/container-image.md`
+  (accepted 2026-11-26): a separate workflow, started when a release is
+  published, so `release.yml` gains no permission. The
+  Homebrew part of #17 shipped in 0.2.2.
 
 ## Later
 
