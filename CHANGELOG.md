@@ -14,6 +14,8 @@ Items marked **Experimental** may change in a minor release before 0.9; everythi
 
 - Documentation: the release workflow ran for `v0.2.3` (run 45347624578), the first run that attached the attestation to the release. `libtea-core` 0.2.1 and `libtea-cli` 0.2.3 are on crates.io, and `libs-v0.2.1` is on the same commit as `v0.2.3`. The docs that list the tags the workflow has run for now include it. `docs/compatibility.md` is reviewed for `libtea-core` 0.2.1, `libtea-client` 0.2.0 and `libtea-cli` 0.2.3, and lists the attached attestation. `docs/installing.md` records that the 0.2.3 files were checked with `--bundle`.
 
+- README: shows the OpenSSF Baseline badge (bestpractices.dev project 17030) next to the Best Practices badge.
+
 ## libtea-cli 0.2.3 — 2026-11-24
 
 Tagged `v0.2.3`, on the same commit as `libs-v0.2.1`. It depends on `libtea-core` 0.2.1, published first, and on `libtea-client` 0.2.0, which is unchanged and not republished. The release binaries are built with `url` 2.5.9 (RUSTSEC-2026-0592; 0.2.2 was not affected, see `vex/libtea.vex.cdx.json`). The one behaviour change is that a lock differing only in `specCommit` is no longer a change: `diff` and `sync --check` exit 0 for it and print a note on stderr, and the `--json` diff object gains `notes` (details under 0.2.1 below). Every other command, flag, exit status and lock-file format behaves as in 0.2.2. From this release, each GitHub release also carries the build-provenance attestation (`libtea-0.2.3.sigstore.json`, `libtea-0.2.3.intoto.jsonl`), and `cargo binstall libtea-cli` installs the release archive. The GitHub Action takes `version: "0.2.3"`.
