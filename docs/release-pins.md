@@ -8,10 +8,10 @@ the SBOM tool has an exact version. Pinned on 2026-11-08:
 | --- | --- | --- | --- |
 | `actions/upload-artifact` | `release.yml` (3 uses) | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | v7.0.2 |
 | `actions/download-artifact` | `release.yml` (2 uses) | `9000827ccba6bdab643e8b6fd33ac0654aef8333` | v8.0.2 |
-| `actions/attest-build-provenance` | `release.yml` | `4d101475d8b20a2381f78447822ac1eab6504dd8` | v4.2.2 |
+| `actions/attest-build-provenance` | `release.yml`, `image.yml` | `4d101475d8b20a2381f78447822ac1eab6504dd8` | v4.2.2 |
 | `cargo-cyclonedx` | `release.yml`, `sbom` job `env:` | `0.5.10` (`cargo install --locked`) | 0.5.10 |
 | `actions/cache` | `action.yml` | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` | v6.1.0 |
-| `actions/checkout` | every workflow (17 uses) | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1 |
+| `actions/checkout` | every workflow (18 uses) | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1 |
 | `actions/upload-artifact` | `interop-manual.yml`, `spec-drift.yml`, `ci.yml` `fuzz` (as in `release.yml`) | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | v7.0.2 |
 | `EmbarkStudios/cargo-deny-action` | `ci.yml` | `3c6349835b2b7b196a839186cb8b78e02f7b5f25` | v2.1.1 |
 | `taiki-e/install-action` | `ci.yml` (3 uses, `with: tool:`) | `5488ac5a951645ce95062214902ac4b6bc1a1037` | v2.87.32 |

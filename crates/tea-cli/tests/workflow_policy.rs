@@ -547,6 +547,8 @@ fn release_never_publishes_to_a_registry() {
             "twine",
             "npm publish",
             "docker push",
+            "docker login",
+            "skopeo",
         ] {
             assert!(
                 !step.run.contains(banned) && !step.raw.contains(banned),
@@ -1203,4 +1205,395 @@ fn every_sha_pin_names_its_release() {
         checked > 10,
         "only {checked} SHA pins found; the parser is wrong"
     );
+}
+
+// ---------------------------------------------------------------------------
+// image.yml: the container image (docs/design/container-image.md). It holds
+// `packages: write`, so it gets the same scrutiny as the release jobs.
+// ---------------------------------------------------------------------------
+
+fn image_workflow() -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/image.yml");
+    std::fs::read_to_string(path).unwrap()
+}
+
+/// Lines that are not comments.
+fn code_lines(text: &str) -> Vec<&str> {
+    text.lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .collect()
+}
+
+fn image_steps() -> Vec<Step> {
+    let jobs = jobs_of(&image_workflow());
+    steps_of(&job(&jobs, "image").raw)
+}
+
+fn image_step<'a>(steps: &'a [Step], name: &str) -> (usize, &'a Step) {
+    steps
+        .iter()
+        .enumerate()
+        .find(|(_, s)| s.name == name)
+        .unwrap_or_else(|| panic!("image.yml has no step `{name}`"))
+}
+
+#[test]
+fn the_image_is_made_only_when_a_final_release_is_published() {
+    let text = image_workflow();
+    let on: Vec<String> = on_block(&text)
+        .lines()
+        .map(|l| l.trim().to_owned())
+        .filter(|l| !l.is_empty())
+        .collect();
+    assert_eq!(on, ["release:", "types: [published]"]);
+    let code = code_lines(&text).join("\n");
+    for forbidden in [
+        "workflow_dispatch",
+        "workflow_run",
+        "repository_dispatch",
+        "pull_request",
+        "schedule",
+        "push:",
+    ] {
+        assert!(
+            !code.contains(forbidden),
+            "image.yml must not use {forbidden}"
+        );
+    }
+    let jobs = jobs_of(&text);
+    assert!(
+        job(&jobs, "image")
+            .raw
+            .contains("    if: github.event.release.prerelease == false\n"),
+        "prereleases get no image"
+    );
+    assert!(text.contains("cancel-in-progress: false"));
+}
+
+#[test]
+fn the_image_job_has_exactly_its_four_permissions_behind_the_environment() {
+    let text = image_workflow();
+    assert!(text.lines().any(|line| line == "permissions: {}"));
+    let jobs = jobs_of(&text);
+    let ids: Vec<&str> = jobs.iter().map(|j| j.id.as_str()).collect();
+    assert_eq!(ids, ["image"]);
+    let image = job(&jobs, "image");
+    assert_eq!(
+        job_permissions(image),
+        BTreeMap::from([
+            ("attestations".to_owned(), "write".to_owned()),
+            ("contents".to_owned(), "read".to_owned()),
+            ("id-token".to_owned(), "write".to_owned()),
+            ("packages".to_owned(), "write".to_owned()),
+        ])
+    );
+    assert!(image.raw.contains("    environment: release\n"));
+    assert!(image.raw.contains("    timeout-minutes: "));
+    assert!(image.raw.contains("    runs-on: ubuntu-24.04\n"));
+}
+
+#[test]
+fn the_image_job_holds_no_secret_and_the_token_reaches_steps_through_env() {
+    let text = image_workflow();
+    assert!(!code_lines(&text).iter().any(|l| l.contains("secrets.")));
+    let steps = image_steps();
+    let mut with_token: Vec<&str> = Vec::new();
+    for step in &steps {
+        assert!(
+            !step.run.contains("${{"),
+            "expression in the run body of `{}`: {}",
+            step.name,
+            step.run
+        );
+        for (key, value) in &step.env {
+            if value.contains("github.token") {
+                assert!(
+                    matches!(key.as_str(), "GH_TOKEN" | "REGISTRY_TOKEN"),
+                    "`{}` passes the token as {key}",
+                    step.name
+                );
+                with_token.push(step.name.as_str());
+            }
+        }
+    }
+    assert_eq!(
+        with_token,
+        [
+            "Check the tag, the release and the commit",
+            "Download the release files",
+            "Verify the release attestation",
+            "Log in to ghcr.io",
+            "Verify the pushed image",
+        ]
+    );
+    // The registry token goes to `docker login` on stdin and nowhere else.
+    let (_, login) = image_step(&steps, "Log in to ghcr.io");
+    assert_eq!(
+        login.run.trim(),
+        r#"printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin"#
+    );
+}
+
+#[test]
+fn the_image_job_checks_the_archives_before_it_builds_and_pushes() {
+    let steps = image_steps();
+    let (sums, sums_step) = image_step(&steps, "Check the archives against SHA256SUMS");
+    assert!(sums_step.run.contains("sha256sum --check --strict"));
+    let (verify, verify_step) = image_step(&steps, "Verify the release attestation");
+    for flag in [
+        r#"gh attestation verify "$file" --bundle "libtea-$VERSION.sigstore.json""#,
+        "--repo Mehrn0ush/libtea-rs",
+        "--signer-workflow Mehrn0ush/libtea-rs/.github/workflows/release.yml",
+        r#"--source-ref "refs/tags/v$VERSION""#,
+        "--deny-self-hosted-runners",
+    ] {
+        assert!(verify_step.run.contains(flag), "missing {flag}");
+    }
+    for file in [
+        "SHA256SUMS",
+        r#""libtea-$VERSION-x86_64-unknown-linux-musl.tar.gz""#,
+        r#""libtea-$VERSION-aarch64-unknown-linux-musl.tar.gz""#,
+    ] {
+        assert!(verify_step.run.contains(file), "{file} is not verified");
+    }
+    let (build, build_step) = image_step(&steps, "Build the image");
+    assert!(build_step
+        .run
+        .contains("python3 -I scripts/make-oci-image.py"));
+    assert!(
+        build_step.run.contains(r#"[[ "$digest" != "$again""#),
+        "the image is built twice and compared"
+    );
+    let (run, run_step) = image_step(&steps, "Run the image");
+    assert!(run_step.run.contains("podman run --rm --network none"));
+    let (push, push_step) = image_step(&steps, "Push the image");
+    assert!(push_step.run.contains("skopeo copy"));
+    let (attest, attest_step) = image_step(&steps, "Attest the image");
+    assert!(attest_step
+        .uses
+        .as_deref()
+        .is_some_and(|u| u.starts_with("actions/attest-build-provenance@")));
+    let (check, check_step) = image_step(&steps, "Verify the pushed image");
+    for flag in [
+        r#"gh attestation verify "oci://$image""#,
+        "--signer-workflow Mehrn0ush/libtea-rs/.github/workflows/image.yml",
+        r#"--source-ref "refs/tags/v$VERSION""#,
+        "--deny-self-hosted-runners",
+    ] {
+        assert!(check_step.run.contains(flag), "missing {flag}");
+    }
+    assert!(
+        sums < verify
+            && verify < build
+            && build < run
+            && run < push
+            && push < attest
+            && attest < check,
+        "order: {:?}",
+        steps.iter().map(|s| &s.name).collect::<Vec<_>>()
+    );
+    // Nothing before the checks touches the registry, and nothing skips them.
+    let code = code_lines(&image_workflow()).join("\n");
+    assert!(!code.contains("--ignore-missing"));
+    for step in &steps[..build] {
+        assert!(
+            !step.run.contains("skopeo") && !step.run.contains("docker"),
+            "`{}` reaches the registry before the image is built",
+            step.name
+        );
+    }
+}
+
+#[test]
+fn the_image_job_runs_no_build_tool_and_only_the_image_script() {
+    let steps = image_steps();
+    for step in &steps {
+        for tool in [
+            "cargo",
+            "rustup",
+            "rustc",
+            "make",
+            "npm",
+            "npx",
+            "pip",
+            "pip3",
+            "curl",
+            "wget",
+            "apt",
+            "apt-get",
+            "brew",
+            "sh",
+            "bash",
+            "./scripts",
+            "sudo",
+        ] {
+            let found = step
+                .run
+                .split(|c: char| {
+                    !(c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/')
+                })
+                .any(|word| word == tool);
+            assert!(!found, "`{tool}` in image step `{}`", step.name);
+        }
+        // Python runs exactly one file, isolated from the environment.
+        let python = step.run.matches("python").count();
+        let script = step
+            .run
+            .matches("python3 -I scripts/make-oci-image.py ")
+            .count();
+        assert_eq!(python, script, "other Python in `{}`", step.name);
+    }
+    let checkouts: Vec<&Step> = steps
+        .iter()
+        .filter(|s| {
+            s.uses
+                .as_deref()
+                .is_some_and(|u| u.starts_with("actions/checkout@"))
+        })
+        .collect();
+    assert_eq!(checkouts.len(), 1);
+    let checkout = checkouts[0];
+    assert!(checkout.raw.contains("persist-credentials: false"));
+    assert!(checkout
+        .raw
+        .contains("sparse-checkout: scripts/make-oci-image.py\n"));
+    assert!(checkout.raw.contains("sparse-checkout-cone-mode: false"));
+}
+
+#[test]
+fn the_image_job_uses_only_the_actions_release_yml_pins() {
+    let release_uses: Vec<String> = jobs_of(&release())
+        .iter()
+        .flat_map(|j| steps_of(&j.raw))
+        .filter_map(|s| s.uses)
+        .collect();
+    let mut actions = Vec::new();
+    for step in image_steps() {
+        let Some(uses) = step.uses else { continue };
+        assert!(
+            release_uses.contains(&uses),
+            "`{uses}` is not pinned the same way in release.yml"
+        );
+        actions.push(uses.split_once('@').unwrap().0.to_owned());
+    }
+    assert_eq!(
+        actions,
+        ["actions/checkout", "actions/attest-build-provenance"]
+    );
+}
+
+#[test]
+fn the_image_gets_one_version_tag_that_is_never_moved() {
+    let text = image_workflow();
+    let code = code_lines(&text).join("\n");
+    assert!(!code.contains("latest"), "no moving tags");
+    let steps = image_steps();
+    let (_, push) = image_step(&steps, "Push the image");
+    assert!(push.run.contains("image=ghcr.io/mehrn0ush/libtea\n"));
+    assert!(push.run.contains(
+        r#"skopeo copy --all --preserve-digests --authfile "$auth" "oci:$RUNNER_TEMP/oci:$VERSION" "docker://$image:$VERSION""#
+    ));
+    assert_eq!(push.run.matches("skopeo copy").count(), 1);
+    // An existing tag must already be this digest, and the registry must
+    // serve this digest afterwards.
+    assert!(push
+        .run
+        .contains(r#"if [[ "$existing" != "$DIGEST" ]]; then"#));
+    assert!(push
+        .run
+        .contains(r#"if [[ "$pushed" != "$DIGEST" ]]; then"#));
+    let (_, attest) = image_step(&steps, "Attest the image");
+    assert!(attest
+        .raw
+        .contains("subject-name: ghcr.io/mehrn0ush/libtea\n"));
+    assert!(attest
+        .raw
+        .contains("subject-digest: ${{ steps.build.outputs.digest }}\n"));
+    assert!(attest.raw.contains("push-to-registry: true"));
+}
+
+/// Runs the SHA256SUMS step of image.yml in a scratch directory laid out as
+/// `$RUNNER_TEMP/release`.
+#[cfg(unix)]
+fn run_image_sums(sums: &str, archives: &[(&str, &[u8])]) -> std::process::Output {
+    let steps = image_steps();
+    let (_, step) = image_step(&steps, "Check the archives against SHA256SUMS");
+    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "libtea-image-sums-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("release")).unwrap();
+    for (name, bytes) in archives {
+        std::fs::write(dir.join("release").join(name), bytes).unwrap();
+    }
+    std::fs::write(dir.join("release/SHA256SUMS"), sums).unwrap();
+    let output = std::process::Command::new("bash")
+        .arg("-c")
+        .arg(&step.run)
+        .env("RUNNER_TEMP", &dir)
+        .env("VERSION", "1.2.3")
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    output
+}
+
+#[cfg(unix)]
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+#[cfg(unix)]
+#[test]
+fn the_image_sums_step_accepts_each_archive_listed_once_and_nothing_else() {
+    if std::process::Command::new("sha256sum")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+    let amd64 = "libtea-1.2.3-x86_64-unknown-linux-musl.tar.gz";
+    let arm64 = "libtea-1.2.3-aarch64-unknown-linux-musl.tar.gz";
+    let (a, b): (&[u8], &[u8]) = (b"amd64 archive", b"arm64 archive");
+    let line = |bytes: &[u8], name: &str| format!("{}  {name}\n", sha256_hex(bytes));
+    let other = line(b"x", "libtea-1.2.3-x86_64-apple-darwin.tar.gz");
+    let files = [(amd64, a), (arm64, b)];
+
+    let good = format!("{other}{}{}", line(a, amd64), line(b, arm64));
+    let ok = run_image_sums(&good, &files);
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+
+    let cases = [
+        ("arm64 missing", format!("{other}{}", line(a, amd64))),
+        ("listed twice", format!("{good}{}", line(a, amd64))),
+        (
+            "wrong hash",
+            format!("{}{}", line(b"tampered", amd64), line(b, arm64)),
+        ),
+        (
+            "short hash",
+            format!("{}  {amd64}\n{}", &sha256_hex(a)[..63], line(b, arm64)),
+        ),
+        ("only other files", other.clone()),
+        ("empty", String::new()),
+    ];
+    for (case, sums) in cases {
+        let out = run_image_sums(&sums, &files);
+        assert!(!out.status.success(), "{case}: accepted");
+    }
+    // The sums match but an archive is missing from the download.
+    let out = run_image_sums(&good, &[(amd64, a)]);
+    assert!(!out.status.success(), "missing archive: accepted");
 }

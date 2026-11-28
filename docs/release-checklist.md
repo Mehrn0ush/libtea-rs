@@ -86,7 +86,11 @@ versions it needs, so check that those are on crates.io before tagging.
     once they are there), then `cargo publish --dry-run -p libtea-cli --locked`.
 13. `cargo publish -p libtea-cli --locked`.
 14. **Publish the GitHub draft: publish the release by hand** (CLI releases
-    only; the workflow never does).
+    only; the workflow never does). Publishing starts `image.yml` for a final release
+    whose tagged commit contains it (`docs/design/container-image.md`):
+    approve its `image` deployment. It checks the musl archives, then pushes
+    and attests `ghcr.io/mehrn0ush/libtea:X.Y.Z`. After the first push, make
+    the GHCR package public once.
 15. **Post-publish checks:** the commands are in "Post-publish checks" below.
 16. **Homebrew formula** (CLI releases only): regenerate `Formula/libtea.rb`
     from the verified `SHA256SUMS` and open a pull request to
