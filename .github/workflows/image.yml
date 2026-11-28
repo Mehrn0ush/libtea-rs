@@ -1,0 +1,206 @@
+# Container image: ghcr.io/mehrn0ush/libtea:X.Y.Z, made from the musl release
+# archives of a published release (docs/design/container-image.md).
+#
+# Started only when a release is published, which the maintainer does by hand
+# after checking the draft (docs/release-checklist.md). It builds nothing from
+# source: it checks the archives against SHA256SUMS and the attached Sigstore
+# bundle, puts the attested binaries into an image with
+# scripts/make-oci-image.py (standard-library Python, the same bytes on any
+# machine), runs it, pushes one tag, attests the image and verifies that
+# attestation. release.yml does not change and still pushes nothing.
+#
+# One job, in the release Environment:
+#   image  contents: read, packages: write, id-token: write, attestations: write
+#
+# A tag is never moved. If the tag already exists, it must already be this
+# image (a re-run), or the job fails. The only third-party code is
+# actions/checkout and actions/attest-build-provenance, pinned as in
+# release.yml; gh, skopeo, podman and docker come with the runner image.
+
+name: Image
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: build, push and attest the image
+    # Final releases only. A prerelease gets no image and asks for no approval.
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      # The tag, the release and the commit, checked again here rather than
+      # trusted from the event.
+      - name: Check the tag, the release and the commit
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF" != "refs/tags/$tag" || ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "not a final release tag: $GITHUB_REF" >&2
+            exit 1
+          fi
+          state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '"\(.isDraft) \(.isPrerelease)"')
+          if [[ "$state" != "false false" ]]; then
+            echo "release $tag is a draft or a prerelease ($state)" >&2
+            exit 1
+          fi
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status)
+          if [[ "$status" != "identical" && "$status" != "behind" ]]; then
+            echo "$GITHUB_SHA is not on main ($status)" >&2
+            exit 1
+          fi
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Download the release files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/release"
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/release" \
+            --pattern SHA256SUMS \
+            --pattern "libtea-$VERSION.sigstore.json" \
+            --pattern "libtea-$VERSION-x86_64-unknown-linux-musl.tar.gz" \
+            --pattern "libtea-$VERSION-aarch64-unknown-linux-musl.tar.gz"
+      # Each archive must be listed exactly once. --ignore-missing would accept
+      # a SHA256SUMS that lists neither.
+      - name: Check the archives against SHA256SUMS
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/release"
+          : > "$RUNNER_TEMP/archives.sha256"
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            name="libtea-$VERSION-$target.tar.gz"
+            lines=$(awk -v name="$name" 'NF == 2 && $2 == name && $1 ~ /^[0-9a-f]+$/ && length($1) == 64' SHA256SUMS)
+            if [[ -z "$lines" || "$(printf '%s\n' "$lines" | wc -l)" -ne 1 ]]; then
+              echo "SHA256SUMS must list $name exactly once" >&2
+              exit 1
+            fi
+            printf '%s\n' "$lines" >> "$RUNNER_TEMP/archives.sha256"
+          done
+          sha256sum --check --strict "$RUNNER_TEMP/archives.sha256"
+      # The bundle attached to the release, checked as docs/installing.md tells
+      # users to: signed by release.yml for this tag on a GitHub-hosted runner.
+      - name: Verify the release attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/release"
+          for file in SHA256SUMS "libtea-$VERSION-x86_64-unknown-linux-musl.tar.gz" "libtea-$VERSION-aarch64-unknown-linux-musl.tar.gz"; do
+            gh attestation verify "$file" --bundle "libtea-$VERSION.sigstore.json" \
+              --repo Mehrn0ush/libtea-rs \
+              --signer-workflow Mehrn0ush/libtea-rs/.github/workflows/release.yml \
+              --source-ref "refs/tags/v$VERSION" --deny-self-hosted-runners
+            echo "verified $file"
+          done
+      - name: Checkout the image script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/make-oci-image.py
+          sparse-checkout-cone-mode: false
+      # Built twice: the two digests must agree, or the image is not
+      # reproducible and is not pushed.
+      - name: Build the image
+        id: build
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/release"
+          args=(--version "$VERSION" --revision "$GITHUB_SHA"
+            --amd64 "$release/libtea-$VERSION-x86_64-unknown-linux-musl.tar.gz"
+            --arm64 "$release/libtea-$VERSION-aarch64-unknown-linux-musl.tar.gz")
+          digest=$(python3 -I scripts/make-oci-image.py "${args[@]}" --out "$RUNNER_TEMP/oci")
+          again=$(python3 -I scripts/make-oci-image.py "${args[@]}" --out "$RUNNER_TEMP/oci-again")
+          if [[ "$digest" != "$again" || ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "the two builds differ: $digest $again" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Run the image
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          id=$(podman pull --quiet "oci:$RUNNER_TEMP/oci:$VERSION")
+          user=$(podman image inspect --format '{{.Config.User}}' "$id")
+          out=$(podman run --rm --network none "$id" --version)
+          if [[ "$user" != "65532:65532" || "$out" != "libtea $VERSION" ]]; then
+            echo "unexpected image: user $user, --version printed $out" >&2
+            exit 1
+          fi
+      - name: Log in to ghcr.io
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Push the image
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image=ghcr.io/mehrn0ush/libtea
+          auth="$HOME/.docker/config.json"
+          if skopeo inspect --authfile "$auth" --raw "docker://$image:$VERSION" > "$RUNNER_TEMP/existing.json" 2>/dev/null; then
+            existing="sha256:$(sha256sum < "$RUNNER_TEMP/existing.json" | cut -d ' ' -f 1)"
+            if [[ "$existing" != "$DIGEST" ]]; then
+              echo "$image:$VERSION already exists as $existing, not $DIGEST; tags are never moved" >&2
+              exit 1
+            fi
+            echo "$image:$VERSION is already $DIGEST"
+          else
+            skopeo copy --all --preserve-digests --authfile "$auth" "oci:$RUNNER_TEMP/oci:$VERSION" "docker://$image:$VERSION"
+          fi
+          pushed="sha256:$(skopeo inspect --authfile "$auth" --raw "docker://$image:$VERSION" | sha256sum | cut -d ' ' -f 1)"
+          if [[ "$pushed" != "$DIGEST" ]]; then
+            echo "the registry serves $pushed for $image:$VERSION, not $DIGEST" >&2
+            exit 1
+          fi
+      - name: Attest the image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/mehrn0ush/libtea
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      # What a user runs (docs/design/container-image.md, "Goal").
+      - name: Verify the pushed image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/mehrn0ush/libtea@$DIGEST"
+          gh attestation verify "oci://$image" --repo Mehrn0ush/libtea-rs \
+            --signer-workflow Mehrn0ush/libtea-rs/.github/workflows/image.yml \
+            --source-ref "refs/tags/v$VERSION" --deny-self-hosted-runners
+          out=$(podman run --rm --network none "$image" --version)
+          if [[ "$out" != "libtea $VERSION" ]]; then
+            echo "the pushed image printed $out" >&2
+            exit 1
+          fi
+      - name: Log out of ghcr.io
+        if: always()
+        run: docker logout ghcr.io

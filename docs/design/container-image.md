@@ -1,10 +1,12 @@
 # Container image: design
 
 **Status:** design for issue #17, accepted 2026-11-26 with the four
-recommended decisions (end of this note). Nothing is built or pushed yet; step
-1 of the plan is next. The Homebrew part of #17 shipped in 0.2.2
-(`docs/design/distribution.md`). This note replaces that note's "Docker image"
-section where they differ.
+recommended decisions (end of this note). Step 1 of the plan, the workflow and
+its tests, is done (2026-11-28). It changed how the image is built: a script
+writes it instead of `docker buildx` (see "Changed while building it"). No
+image has been pushed yet; the first comes with the next release. The Homebrew
+part of #17 shipped in 0.2.2 (`docs/design/distribution.md`). This note
+replaces that note's "Docker image" section where they differ.
 
 ## Goal
 
@@ -28,22 +30,23 @@ in the attested archive, so the image adds a package format, not a new build.
 
 1. **`release.yml` does not change.** It keeps its rule that it never
    publishes anything (`release_never_publishes_to_a_registry` in
-   `crates/tea-cli/tests/workflow_policy.rs` bans `docker push`). The image is
-   made by a separate workflow, so the most sensitive file in the repository
-   gets no new permission.
+   `crates/tea-cli/tests/workflow_policy.rs` bans `docker push`,
+   `docker login` and `skopeo`). The image is made by a separate workflow, so
+   the most sensitive file in the repository gets no new permission.
 2. **The image follows the published release, never the draft.** Users can
    only see an image for a release that the maintainer has already checked and
    published (step 14 of `docs/release-checklist.md`).
 3. **The image job verifies before it builds.** It checks what users download
    (the published release files), with the same commands `docs/installing.md`
    gives users.
-4. **No repository code runs with `packages: write`.** The job runs `sha256sum`,
-   `tar`, `gh` and `docker`, never `cargo` or a script from the repository.
-   This is the rule `release_privileged_jobs_run_no_build_tools` applies to the
-   attest job.
-5. **No third-party action is added.** `docker buildx` and `gh` are on the
-   runner image. The only action used is `actions/attest-build-provenance`,
-   which is already pinned.
+4. **No build tool and no third-party code runs with `packages: write`.** The
+   job runs `gh`, `sha256sum`, `awk`, `skopeo`, `podman` and `docker login`,
+   all from the runner image, and one file from the repository:
+   `scripts/make-oci-image.py`, standard-library Python, from the tagged
+   commit, run with `python3 -I`. No `cargo`, no package manager, nothing
+   downloaded and run.
+5. **No third-party action is added.** The only actions are `actions/checkout`
+   and `actions/attest-build-provenance`, with the same pins as `release.yml`.
 
 ## The workflow: `.github/workflows/image.yml`
 
@@ -61,8 +64,9 @@ tag. It also follows that the first image is for the first release whose
 tagged commit contains `image.yml`. Releases before it, 0.2.3 included, get no
 image (decision 3).
 
-A prerelease (a tag with a `-` suffix, which includes dry runs) gets no image:
-the job ends before it builds.
+A prerelease gets no image: the job has
+`if: github.event.release.prerelease == false`, so it is skipped and asks for
+no approval.
 
 **One job, `image`.**
 
@@ -86,63 +90,85 @@ reads the job's `GITHUB_TOKEN` from stdin.
 **Steps.**
 
 1. Take the tag from the `GITHUB_REF_NAME` environment variable, never from a
-   `${{ }}` expression in a `run:` body (the rule
-   `release_run_bodies_interpolate_no_expressions` sets for `release.yml`).
-   Check that `GITHUB_REF` is `refs/tags/<it>`, and that it matches
-   `^v[0-9]+\.[0-9]+\.[0-9]+$`. Stop on anything else, prereleases included.
-2. Check that the release is published. `gh release view "$TAG" --json
-   isDraft,isPrerelease` must give `false,false`.
-3. In a new, empty directory, download `SHA256SUMS`, the two musl archives and
-   `libtea-X.Y.Z.sigstore.json` with `gh release download`.
-4. `sha256sum --check --strict --ignore-missing SHA256SUMS`, and check that
-   both archives are listed in it. `--ignore-missing` without the second check
-   would accept a download of nothing.
-5. Verify both archives and `SHA256SUMS` with
+   `${{ }}` expression in a `run:` body. Check that `GITHUB_REF` is
+   `refs/tags/<it>` and that it matches `^v[0-9]+\.[0-9]+\.[0-9]+$`, that
+   `gh release view` reports the release as neither a draft nor a prerelease,
+   and that the tagged commit is on `main` (the compare API reports
+   `identical` or `behind`). Stop on anything else.
+2. Download `SHA256SUMS`, the two musl archives and
+   `libtea-X.Y.Z.sigstore.json` into a new directory with
+   `gh release download`.
+3. Take the line for each archive from `SHA256SUMS`, which must list it
+   exactly once with a 64-hex hash, and run `sha256sum --check --strict` on
+   those two lines. There is no `--ignore-missing`, which would accept a
+   `SHA256SUMS` that lists neither archive.
+4. Verify `SHA256SUMS` and both archives with
    `gh attestation verify --bundle libtea-X.Y.Z.sigstore.json --repo
    Mehrn0ush/libtea-rs --signer-workflow
    Mehrn0ush/libtea-rs/.github/workflows/release.yml --source-ref
-   refs/tags/vX.Y.Z`. The bundle is the one attached to the release, so this
-   checks the same thing a user's offline check does.
-6. Unpack each archive into `context/linux/amd64/` or `context/linux/arm64/`.
-   Each archive must hold exactly the files `scripts/package-release.py`
-   writes, with no links, absolute paths or `..`. Then run the unpacked
-   `linux/amd64` binary's `--version` and check it prints `libtea X.Y.Z`. The
-   runner is amd64, so the arm64 binary is not run.
-7. Build and push with `docker buildx build --platform linux/amd64,linux/arm64`
-   from the `Dockerfile` below. The build context is only `context/`. The build
-   is reproducible:
-   `SOURCE_DATE_EPOCH` is the tagged commit's time (`git log -1
-   --format=%ct` in the checkout), and the output uses
-   `rewrite-timestamp=true`. It pushes one tag, `X.Y.Z`, and records the
-   manifest-list digest.
-8. `actions/attest-build-provenance` with `subject-name:
-   ghcr.io/mehrn0ush/libtea`, `subject-digest:` the digest from step 7, and
+   refs/tags/vX.Y.Z --deny-self-hosted-runners`. The bundle is the one
+   attached to the release, so this checks the same thing a user's offline
+   check does.
+5. Check out only `scripts/make-oci-image.py` (sparse checkout,
+   `persist-credentials: false`).
+6. Build the image twice into two new directories and stop unless the digests
+   agree.
+7. Load it into `podman` from the OCI layout, check that its user is
+   `65532:65532`, and check that `--version` (amd64, no network) prints
+   `libtea X.Y.Z`. The arm64 image is not run: there is no emulation on the
+   runner.
+8. `docker login ghcr.io` with the job token on stdin. If the tag `X.Y.Z`
+   already exists, it must already be this digest (a re-run), or the job
+   fails: tags are never moved. Otherwise
+   `skopeo copy --all --preserve-digests` pushes the layout as is. Then the
+   registry must serve this digest for the tag.
+9. `actions/attest-build-provenance` with `subject-name:
+   ghcr.io/mehrn0ush/libtea`, `subject-digest:` the digest from step 6, and
    `push-to-registry: true`.
-9. Pull the image by digest, run `--version` on `linux/amd64`, and run
-   `gh attestation verify oci://ghcr.io/mehrn0ush/libtea@<digest>` with the
-   flags from the Goal section. The job fails if either fails. By then the
-   image is pushed, so a failure here means the image must be deleted by hand
-   (see Rollback).
+10. Run the commands from the Goal section on the pushed digest:
+    `gh attestation verify oci://ghcr.io/mehrn0ush/libtea@<digest>` and
+    `podman run ... --version`. The job fails if either fails. By then the
+    image is pushed, so a failure here means the image must be deleted by
+    hand (see Rollback).
+11. `docker logout ghcr.io`, even after a failure.
 
-## The `Dockerfile`
+## The image: `scripts/make-oci-image.py`
 
-```dockerfile
-FROM scratch
-ARG TARGETPLATFORM
-COPY --chmod=0555 ${TARGETPLATFORM}/libtea /libtea
-USER 65532:65532
-ENTRYPOINT ["/libtea"]
+```sh
+python3 -I scripts/make-oci-image.py --version X.Y.Z --revision <commit> \
+  --amd64 libtea-X.Y.Z-x86_64-unknown-linux-musl.tar.gz \
+  --arm64 libtea-X.Y.Z-aarch64-unknown-linux-musl.tar.gz --out <new directory>
 ```
 
-It has no `RUN`, so building for arm64 on an amd64 runner needs no emulation.
-The repository keeps it at `packaging/container/Dockerfile`. The image job
-checks out the tagged commit with `persist-credentials: false` and a sparse
-checkout of that one file, so it reads the file and runs nothing from the
-repository. Labels (`org.opencontainers.image.source`, `.version`,
-`.revision`, `.licenses=Apache-2.0`, `.description`) are set with `--label`
-on the command line, so the `Dockerfile` does not change between releases.
+It writes an OCI image layout and prints the image digest. For each platform:
 
-Why `scratch` works:
+- **One layer:** an uncompressed ustar archive with a single entry, `libtea`,
+  mode 0555, uid and gid 0, no user or group names, mtime 0. The bytes are
+  the binary from the archive, unchanged.
+- **The config:** `Entrypoint: ["/libtea"]`, `User: "65532:65532"`, and the
+  labels `org.opencontainers.image.source`, `.version`, `.revision`,
+  `.licenses` (Apache-2.0), `.title` and `.description`. It has no `created`
+  time and no history.
+- **The index:** both manifests, with the same labels as annotations. GHCR
+  reads them to link the package to the repository.
+
+All JSON is written with sorted keys and no spaces. So the same archives,
+version and revision give the same bytes on any machine and any Python 3. The
+layer is uncompressed because gzip output depends on the zlib in use.
+
+Before it writes anything, the script checks:
+
+- each archive's name;
+- that each archive holds exactly the four entries `package-release.py` writes
+  (the directory, `LICENSE`, `README.md` and `libtea`), all regular files or
+  the directory;
+- that each binary is a 64-bit little-endian ELF file for its architecture
+  (`e_machine` 62 or 183).
+
+It refuses an output directory that already exists, and a version or revision
+of the wrong shape.
+
+Why an image with nothing but the binary works:
 
 - The musl binaries are statically linked.
 - TLS uses rustls with the `webpki-roots` certificates built into the binary
@@ -157,16 +183,31 @@ User 65532 is unprivileged. To write to a mounted directory you need
 `docker run --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work ...`. The
 installing doc will show that.
 
+## Changed while building it (2026-11-28)
+
+The accepted design built the image with `docker buildx build --platform
+linux/amd64,linux/arm64` from a `Dockerfile`. On a GitHub runner, a
+multi-platform buildx build needs the `docker-container` driver, and that
+driver pulls a BuildKit image from Docker Hub at run time. That image would be
+unpinned third-party code running in the job that holds `packages: write` and
+`id-token: write`, which property 4 rules out.
+
+So `scripts/make-oci-image.py` writes the image itself, and `skopeo` and
+`podman`, which are on the runner image, push it and run it. There is no
+`Dockerfile`. The image is the same as the `Dockerfile` would have made: one
+file, the same user and entrypoint. It is also reproducible by construction,
+where buildx needed `SOURCE_DATE_EPOCH` and `rewrite-timestamp`.
+
 ## What the image does not give you
 
 - **The CA list is the one built into the binary.** A CA that is revoked or
   added reaches users only in a new release. This is true of the archives too.
 - **The image's attestation is a second attestation.** It says that
   `image.yml` built this digest from tag `vX.Y.Z`. That the binary inside came
-  from `release.yml` is shown by step 5 of the job, and by rebuilding the image:
-  anyone with the two archives and the `Dockerfile` can rebuild it and compare
-  digests (see "Checking it yourself"). The attestation of the archive does not
-  cover the image digest.
+  from `release.yml` is shown by step 4 of the job, and by rebuilding the
+  image: anyone with the two archives can rebuild it and compare digests (see
+  "Checking it yourself"). The attestation of the archive does not cover the
+  image digest.
 - **No `latest` tag** (decision 2).
 - **No SBOM attestation on the image** in the first version. The release's
   CycloneDX SBOM describes the same binary. `actions/attest-sbom` could attach
@@ -174,49 +215,76 @@ installing doc will show that.
 
 ## Checking it yourself
 
-`docs/installing.md` gets a "With Docker (0.2.4 and later)" section:
+`docs/installing.md` gets a "With Docker" section, from the first release
+with an image:
 
 - the `gh attestation verify oci://...` command from the Goal section;
 - pinning by digest (`ghcr.io/mehrn0ush/libtea@sha256:...`);
-- rebuilding from the verified archives: unpack them into `linux/amd64/` and
-  `linux/arm64/`, run the `docker buildx build` command from the workflow with
-  the same `SOURCE_DATE_EPOCH`, and compare digests.
+- rebuilding from the verified archives: run `scripts/make-oci-image.py` from
+  the tagged commit with the version, the tagged commit's SHA and the two
+  archives, and compare the digest it prints with the pushed one.
 
-The rebuild is also how this design gets tested before the first push. If the
-digests do not match on a second machine, the image is not reproducible, and
-the installing doc must not say it is.
+The script was checked this way on 2026-11-28 with the 0.2.3 archives: they
+were verified with `SHA256SUMS` and `gh attestation verify --bundle`, built
+twice, and gave the same digest
+(`sha256:ddb7958cb8ae890e609427bcece716d45f50f03cc904cc7182c3ea5f9fd75840`
+with revision `17a972f5`). Nothing was pushed. The job compares two builds on
+every run as well.
 
-## Tests (`workflow_policy.rs`)
+## Tests
 
-New tests for `image.yml`, modelled on the `release.yml` ones:
+`crates/tea-cli/tests/oci_image.rs` runs the script on archives made by
+`scripts/package-release.py`. It checks:
 
-- The only trigger is `release: [published]`. No `workflow_dispatch`, no
-  inputs.
-- Top-level `permissions: {}`. One job, `image`, with exactly the four
+- that two builds give the same digest and the same files;
+- every blob's digest and size;
+- the platforms, the config and the labels;
+- that the layer holds exactly the binary, with the mode, owner and mtime
+  above.
+
+It also checks that the script refuses:
+
+- swapped archives;
+- a binary for the wrong architecture, or a file that is not ELF;
+- an extra or a missing file;
+- a bad version or revision;
+- an existing output directory.
+
+`crates/tea-cli/tests/workflow_policy.rs` checks `image.yml`:
+
+- **Triggers:** only `release: [published]`, with no `workflow_dispatch` or
+  other trigger, and the prerelease `if:`.
+- **Permissions:** top-level `permissions: {}`, one job with exactly the four
   permissions above, and `environment: release`.
-- No `secrets.` anywhere. `GITHUB_TOKEN` reaches only the `gh` and
-  `docker login` steps, through `env:`.
-- No `cargo`, `python`, `scripts/` or `./` command in any step. Checkouts use
-  `persist-credentials: false` and are sparse.
-- The verify steps (`sha256sum --check`, `gh attestation verify --bundle` with
-  `--signer-workflow .../release.yml` and `--source-ref`) come before the
-  build-and-push step.
-- The only `uses:` are `actions/checkout` and
-  `actions/attest-build-provenance`, both pinned by SHA.
-- No `${{ }}` expressions in `run:` bodies.
-- The pushed tag is the version, never `latest`.
+- **The token:** no `secrets.`, and no `${{ }}` in a `run:` body. The token
+  reaches exactly five steps, as `GH_TOKEN` or `REGISTRY_TOKEN` in `env:`. The
+  login step is exactly `docker login --password-stdin`.
+- **Step order:** checksums, release attestation, build, run, push, attest,
+  verify. Nothing reaches the registry before the build, and there is no
+  `--ignore-missing`.
+- **Commands:** no build tool, package manager, `curl`, `sudo` or shell
+  script. The only Python is `python3 -I scripts/make-oci-image.py`. The one
+  checkout is sparse and has `persist-credentials: false`.
+- **Actions:** only `actions/checkout` and `actions/attest-build-provenance`,
+  each pinned exactly as in `release.yml`.
+- **Tags:** one tag, `$image:$VERSION`, never `latest`. An existing tag must
+  already be this digest. The attestation subject is the built digest.
 
-`release_never_publishes_to_a_registry` stays as it is: `release.yml` still
-pushes nothing.
+The `SHA256SUMS` step also runs in the tests. Each archive listed once
+passes. It fails on:
 
-Shell parts that can run offline (tag check, archive listing check) get tests
-that run them, like `the_attest_job_rejects_any_other_set_of_files`.
+- an archive that is missing;
+- an archive listed twice;
+- a wrong or short hash;
+- a `SHA256SUMS` that lists only other files, or nothing;
+- an archive missing from the download.
 
 ## Settings you change, once
 
-- After the first push, make the GHCR package `libtea` public and link it to
-  the repository (package settings, "Change visibility"). A package pushed
-  from a workflow starts private.
+- After the first push, make the GHCR package `libtea` public (package
+  settings, "Change visibility"). A package pushed from a workflow starts
+  private. The `org.opencontainers.image.source` annotation links it to the
+  repository.
 - Nothing else. The `release` Environment and its reviewer already exist.
 
 ## Rollback
@@ -227,18 +295,15 @@ digest. A fixed image is a new release.
 
 ## Steps (one PR each)
 
-1. `packaging/container/Dockerfile`, `image.yml`, and the policy tests. The
-   workflow cannot run until a release is published, so the PR is checked by
-   the tests, `actionlint` and a local build from the verified 0.2.3 archives
-   (built twice, digests compared; nothing pushed).
+1. **Done (2026-11-28):** `scripts/make-oci-image.py`, `image.yml`, and the
+   tests. The workflow cannot run until a release is published, so the PR was
+   checked with the tests, `actionlint` and the local 0.2.3 build above.
 2. The next release (0.2.4 or later) is the first with an image. After
    publishing it, you approve the Environment for the image run, make the
    package public, and check the commands from the Goal section.
 3. Docs: `docs/installing.md` (Docker section), `docs/release-checklist.md`
    (approving the image run after step 14 and checking it), README, ROADMAP,
-   `docs/release-pins.md` (no new pin, but `image.yml` joins the
-   `actions/checkout` and `actions/attest-build-provenance` rows), and
-   `docs/design/distribution.md` marked done. Then close #17.
+   and `docs/design/distribution.md` marked done. Then close #17.
 
 ## Decisions (2026-11-26)
 
